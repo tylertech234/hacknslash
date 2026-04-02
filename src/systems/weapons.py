@@ -3,6 +3,8 @@ import math
 
 
 # ---- Weapon definitions ----
+
+# === SHARED / CYBER KNIGHT (melee-focused) ===
 WEAPONS = {
     "sword": {
         "name": "Sword",
@@ -14,6 +16,7 @@ WEAPONS = {
         "blade_color": (200, 200, 210),
         "trail_color": (255, 255, 150),
         "desc": "Balanced blade. Reliable swing.",
+        "class": "knight",
     },
     "axe": {
         "name": "Battle Axe",
@@ -25,18 +28,7 @@ WEAPONS = {
         "blade_color": (160, 160, 170),
         "trail_color": (255, 180, 80),
         "desc": "Heavy hits, slower swing.",
-    },
-    "dagger": {
-        "name": "Throwing Daggers",
-        "damage_mult": 0.7,
-        "range": 40,
-        "cooldown": 300,
-        "duration": 120,
-        "sweep_deg": 60,
-        "blade_color": (180, 220, 220),
-        "trail_color": (150, 255, 200),
-        "desc": "Throw twin daggers at enemies.",
-        "projectile": True,
+        "class": "knight",
     },
     "spear": {
         "name": "Spear",
@@ -48,6 +40,7 @@ WEAPONS = {
         "blade_color": (190, 170, 140),
         "trail_color": (200, 200, 150),
         "desc": "Long thrust, narrow arc.",
+        "class": "knight",
     },
     "hammer": {
         "name": "War Hammer",
@@ -59,6 +52,226 @@ WEAPONS = {
         "blade_color": (140, 130, 130),
         "trail_color": (255, 120, 60),
         "desc": "Devastating slam, very slow.",
+        "class": "knight",
+    },
+    # Knight cyber upgrades
+    "plasma_blade": {
+        "name": "Plasma Blade",
+        "damage_mult": 1.4,
+        "range": 65,
+        "cooldown": 350,
+        "duration": 180,
+        "sweep_deg": 130,
+        "blade_color": (0, 200, 255),
+        "trail_color": (100, 220, 255),
+        "desc": "Superheated edge. Fast & deadly.",
+        "class": "knight",
+    },
+    "gravity_maul": {
+        "name": "Gravity Maul",
+        "damage_mult": 2.8,
+        "range": 60,
+        "cooldown": 1000,
+        "duration": 450,
+        "sweep_deg": 180,
+        "blade_color": (180, 50, 255),
+        "trail_color": (200, 100, 255),
+        "desc": "Warps space on impact. Massive.",
+        "class": "knight",
+    },
+    "blade_barrier": {
+        "name": "Blade Barrier",
+        "damage_mult": 0.7,
+        "range": 50,
+        "cooldown": 400,
+        "duration": 150,
+        "sweep_deg": 60,
+        "blade_color": (180, 220, 255),
+        "trail_color": (150, 200, 255),
+        "desc": "Orbiting blades. Throw up to 3!",
+        "projectile": True,
+        "orbiter": True,
+        "orbiter_type": "blade",
+        "class": "knight",
+    },
+
+    # === CYBER ARCHER (ranged-focused) ===
+    "dagger": {
+        "name": "Throwing Dagger",
+        "damage_mult": 1.0,
+        "range": 40,
+        "cooldown": 350,
+        "duration": 120,
+        "sweep_deg": 60,
+        "blade_color": (180, 220, 220),
+        "trail_color": (150, 255, 200),
+        "desc": "Precision throw. Single deadly dagger.",
+        "projectile": True,
+        "proj_speed": 8.0,
+        "proj_lifetime": 900,
+        "proj_count": 1,
+        "proj_visual": "dagger",
+        "class": "archer",
+    },
+    "cyber_bow": {
+        "name": "Cyber Bow",
+        "damage_mult": 1.8,
+        "range": 50,
+        "cooldown": 550,
+        "duration": 200,
+        "sweep_deg": 30,
+        "blade_color": (0, 255, 180),
+        "trail_color": (100, 255, 200),
+        "desc": "Piercing energy arrow. Passes through enemies.",
+        "projectile": True,
+        "proj_speed": 11.0,
+        "proj_lifetime": 1500,
+        "proj_count": 1,
+        "proj_visual": "arrow",
+        "piercing": True,
+        "class": "archer",
+    },
+    "pulse_rifle": {
+        "name": "Pulse Rifle",
+        "damage_mult": 0.7,
+        "range": 35,
+        "cooldown": 150,
+        "duration": 80,
+        "sweep_deg": 15,
+        "blade_color": (255, 100, 50),
+        "trail_color": (255, 180, 80),
+        "desc": "Rapid-fire energy bolts. Hold the line.",
+        "projectile": True,
+        "proj_speed": 10.0,
+        "proj_lifetime": 700,
+        "proj_count": 1,
+        "proj_visual": "bolt",
+        "class": "archer",
+    },
+    "scatter_shot": {
+        "name": "Scatter Shot",
+        "damage_mult": 0.6,
+        "range": 30,
+        "cooldown": 600,
+        "duration": 100,
+        "sweep_deg": 60,
+        "blade_color": (255, 200, 0),
+        "trail_color": (255, 255, 100),
+        "desc": "5-bolt spread. Covers wide area.",
+        "projectile": True,
+        "proj_speed": 7.0,
+        "proj_lifetime": 600,
+        "proj_count": 5,
+        "proj_visual": "pellet",
+        "class": "archer",
+    },
+
+    # === CYBER JESTER (chaotic mix) ===
+    "rubber_chicken": {
+        "name": "Rubber Chicken",
+        "damage_mult": 0.8,
+        "range": 55,
+        "cooldown": 350,
+        "duration": 200,
+        "sweep_deg": 140,
+        "blade_color": (255, 220, 50),
+        "trail_color": (255, 255, 100),
+        "desc": "BAWK! Surprisingly effective.",
+        "class": "jester",
+    },
+    "banana_rang": {
+        "name": "Banana-Rang",
+        "damage_mult": 0.9,
+        "range": 45,
+        "cooldown": 450,
+        "duration": 150,
+        "sweep_deg": 50,
+        "blade_color": (255, 230, 0),
+        "trail_color": (255, 255, 120),
+        "desc": "Orbiting banana. Throw up to 3!",
+        "projectile": True,
+        "orbiter": True,
+        "orbiter_type": "banana",
+        "class": "jester",
+    },
+    "joy_buzzer": {
+        "name": "Joy Buzzer",
+        "damage_mult": 1.3,
+        "range": 35,
+        "cooldown": 500,
+        "duration": 250,
+        "sweep_deg": 360,
+        "blade_color": (0, 255, 255),
+        "trail_color": (150, 255, 255),
+        "desc": "ZAP! Electric handshake of doom.",
+        "class": "jester",
+    },
+    "pie_launcher": {
+        "name": "Pie Launcher",
+        "damage_mult": 1.5,
+        "range": 40,
+        "cooldown": 700,
+        "duration": 200,
+        "sweep_deg": 45,
+        "blade_color": (255, 200, 150),
+        "trail_color": (255, 255, 220),
+        "desc": "Cream pies. Deals splash damage.",
+        "projectile": True,
+        "proj_speed": 5.0,
+        "proj_lifetime": 800,
+        "proj_count": 1,
+        "class": "jester",
+    },
+    "confetti_grenade": {
+        "name": "Confetti Grenade",
+        "damage_mult": 1.8,
+        "range": 40,
+        "cooldown": 800,
+        "duration": 180,
+        "sweep_deg": 30,
+        "blade_color": (255, 100, 200),
+        "trail_color": (255, 200, 255),
+        "desc": "Thrown explosive. SURPRISE! Confetti!",
+        "projectile": True,
+        "grenade": True,
+        "proj_speed": 5.5,
+        "proj_lifetime": 600,
+        "proj_count": 1,
+        "class": "jester",
+    },
+}
+
+# ── Character class definitions ──
+CHARACTER_CLASSES = {
+    "knight": {
+        "name": "Knight",
+        "desc": "Heavy armor, devastating melee. Born to fight up close.",
+        "color": (0, 180, 255),
+        "start_weapon": "sword",
+        "hp_bonus": 30,
+        "damage_bonus": 5,
+        "speed_bonus": 0,
+        "passives": ["melee_lifesteal", "armor_plating"],
+    },
+    "archer": {
+        "name": "Archer",
+        "desc": "Fast and deadly at range. Keep your distance.",
+        "color": (0, 255, 150),
+        "start_weapon": "dagger",
+        "hp_bonus": -10,
+        "damage_bonus": 0,
+        "speed_bonus": 1.0,
+        "passives": ["crit_shots", "evasion"],
+    },
+    "jester": {
+        "name": "Jester",
+        "desc": "Chaos incarnate. Funny weapons, unpredictable power.",
+        "color": (255, 50, 255),
+        "start_weapon": "rubber_chicken",
+        "hp_bonus": 0,
+        "damage_bonus": 0,
+        "speed_bonus": 0.5,
+        "passives": ["lucky_crits", "confetti_burst"],
     },
 }
 
@@ -87,28 +300,40 @@ def draw_weapon(surface: pygame.Surface, sx: int, sy: int,
         swing_angle = sword_angle - sweep / 2 + sweep * progress
         blade_len = attack_range + 10
 
-        if "Hammer" in wname:
+        if "Hammer" in wname or "Maul" in wname:
             _draw_hammer_swing(surface, sx, sy, swing_angle, blade_len, blade_color, trail_color, progress, sword_angle, sweep)
         elif "Axe" in wname:
             _draw_axe_swing(surface, sx, sy, swing_angle, blade_len, blade_color, trail_color, progress, sword_angle, sweep)
-        elif "Dagger" in wname:
+        elif "Grenade" in wname:
+            _draw_grenade_swing(surface, sx, sy, swing_angle, blade_len, blade_color, trail_color, progress, sword_angle, sweep)
+        elif "Dagger" in wname or "Bow" in wname or "Rifle" in wname or "Scatter" in wname or "Banana" in wname or "Pie" in wname:
             _draw_dagger_swing(surface, sx, sy, swing_angle, blade_len, blade_color, trail_color, progress, sword_angle, sweep)
         elif "Spear" in wname:
             _draw_spear_thrust(surface, sx, sy, sword_angle, blade_len, blade_color, trail_color, progress)
+        elif "Chicken" in wname:
+            _draw_chicken_swing(surface, sx, sy, swing_angle, blade_len, blade_color, trail_color, progress, sword_angle, sweep)
+        elif "Buzzer" in wname:
+            _draw_buzzer_swing(surface, sx, sy, swing_angle, blade_len, blade_color, trail_color, progress, sword_angle, sweep)
         else:
             _draw_sword_swing(surface, sx, sy, swing_angle, blade_len, blade_color, trail_color, progress, sword_angle, sweep)
     else:
         blade_len = attack_range - 10
         idle_angle = sword_angle + 0.3
 
-        if "Hammer" in wname:
+        if "Hammer" in wname or "Maul" in wname:
             _draw_hammer_idle(surface, sx, sy, idle_angle, blade_len, blade_color)
         elif "Axe" in wname:
             _draw_axe_idle(surface, sx, sy, idle_angle, blade_len, blade_color)
-        elif "Dagger" in wname:
+        elif "Grenade" in wname:
+            _draw_grenade_idle(surface, sx, sy, sword_angle, blade_len, blade_color)
+        elif "Dagger" in wname or "Bow" in wname or "Rifle" in wname or "Scatter" in wname or "Banana" in wname or "Pie" in wname:
             _draw_dagger_idle(surface, sx, sy, sword_angle, blade_len, blade_color)
         elif "Spear" in wname:
             _draw_spear_idle(surface, sx, sy, idle_angle, blade_len, blade_color)
+        elif "Chicken" in wname:
+            _draw_chicken_idle(surface, sx, sy, idle_angle, blade_len, blade_color)
+        elif "Buzzer" in wname:
+            _draw_buzzer_idle(surface, sx, sy, idle_angle, blade_len, blade_color)
         else:
             _draw_sword_idle(surface, sx, sy, idle_angle, blade_len, blade_color)
 
@@ -315,3 +540,123 @@ def _draw_hammer_idle(surface, sx, sy, idle_angle, blade_len, blade_color):
          by + int(math.sin(perp) * hw)),
     ]
     pygame.draw.polygon(surface, blade_color, pts)
+
+
+# ---- Rubber Chicken ----
+def _draw_chicken_swing(surface, sx, sy, swing_angle, blade_len, blade_color, trail_color, progress, base_angle, sweep):
+    bx = sx + int(math.cos(swing_angle) * blade_len * 0.8)
+    by = sy + int(math.sin(swing_angle) * blade_len * 0.8)
+    mid_x = (sx + bx) // 2 + int(math.sin(progress * 12) * 4)
+    mid_y = (sy + by) // 2 + int(math.cos(progress * 12) * 4)
+    pygame.draw.line(surface, (255, 200, 50), (sx, sy), (mid_x, mid_y), 3)
+    pygame.draw.line(surface, (255, 220, 80), (mid_x, mid_y), (bx, by), 3)
+    pygame.draw.circle(surface, blade_color, (bx, by), 7)
+    beak_x = bx + int(math.cos(swing_angle) * 8)
+    beak_y = by + int(math.sin(swing_angle) * 8)
+    pygame.draw.polygon(surface, (255, 150, 0), [(bx, by), (beak_x, beak_y - 2), (beak_x, beak_y + 2)])
+    pygame.draw.circle(surface, (0, 0, 0), (bx + int(math.cos(swing_angle - 0.5) * 4),
+                                              by + int(math.sin(swing_angle - 0.5) * 4)), 2)
+    for i in range(3):
+        t = max(0, progress - i * 0.1)
+        ta = base_angle - sweep / 2 + sweep * min(1.0, t)
+        tx = sx + int(math.cos(ta) * blade_len * 0.5)
+        ty = sy + int(math.sin(ta) * blade_len * 0.5)
+        alpha = max(20, 150 - i * 50)
+        ts = pygame.Surface((8, 8), pygame.SRCALPHA)
+        pygame.draw.circle(ts, (*trail_color, alpha), (4, 4), 4)
+        surface.blit(ts, (tx - 4, ty - 4))
+
+
+def _draw_chicken_idle(surface, sx, sy, idle_angle, blade_len, blade_color):
+    bob_now = pygame.time.get_ticks()
+    wobble = math.sin(bob_now * 0.005) * 3
+    bx = sx + int(math.cos(idle_angle) * blade_len * 0.7)
+    by = sy + int(math.sin(idle_angle) * blade_len * 0.7 + wobble)
+    pygame.draw.line(surface, (255, 200, 50), (sx, sy), (bx, by), 3)
+    pygame.draw.circle(surface, blade_color, (bx, by), 6)
+    beak_x = bx + int(math.cos(idle_angle) * 7)
+    beak_y = by + int(math.sin(idle_angle) * 7)
+    pygame.draw.polygon(surface, (255, 150, 0), [(bx, by), (beak_x, beak_y - 2), (beak_x, beak_y + 2)])
+    pygame.draw.circle(surface, (0, 0, 0), (bx + int(math.cos(idle_angle - 0.5) * 3),
+                                              by + int(math.sin(idle_angle - 0.5) * 3)), 2)
+
+
+# ---- Joy Buzzer ----
+def _draw_buzzer_swing(surface, sx, sy, swing_angle, blade_len, blade_color, trail_color, progress, base_angle, sweep):
+    for i in range(6):
+        angle = base_angle + (math.tau / 6) * i + progress * 4
+        length = blade_len * (0.5 + 0.5 * math.sin(progress * 8 + i))
+        zx = sx + int(math.cos(angle) * length)
+        zy = sy + int(math.sin(angle) * length)
+        mid_x = sx + int(math.cos(angle) * length * 0.5 + math.sin(angle * 3) * 6)
+        mid_y = sy + int(math.sin(angle) * length * 0.5 + math.cos(angle * 3) * 6)
+        pygame.draw.line(surface, blade_color, (sx, sy), (mid_x, mid_y), 2)
+        pygame.draw.line(surface, (255, 255, 255), (mid_x, mid_y), (zx, zy), 2)
+        if progress > 0.3:
+            spark_s = pygame.Surface((6, 6), pygame.SRCALPHA)
+            pygame.draw.circle(spark_s, (*trail_color, 180), (3, 3), 3)
+            surface.blit(spark_s, (zx - 3, zy - 3))
+    flash_r = int(5 + 8 * progress)
+    flash_s = pygame.Surface((flash_r * 2, flash_r * 2), pygame.SRCALPHA)
+    pygame.draw.circle(flash_s, (*blade_color, int(120 * progress)), (flash_r, flash_r), flash_r)
+    surface.blit(flash_s, (sx - flash_r, sy - flash_r))
+
+
+def _draw_buzzer_idle(surface, sx, sy, idle_angle, blade_len, blade_color):
+    bx = sx + int(math.cos(idle_angle) * 12)
+    by = sy + int(math.sin(idle_angle) * 12)
+    pygame.draw.circle(surface, blade_color, (bx, by), 5)
+    pygame.draw.circle(surface, (255, 255, 255), (bx, by), 3)
+    bob_now = pygame.time.get_ticks()
+    if (bob_now // 200) % 3 == 0:
+        spark_a = idle_angle + math.sin(bob_now * 0.01) * 1.5
+        spark_x = bx + int(math.cos(spark_a) * 8)
+        spark_y = by + int(math.sin(spark_a) * 8)
+        pygame.draw.line(surface, (0, 255, 255), (bx, by), (spark_x, spark_y), 1)
+
+
+# ---- Confetti Grenade ----
+def _draw_grenade_swing(surface, sx, sy, swing_angle, blade_len, blade_color, trail_color, progress, base_angle, sweep):
+    # Lobbing motion — arm arcs up then throws
+    extend = 0.3 + 0.7 * progress
+    arc_y = -16 * math.sin(progress * math.pi)  # arc upward during throw
+    bx = sx + int(math.cos(base_angle) * blade_len * 0.4 * extend)
+    by = sy + int(math.sin(base_angle) * blade_len * 0.4 * extend) + int(arc_y)
+    # Arm
+    pygame.draw.line(surface, blade_color, (sx, sy), (bx, by), 3)
+    # Grenade in hand
+    if progress < 0.6:
+        pygame.draw.circle(surface, (80, 80, 80), (bx, by), 5)
+        pygame.draw.circle(surface, blade_color, (bx, by), 5, 2)
+        # Fuse spark
+        spark_s = pygame.Surface((6, 6), pygame.SRCALPHA)
+        pygame.draw.circle(spark_s, (255, 255, 100, 200), (3, 3), 3)
+        surface.blit(spark_s, (bx - 3, by - 8))
+    else:
+        # Release flash — confetti burst hint
+        fx = sx + int(math.cos(base_angle) * blade_len * 0.5)
+        fy = sy + int(math.sin(base_angle) * blade_len * 0.5)
+        alpha = int(200 * max(0, 1.0 - (progress - 0.6) / 0.4))
+        for color in [(255, 100, 200), (100, 255, 100), (255, 255, 0)]:
+            ts = pygame.Surface((6, 6), pygame.SRCALPHA)
+            pygame.draw.circle(ts, (*color, alpha), (3, 3), 3)
+            import random as _rng
+            surface.blit(ts, (fx - 3 + _rng.randint(-6, 6), fy - 3 + _rng.randint(-6, 6)))
+
+
+def _draw_grenade_idle(surface, sx, sy, angle, blade_len, blade_color):
+    bx = sx + int(math.cos(angle) * 14)
+    by = sy + int(math.sin(angle) * 14)
+    # Grenade in hand
+    pygame.draw.circle(surface, (80, 80, 80), (bx, by), 5)
+    pygame.draw.circle(surface, blade_color, (bx, by), 5, 2)
+    # Pin/ring
+    pygame.draw.circle(surface, (200, 200, 200), (bx, by - 6), 2, 1)
+    # Decorative confetti dots
+    bob_now = pygame.time.get_ticks()
+    for i in range(3):
+        a = bob_now * 0.004 + i * 2.1
+        cx = bx + int(math.cos(a) * 3)
+        cy = by + int(math.sin(a) * 3)
+        colors = [(255, 100, 200), (100, 255, 100), (255, 255, 0)]
+        pygame.draw.circle(surface, colors[i], (cx, cy), 1)
