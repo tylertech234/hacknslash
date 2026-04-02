@@ -52,6 +52,10 @@ class CombatSystem:
                                 other.take_damage(chain_dmg, other.x - enemy.x, other.y - enemy.y, now)
                                 self._add_damage_number(other.x, other.y - other.size, chain_dmg, (100, 200, 255))
                                 chain_count += 1
+                                if not other.alive:
+                                    xp_m = 1.0 + self.darkness_level * XP_DARKNESS_BONUS
+                                    player.gain_xp(int(getattr(other, "xp_value", XP_PER_KILL) * xp_m))
+                                    self.pending_drops.append((other.x, other.y))
                 if not enemy.alive:
                     # XP scales with darkness; use enemy-specific xp_value
                     xp_mult = 1.0 + self.darkness_level * XP_DARKNESS_BONUS
@@ -78,6 +82,10 @@ class CombatSystem:
                     reflected = max(1, int(actual * 0.3))
                     enemy.take_damage(reflected, enemy.x - player.x, enemy.y - player.y, now)
                     self._add_damage_number(enemy.x, enemy.y - enemy.size, reflected, (255, 150, 50))
+                    if not enemy.alive:
+                        xp_m = 1.0 + self.darkness_level * XP_DARKNESS_BONUS
+                        player.gain_xp(int(getattr(enemy, "xp_value", XP_PER_KILL) * xp_m))
+                        self.pending_drops.append((enemy.x, enemy.y))
 
     def _add_damage_number(self, x: float, y: float, amount: int, color: tuple):
         self.damage_numbers.append({

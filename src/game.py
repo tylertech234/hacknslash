@@ -416,6 +416,12 @@ class Game:
                             self.combat._add_damage_number(other.x, other.y - other.size, chain_dmg, (100, 200, 255))
                             self.animations.spawn_hit_sparks(other.x, other.y, count=4)
                             chain_count += 1
+                            if not other.alive:
+                                process_enemy_death(other, self.player, alive, self.animations,
+                                                    self.combat, self.sounds, self.lighting,
+                                                    self.boss_chests, _kt, now)
+                                self.kills = _kt["kills"]
+                                self.boss_kills = _kt["boss_kills"]
             if not enemy.alive:
                 process_enemy_death(enemy, self.player, alive, self.animations,
                                     self.combat, self.sounds, self.lighting,

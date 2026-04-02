@@ -70,7 +70,7 @@ def process_enemy_death(enemy, player, alive, animations, combat, sounds,
     if is_boss:
         chest = BossChest(enemy.x, enemy.y)
         boss_chests.append(chest)
-        log.info("Boss chest spawned at (%d, %d)", enemy.x, enemy.y)
+        log.info("Boss chest spawned at (%.0f, %.0f)", enemy.x, enemy.y)
 
 
 def fire_player_projectile(player, player_projectiles, sounds):
