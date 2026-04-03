@@ -1,8 +1,13 @@
 # -- Display --
+# NOTE: SCREEN_WIDTH / SCREEN_HEIGHT are patched by main.py at startup
+# to match the user's chosen resolution (default: native desktop).
 SCREEN_WIDTH = 1280
 SCREEN_HEIGHT = 720
+NATIVE_WIDTH = 0   # filled in by main.py
+NATIVE_HEIGHT = 0  # filled in by main.py
+RESOLUTIONS: dict = {}  # filled in by main.py
 FPS = 60
-TITLE = "Hack 'n Slash"
+TITLE = "Cyber Survivor"
 
 # -- Colors --
 BLACK = (0, 0, 0)
@@ -71,12 +76,12 @@ ENEMY_EYE_COLOR = (0, 200, 255)     # Dalek eyestalk glow
 ENEMY_SKIRT_COLOR = (90, 82, 74)    # Dalek skirt
 
 # -- Spawning --
-WAVE_BASE_COUNT = 8
-WAVE_GROWTH = 5
+WAVE_BASE_COUNT = 30
+WAVE_GROWTH = 12
 SPAWN_MARGIN = 80                   # px from screen edge
 
 # -- XP / Leveling --
-XP_PER_KILL = 25
+XP_PER_KILL = 8
 XP_TO_LEVEL = 100
 XP_LEVEL_SCALE = 1.4                # multiplier per level
 
@@ -106,5 +111,5 @@ ENEMY_DARKNESS_DMG_BONUS = 0.5      # extra damage fraction at full darkness
 TILE_SIZE = 64
 MAP_WIDTH = 50                      # tiles
 MAP_HEIGHT = 50                     # tiles
-FLOOR_COLOR = (50, 50, 55)
-WALL_COLOR = (90, 85, 80)
+FLOOR_COLOR = (34, 60, 28)
+WALL_COLOR = (20, 35, 18)

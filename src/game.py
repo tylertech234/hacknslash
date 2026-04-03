@@ -37,7 +37,20 @@ from src.ui.legacy_screen import LegacyScreen
 from src.systems.animations import AnimationSystem
 from src.systems.boss_chest import BossChest, ChestRewardScreen
 from src.systems.game_actions import process_enemy_death, fire_player_projectile
+from src.entities.enemy import Enemy, ENEMY_TYPES
 from src.ui.passive_swap import PassiveSwapScreen
+from src.ui.weapon_swap import WeaponSwapScreen
+from src.ui.main_menu import MainMenuScreen, load_settings, save_settings
+from src.ui.run_summary import RunSummaryScreen
+from src.ui.tooltip import Tooltip
+from src.systems.run_stats import RunStats
+from src.systems.zones import ZONES, ZONE_ORDER, get_zone, get_next_zone
+from src.systems.atmosphere import AtmosphericSystem
+from src.systems.hazards import HazardSystem
+from src.systems.portal import Portal
+from src.ui.debug_menu import DebugMenu
+from src.ui.debug_overlay import DebugOverlay
+from src.font_cache import get_font
 
 
 class Game:
@@ -45,18 +58,43 @@ class Game:
 
     def __init__(self):
         pygame.init()
-        self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+        self.game_settings = load_settings()
+        flags = pygame.FULLSCREEN if self.game_settings.get("fullscreen") else 0
+        self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), flags)
         pygame.display.set_caption(TITLE)
         self.clock = pygame.time.Clock()
         self.running = True
         self.game_over = False
+        self.main_menu = MainMenuScreen()
         self.char_select = CharacterSelectScreen()
         self.char_class = None  # set after selection
+        self.run_summary = RunSummaryScreen()
         self.legacy = LegacyData()
         self.legacy_screen = LegacyScreen(self.legacy)
         self._legacy_points_earned = 0
 
+        self._show_loading_screen()
         self._init_world()
+
+        # Debug / dev tools
+        self.debug_menu = DebugMenu()
+        self.debug_overlay = DebugOverlay()
+        self.auto_attack = False
+        self.paused = False
+        self._pause_selected = 0
+        self._pause_options = ["Resume", "Settings", "Quit to Menu"]
+        self._debug_mode = False
+
+    def _show_loading_screen(self):
+        """Draw a loading frame so the window doesn't appear frozen."""
+        self.screen.fill((8, 8, 12))
+        font = pygame.font.SysFont("consolas", 28, bold=True)
+        text = font.render("LOADING...", True, (160, 160, 180))
+        self.screen.blit(text, text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2)))
+        sub = pygame.font.SysFont("consolas", 14)
+        hint = sub.render("first run generates audio — subsequent loads are instant", True, (80, 80, 100))
+        self.screen.blit(hint, hint.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 40)))
+        pygame.display.flip()
 
     def _init_world(self):
         self.game_map = GameMap()
@@ -70,7 +108,8 @@ class Game:
         self.projectiles = ProjectileSystem()
         self.player_projectiles = PlayerProjectileSystem()
         self.pickups = PickupSystem()
-        self.environment = EnvironmentSystem()
+        self.current_zone = getattr(self, "current_zone", "wasteland")
+        self.environment = EnvironmentSystem(self.current_zone)
         self.campfire = Campfire()
         self.lighting = LightingSystem()
         self.sounds = SoundManager()
@@ -79,8 +118,15 @@ class Game:
         self.levelup_screen = LevelUpScreen()
         self.chest_reward = ChestRewardScreen()
         self.passive_swap = PassiveSwapScreen()
+        self.weapon_swap = WeaponSwapScreen()
         self.boss_chests: list[BossChest] = []
         self.animations = AnimationSystem()
+        self.run_stats = RunStats()
+        self.atmosphere = AtmosphericSystem()
+        self.hazard_system = HazardSystem()
+        self.portal: Portal | None = None
+        self._zone_transition = False
+        self._zone_transition_time = 0
         self.combat_font = pygame.font.SysFont("consolas", 18, bold=True)
         self.game_over = False
         self._last_player_pos = (world_cx, world_cy)
@@ -98,6 +144,11 @@ class Game:
         # Level-up fanfare state
         self._levelup_fanfare_time = 0
         self._levelup_fanfare_duration = 400
+
+        # Player death animation state
+        self._player_dying = False
+        self._player_death_time = 0
+        self._player_death_duration = 2200  # ms before game_over screen appears
 
         # Apply legacy bonuses
         bonuses = self.legacy.get_bonuses()
@@ -118,6 +169,15 @@ class Game:
             self.player.max_hp += bonus_levels * 10
             self.player.hp = self.player.max_hp
 
+        # Zone setup
+        zone_data = get_zone(self.current_zone)
+        self.game_map.set_colors(zone_data.get("tile_colors", {}))
+        self.atmosphere.set_zone(self.current_zone, zone_data)
+        self.hazard_system.set_zone(self.current_zone, zone_data)
+        self.run_stats.set_weapon(self.player.weapon_name, self.player.weapon.get("name", ""))
+        self.run_stats.set_zone(self.current_zone)
+        self.spawner.set_zone(zone_data)
+        self.sounds.set_zone_music(self.current_zone)
         self.sounds.start_music()
 
     def run(self):
@@ -125,6 +185,46 @@ class Game:
         while self.running:
             dt = self.clock.tick(FPS)
             now = pygame.time.get_ticks()
+
+            # Main menu phase
+            if self.main_menu.active:
+                for event in pygame.event.get():
+                    if event.type == pygame.QUIT:
+                        self.running = False
+                    if self.debug_menu.active:
+                        dm_result = self.debug_menu.handle_event(event)
+                        if dm_result == "back":
+                            self.debug_menu.active = False
+                        continue
+                    result = self.main_menu.handle_event(event)
+                    if result == "new_run":
+                        self._debug_mode = self.main_menu.settings.get("dev_options", False)
+                        self.char_select.active = True
+                    elif result == "debug_menu":
+                        self.debug_menu.active = True
+                    elif result == "quit":
+                        self.running = False
+                self._apply_settings()
+                if self.debug_menu.active:
+                    self.debug_menu.draw(self.screen)
+                else:
+                    self.main_menu.draw(self.screen)
+                pygame.display.flip()
+                continue
+
+            # Run summary phase
+            if self.run_summary.active:
+                for event in pygame.event.get():
+                    if event.type == pygame.QUIT:
+                        self.running = False
+                    done = self.run_summary.handle_event(event)
+                    if done:
+                        self.legacy_screen.activate(
+                            self.spawner.wave, self.kills,
+                            self._legacy_points_earned)
+                self.run_summary.draw(self.screen)
+                pygame.display.flip()
+                continue
 
             # Character select phase
             if self.char_select.active:
@@ -134,8 +234,10 @@ class Game:
                     result = self.char_select.handle_event(event)
                     if result:
                         self.char_class = result
+                        self.current_zone = "wasteland"
                         log.info("Character class selected: %s", result)
                         self._init_world()
+                        self._apply_debug_cheats()
                 self.char_select.draw(self.screen)
                 pygame.display.flip()
                 continue
@@ -147,13 +249,15 @@ class Game:
                         self.running = False
                     done = self.legacy_screen.handle_event(event)
                     if done:
-                        self.char_select.active = True
+                        self.main_menu.active = True
+                        self.main_menu.settings_open = False
+                        self.main_menu.selected = 0
                 self.legacy_screen.draw(self.screen)
                 pygame.display.flip()
                 continue
 
             self._handle_events()
-            if not self.game_over:
+            if not self.game_over and not self.paused:
                 self._update(dt, now)
             self._draw()
         pygame.quit()
@@ -166,21 +270,61 @@ class Game:
                 self.running = False
 
             if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_ESCAPE:
-                    self.running = False
+                if event.key in (pygame.K_ESCAPE, pygame.K_p):
+                    if self.game_over:
+                        pass  # handled below
+                    else:
+                        self.paused = not self.paused
+                        if self.paused:
+                            self._pause_selected = 0
+                        self.sounds.play("pause" if self.paused else "unpause")
+                    continue
+
+            # Pause menu navigation
+            if self.paused:
+                if event.type == pygame.KEYDOWN:
+                    if event.key in (pygame.K_w, pygame.K_UP):
+                        self._pause_selected = (self._pause_selected - 1) % len(self._pause_options)
+                    elif event.key in (pygame.K_s, pygame.K_DOWN):
+                        self._pause_selected = (self._pause_selected + 1) % len(self._pause_options)
+                    elif event.key in (pygame.K_RETURN, pygame.K_SPACE, pygame.K_e):
+                        opt = self._pause_options[self._pause_selected]
+                        if opt == "Resume":
+                            self.paused = False
+                            self.sounds.play("unpause")
+                        elif opt == "Settings":
+                            self.main_menu.settings_open = True
+                            self.main_menu.settings_selected = 0
+                        elif opt == "Quit to Menu":
+                            self.paused = False
+                            self.game_over = False
+                            self.main_menu.active = True
+                            self.main_menu.settings_open = False
+                continue
+
+                if event.key == pygame.K_f and not self.game_over:
+                    self.auto_attack = not self.auto_attack
+                    if self._debug_mode:
+                        self.debug_overlay.log(
+                            f"Auto-attack {'ON' if self.auto_attack else 'OFF'}")
+                    continue
 
                 if self.game_over:
                     if event.key == pygame.K_r:
-                        self.legacy_screen.activate(
-                            self.spawner.wave, self.kills,
-                            self._legacy_points_earned)
+                        self.run_summary.activate(
+                            self.run_stats, self.spawner.wave,
+                            self.current_zone, self._legacy_points_earned,
+                            self.player.level, victory=False)
                     continue
 
             # Chest reward screen intercepts input
             if self.chest_reward.active:
                 self.chest_reward.handle_event(event)
                 if not self.chest_reward.active:
-                    self._apply_chest_rewards()
+                    try:
+                        self._apply_chest_rewards()
+                    except Exception:
+                        log.exception("ERROR applying chest rewards")
                 continue
 
             # Passive swap screen intercepts input
@@ -188,6 +332,13 @@ class Game:
                 result = self.passive_swap.handle_event(event)
                 if result is not None:
                     self._apply_passive_swap(result)
+                continue
+
+            # Weapon swap screen intercepts input
+            if self.weapon_swap.active:
+                result = self.weapon_swap.handle_event(event)
+                if result is not None:
+                    self._apply_weapon_swap(result)
                 continue
 
             # Level-up screen intercepts input
@@ -226,7 +377,12 @@ class Game:
         p = self.player
         effect = choice["effect"]
         value = choice.get("value", 0)
-        log.debug("Applying effect=%s value=%s", effect, value)
+        base_name = choice.get("base_name", choice.get("name", ""))
+        tier = choice.get("tier", 1)
+        log.debug("Applying effect=%s value=%s tier=%s", effect, value, tier)
+        # Track tier for stat upgrades
+        if effect not in ("passive", "weapon", "heal") and base_name:
+            p.upgrade_tiers[base_name] = tier
         if effect == "max_hp":
             p.max_hp += value
             p.hp = min(p.max_hp, p.hp + value)
@@ -241,7 +397,7 @@ class Game:
         elif effect == "cooldown":
             p.attack_cooldown = max(80, p.attack_cooldown - value)
         elif effect == "weapon":
-            p.equip_weapon(value)
+            self.weapon_swap.activate(p.weapon_name, value)
         elif effect == "glass_cannon":
             p.damage = int(p.damage * 1.3)
             p.max_hp = max(20, p.max_hp - 20)
@@ -276,6 +432,14 @@ class Game:
         else:
             log.info("Passive swap skipped")
 
+    def _apply_weapon_swap(self, result: dict):
+        """Handle result from weapon swap screen."""
+        if result["action"] == "swap":
+            self.player.equip_weapon(result["weapon"])
+            log.info("Weapon swapped to: %s", result["weapon"])
+        else:
+            log.info("Weapon swap skipped")
+
     def _apply_chest_rewards(self):
         """Apply all rewards from a boss chest to the player."""
         p = self.player
@@ -296,31 +460,58 @@ class Game:
                 p.hp = p.max_hp
             elif effect == "speed":
                 p.speed += value
-            elif effect == "weapon":
-                p.equip_weapon(value)
             elif effect == "passive":
                 self._try_add_passive(value, r.get("name", value))
 
     # ------------------------------------------------------------------ update
     def _update(self, dt: float, now: int):
+        # Auto-attack: fire at fastest interval when toggled or mouse held
+        if self.auto_attack or pygame.mouse.get_pressed()[0]:
+            if not (self.levelup_screen.active or self.chest_reward.active
+                    or self.passive_swap.active or self.weapon_swap.active
+                    or self.paused or self.game_over):
+                if self.player.try_attack(now):
+                    from src.systems.game_actions import fire_player_projectile as _fpp
+                    if not _fpp(self.player, self.player_projectiles, self.sounds):
+                        self.sounds.play("swing")
+                        self.animations.add_screen_shake(1)
+
+        # Debug cheats: god mode and no cooldown
+        if self._debug_mode:
+            if self.debug_menu.cheats.get("god_mode"):
+                self.player.hp = self.player.max_hp
+            if self.debug_menu.cheats.get("no_cooldown"):
+                self.player.attack_cooldown = 0
+                self.player.last_attack_time = 0
+
         # Level-up fanfare timer: open choices after freeze completes
         if self._levelup_fanfare_time and now - self._levelup_fanfare_time >= self._levelup_fanfare_duration:
             self._levelup_fanfare_time = 0
             self.levelup_screen.activate(self.player.weapon_name, self.player.char_class,
-                                         self.player.passives)
+                                         self.player.passives,
+                                         base_damage=self.player.damage,
+                                         current_weapon=self.player.weapon,
+                                         upgrade_tiers=self.player.upgrade_tiers)
             log.info("Level-up screen activated, choices=%s",
                      [c.get('name','?') for c in self.levelup_screen.choices])
 
         # Pause gameplay during level-up, chest reward, passive swap, or fanfare
         if (self.levelup_screen.active or self.chest_reward.active
-                or self.passive_swap.active or self._levelup_fanfare_time):
+                or self.passive_swap.active or self.weapon_swap.active
+                or self._levelup_fanfare_time):
             return
 
         keys = pygame.key.get_pressed()
         world_w = self.game_map.pixel_width
         world_h = self.game_map.pixel_height
 
-        self.player.update(dt, now, keys, world_w, world_h)
+        # During player death animation, freeze player input (no movement)
+        _dying_keys = None
+        if self._player_dying:
+            class _FrozenKeys:
+                def __getitem__(self, _): return 0
+            _dying_keys = _FrozenKeys()
+        self.player.update(dt, now, _dying_keys if _dying_keys else keys, world_w, world_h)
 
         # Passive: nano_regen — heal 1 HP every 2s
         if "nano_regen" in self.player.passives:
@@ -357,16 +548,66 @@ class Game:
 
         self.spawner.update(now, self.player.x, self.player.y)
 
-        # Play boss roar on boss wave start
+        # Sync wave to atmosphere and hazards
+        self.atmosphere.set_wave(self.spawner.wave)
+        self.hazard_system.set_wave(self.spawner.wave)
+        self.atmosphere.update(dt, now, int(self.camera.x), int(self.camera.y))
+
+        # Environmental hazards
+        hazard_events = self.hazard_system.update(
+            now, self.player.x, self.player.y,
+            int(self.camera.x), int(self.camera.y),
+            world_w, world_h)
+        for hev in hazard_events:
+            hx, hy = hev["x"], hev["y"]
+            hr = hev["radius"]
+            hdmg = hev["damage"]
+            # Check player in range
+            pdist = math.hypot(self.player.x - hx, self.player.y - hy)
+            if pdist < hr and not self.player.invincible:
+                self.player.hp -= hdmg
+                self.run_stats.record_damage_taken(hdmg)
+                self.animations.spawn_hit_sparks(self.player.x, self.player.y)
+                self.sounds.play("hit")
+            # Pull effect (void rift)
+            if hev.get("pull"):
+                px, py = hev["pull"]
+                self.player.x += px
+                self.player.y += py
+            # Damage enemies if applicable
+            if hev.get("hits_enemies"):
+                for enemy in self.spawner.get_alive_enemies():
+                    edist = math.hypot(enemy.x - hx, enemy.y - hy)
+                    if edist < hr:
+                        enemy.take_damage(hdmg, enemy.x - hx, enemy.y - hy, now)
+
+        # Entropic decay (abyss passive damage)
+        if self.hazard_system.is_entropic_decay_active():
+            # Check if player is near campfire (safe zone)
+            cf_dist = math.hypot(self.player.x - self.campfire.x, self.player.y - self.campfire.y)
+            if cf_dist > 200 and not self.player.invincible:
+                decay_dmg = 2 + (self.spawner.wave - 7)
+                if now % 1000 < dt:  # Roughly once per second
+                    self.player.hp -= decay_dmg
+                    self.run_stats.record_damage_taken(decay_dmg)
+
+        # Play boss roar on boss wave start + switch to boss music
         if self.spawner.just_started_wave and self.spawner.boss_wave:
             self.sounds.play("boss_roar")
+            self.sounds.start_boss_music(self.current_zone)
+
+        # Stop boss music when boss wave ends (no more boss enemies alive)
+        if self.sounds.boss_music_playing:
+            alive_bosses = [e for e in self.spawner.get_alive_enemies() if e.is_boss]
+            if not alive_bosses and not self.spawner.wave_active:
+                self.sounds.stop_boss_music()
 
         # Campfire is active only between waves
         self.campfire.set_active(not self.spawner.wave_active)
         self.campfire.update(now, self.player)
 
-        # Fruit tree regrowth
-        self.environment.update_fruit(now)
+        # Healing prop regrowth
+        self.environment.update_healing(now)
 
         # Lighting system
         self.lighting.update(self.player.x, self.player.y)
@@ -383,13 +624,222 @@ class Game:
                 enemy.x, enemy.y, ehalf)
             # Spawn projectile if enemy wants to shoot
             if enemy.wants_to_shoot:
-                self.projectiles.spawn(
-                    enemy.x, enemy.y,
-                    self.player.x, self.player.y,
-                    int(enemy.bullet_damage * (1.0 + self.lighting.darkness * 0.5)),
-                )
+                base_dmg = int(enemy.bullet_damage * (1.0 + self.lighting.darkness * 0.5))
+                spread_n = getattr(enemy, 'shoot_spread_count', 1)
+                spread_arc = getattr(enemy, 'shoot_spread_arc', 0.0)
+                if spread_n <= 1:
+                    self.projectiles.spawn(enemy.x, enemy.y,
+                                           self.player.x, self.player.y, base_dmg)
+                else:
+                    # Fan spread: evenly distribute shots across the arc
+                    base_angle = math.atan2(self.player.y - enemy.y,
+                                            self.player.x - enemy.x)
+                    for s in range(spread_n):
+                        offset = (s - (spread_n - 1) / 2.0) * (spread_arc / max(1, spread_n - 1))
+                        angle = base_angle + offset
+                        tx = enemy.x + math.cos(angle) * 300
+                        ty = enemy.y + math.sin(angle) * 300
+                        self.projectiles.spawn(enemy.x, enemy.y, tx, ty, base_dmg)
                 enemy.wants_to_shoot = False
                 self.sounds.play("enemy_shoot")
+
+            # Boss enrage at phase 2 activation
+            if getattr(enemy, 'wants_enrage', False):
+                enemy.wants_enrage = False
+                self.animations.spawn_death_burst(enemy.x, enemy.y, (255, 60, 0), count=24)
+                self.animations.add_screen_shake(8)
+                self.sounds.play("boss_roar")
+
+            # Cyber dog bark/growl sounds
+            if enemy._dog_wants_growl:
+                enemy._dog_wants_growl = False
+                self.sounds.play("dog_growl")
+            if enemy._dog_wants_bark:
+                enemy._dog_wants_bark = False
+                self.sounds.play("dog_bark")
+
+            # Boss special attack damage + unique effects per type
+            if enemy.special_attack_hit and enemy.is_boss:
+                spec = enemy._special
+                spec_dmg = enemy.damage
+                pdist = math.hypot(self.player.x - enemy.x, self.player.y - enemy.y)
+                aoe_range = int(enemy.size * enemy._special_aoe_mult)
+                hit_player = False
+
+                if spec == "flame_pillar":
+                    # Check distance to targeted position
+                    tdist = math.hypot(self.player.x - enemy._special_target_x,
+                                       self.player.y - enemy._special_target_y)
+                    if tdist < aoe_range and not self.player.invincible:
+                        hit_player = True
+                        self.player.statuses.apply("fire", now)
+                elif spec == "void_rift":
+                    tdist = math.hypot(self.player.x - enemy._special_target_x,
+                                       self.player.y - enemy._special_target_y)
+                    if tdist < aoe_range and not self.player.invincible:
+                        hit_player = True
+                        self.player.statuses.apply("slow", now)
+                elif spec == "tentacle_sweep":
+                    # Cone check: must be in range AND within sweep angle
+                    if pdist < aoe_range and not self.player.invincible:
+                        angle_to_player = math.atan2(self.player.y - enemy.y,
+                                                     self.player.x - enemy.x)
+                        angle_diff = abs((angle_to_player - enemy._sweep_angle + math.pi) % (2 * math.pi) - math.pi)
+                        if angle_diff < math.radians(35):
+                            hit_player = True
+                            # Heavy knockback away from boss
+                            kb_str = 15.0
+                            kx = math.cos(angle_to_player) * kb_str
+                            ky = math.sin(angle_to_player) * kb_str
+                            self.player.x += kx
+                            self.player.y += ky
+                elif spec == "war_cry":
+                    # Knockback player + buff nearby enemies
+                    if pdist < aoe_range and not self.player.invincible:
+                        hit_player = True
+                        spec_dmg = enemy.damage // 3  # less damage, more utility
+                        angle_away = math.atan2(self.player.y - enemy.y,
+                                                self.player.x - enemy.x)
+                        self.player.x += math.cos(angle_away) * 12
+                        self.player.y += math.sin(angle_away) * 12
+                    # Buff nearby enemies with speed boost
+                    for ally in alive:
+                        if ally is not enemy and ally.alive:
+                            adist = math.hypot(ally.x - enemy.x, ally.y - enemy.y)
+                            if adist < aoe_range:
+                                ally.speed = ENEMY_TYPES[ally.enemy_type]["speed"] * 1.5
+                elif spec == "ground_slam":
+                    if pdist < aoe_range and not self.player.invincible:
+                        hit_player = True
+                        # Knockback based on distance (closer = stronger)
+                        if pdist > 0:
+                            kb = 10.0 * (1.0 - pdist / aoe_range)
+                            angle_away = math.atan2(self.player.y - enemy.y,
+                                                    self.player.x - enemy.x)
+                            self.player.x += math.cos(angle_away) * kb
+                            self.player.y += math.sin(angle_away) * kb
+                elif spec == "null_burst":
+                    if pdist < aoe_range and not self.player.invincible:
+                        hit_player = True
+                        spec_dmg = enemy.damage // 2  # less per burst since multiple hits
+                        self.player.vision_debuff_until = now + 5000
+                        self.player.statuses.apply("slow", now)
+                else:
+                    # Fallback generic AoE
+                    if pdist < aoe_range and not self.player.invincible:
+                        hit_player = True
+
+                if hit_player:
+                    self.player.hp -= spec_dmg
+                    self.run_stats.record_damage_taken(spec_dmg)
+                    self.animations.spawn_hit_sparks(self.player.x, self.player.y, count=8)
+                    self.animations.add_screen_shake(5)
+                    self.sounds.play("hit")
+                enemy.special_attack_hit = False
+
+            # ---- Secondary (phase 2) special attack ----
+            if getattr(enemy, 'special2_attack_hit', False) and enemy.is_boss:
+                spec2 = enemy._special2
+                aoe_range2 = int(enemy.size * enemy._special2_aoe_mult)
+                pdist2 = math.hypot(self.player.x - enemy.x, self.player.y - enemy.y)
+                hit_player2 = False
+                spec2_dmg = enemy.damage
+
+                if spec2 == "missile_barrage":
+                    # Fire 3 clustered projectiles toward player with slight spread
+                    dmg = int(enemy.bullet_damage * 1.3)
+                    for mi in range(3):
+                        offset_ang = (mi - 1) * 0.18
+                        base_ang = math.atan2(self.player.y - enemy.y, self.player.x - enemy.x)
+                        ang = base_ang + offset_ang
+                        tx = enemy.x + math.cos(ang) * 400
+                        ty = enemy.y + math.sin(ang) * 400
+                        self.projectiles.spawn(enemy.x, enemy.y, tx, ty, dmg)
+                    self.sounds.play("enemy_shoot")
+
+                elif spec2 == "bleed_storm":
+                    # Ring of 12 projectiles in all directions from boss
+                    dmg = int(enemy.bullet_damage * 0.9)
+                    for bi in range(12):
+                        ang = bi * math.pi * 2 / 12
+                        tx = enemy.x + math.cos(ang) * 500
+                        ty = enemy.y + math.sin(ang) * 500
+                        self.projectiles.spawn(enemy.x, enemy.y, tx, ty, dmg)
+                    self.animations.spawn_death_burst(enemy.x, enemy.y, (200, 50, 50), count=16)
+                    self.sounds.play("enemy_shoot")
+
+                elif spec2 == "fire_ring":
+                    # 8 fire pillars placed around the player's position
+                    for fi in range(8):
+                        ang = fi * math.pi / 4
+                        ring_r = 80
+                        fx = enemy._special2_target_x + math.cos(ang) * ring_r
+                        fy = enemy._special2_target_y + math.sin(ang) * ring_r
+                        tdist = math.hypot(self.player.x - fx, self.player.y - fy)
+                        if tdist < 50 and not self.player.invincible:
+                            hit_player2 = True
+                            self.player.statuses.apply("fire", now)
+                    self.animations.spawn_death_burst(
+                        enemy._special2_target_x, enemy._special2_target_y,
+                        (255, 100, 20), count=20)
+
+                elif spec2 == "eldritch_pull":
+                    # Gravitational pull — yank player toward boss, damage at close range
+                    pull_str = 18.0
+                    if pdist2 > 0:
+                        pull_x = (enemy.x - self.player.x) / pdist2 * pull_str
+                        pull_y = (enemy.y - self.player.y) / pdist2 * pull_str
+                        self.player.x += pull_x
+                        self.player.y += pull_y
+                    new_pdist = math.hypot(self.player.x - enemy.x, self.player.y - enemy.y)
+                    if new_pdist < aoe_range2 * 0.6 and not self.player.invincible:
+                        hit_player2 = True
+                        self.player.statuses.apply("bleed", now)
+                    self.animations.add_screen_shake(7)
+
+                elif spec2 == "void_cage":
+                    # 6 void zones ring the player — deal slow + damage if any hit
+                    for ci in range(6):
+                        ang = ci * math.pi / 3
+                        cage_r = 60
+                        cx = enemy._special2_target_x + math.cos(ang) * cage_r
+                        cy = enemy._special2_target_y + math.sin(ang) * cage_r
+                        tdist = math.hypot(self.player.x - cx, self.player.y - cy)
+                        if tdist < 55 and not self.player.invincible:
+                            hit_player2 = True
+                            self.player.statuses.apply("slow", now)
+                    self.animations.spawn_confetti_explosion(
+                        enemy._special2_target_x, enemy._special2_target_y)
+
+                elif spec2 == "reality_collapse":
+                    # 16-shot burst ring from nexus
+                    dmg = int(enemy.bullet_damage * 0.75)
+                    for ri in range(16):
+                        ang = ri * math.pi * 2 / 16
+                        tx = enemy.x + math.cos(ang) * 500
+                        ty = enemy.y + math.sin(ang) * 500
+                        self.projectiles.spawn(enemy.x, enemy.y, tx, ty, dmg)
+                    # Plus direct vision/slow damage at close range
+                    if pdist2 < aoe_range2 and not self.player.invincible:
+                        hit_player2 = True
+                        spec2_dmg = enemy.damage // 2
+                        self.player.vision_debuff_until = now + 4000
+                        self.player.statuses.apply("slow", now)
+                    self.animations.spawn_death_burst(enemy.x, enemy.y, (80, 60, 220), count=24)
+                    self.sounds.play("enemy_shoot")
+
+                else:
+                    # Generic fallback
+                    if pdist2 < aoe_range2 and not self.player.invincible:
+                        hit_player2 = True
+
+                if hit_player2:
+                    self.player.hp -= spec2_dmg
+                    self.run_stats.record_damage_taken(spec2_dmg)
+                    self.animations.spawn_hit_sparks(self.player.x, self.player.y, count=10)
+                    self.animations.add_screen_shake(6)
+                    self.sounds.play("hit")
+                enemy.special2_attack_hit = False
 
         self.combat.process_player_attack(self.player, alive, now)
 
@@ -411,16 +861,40 @@ class Game:
             if not enemy.alive:
                 process_enemy_death(enemy, self.player, alive, self.animations,
                                     self.combat, self.sounds, self.lighting,
-                                    self.boss_chests, _kt, now)
+                                    self.boss_chests, _kt, self.pickups, now)
         self.kills = _kt["kills"]
         self.boss_kills = _kt["boss_kills"]
 
-        # Check if player attack hits a fruit tree
-        if self.player.is_attacking and not self.player.weapon.get("projectile"):
-            apple_drops = self.environment.check_fruit_tree_hit(
+        # Mirror shade splitting
+        for enemy in alive:
+            if enemy.wants_to_split:
+                enemy.wants_to_split = False
+                for _ in range(2):
+                    offset_x = _rng.uniform(-40, 40)
+                    offset_y = _rng.uniform(-40, 40)
+                    clone = Enemy(enemy.x + offset_x, enemy.y + offset_y, "mirror_shade")
+                    clone.max_hp = enemy.max_hp // 3
+                    clone.hp = clone.max_hp
+                    clone.damage = max(1, enemy.damage * 2 // 3)
+                    clone._has_split = True
+                    clone.spawn_time = now
+                    self.spawner.enemies.append(clone)
+
+        # Check if player attack hits a healing prop (any weapon type)
+        if self.player.is_attacking:
+            healing_drops = self.environment.check_healing_prop_hit(
                 self.player.get_attack_rect(), now)
-            for ax, ay in apple_drops:
-                self.pickups.spawn_apple(ax, ay)
+            for ax, ay, kind in healing_drops:
+                self._spawn_healing_drop(ax, ay, kind)
+
+        # Check if player projectiles hit healing props
+        for proj in self.player_projectiles.daggers:
+            if not proj.alive:
+                continue
+            proj_rect = pygame.Rect(proj.x - 6, proj.y - 6, 12, 12)
+            healing_drops = self.environment.check_healing_prop_hit(proj_rect, now)
+            for ax, ay, kind in healing_drops:
+                self._spawn_healing_drop(ax, ay, kind)
 
         # Update player-thrown projectiles (daggers, orbiters, grenades)
         thrown_hits, grenade_explosions = self.player_projectiles.update(
@@ -464,13 +938,13 @@ class Game:
                             if not other.alive:
                                 process_enemy_death(other, self.player, alive, self.animations,
                                                     self.combat, self.sounds, self.lighting,
-                                                    self.boss_chests, _kt, now)
+                                                    self.boss_chests, _kt, self.pickups, now)
                                 self.kills = _kt["kills"]
                                 self.boss_kills = _kt["boss_kills"]
             if not enemy.alive:
                 process_enemy_death(enemy, self.player, alive, self.animations,
                                     self.combat, self.sounds, self.lighting,
-                                    self.boss_chests, _kt, now)
+                                    self.boss_chests, _kt, self.pickups, now)
                 self.kills = _kt["kills"]
                 self.boss_kills = _kt["boss_kills"]
             self.sounds.play("hit")
@@ -479,6 +953,7 @@ class Game:
         prev_hp = self.player.hp
         self.combat.process_enemy_attacks(self.player, alive, now)
         if self.player.hp < prev_hp:
+            self.run_stats.record_damage_taken(prev_hp - self.player.hp)
             self.sounds.play("hit")
             self.animations.spawn_hit_sparks(self.player.x, self.player.y)
             self.animations.add_screen_shake(3)
@@ -495,6 +970,7 @@ class Game:
         prev_hp2 = self.player.hp
         self.projectiles.update(now, self.player, world_w, world_h)
         if self.player.hp < prev_hp2:
+            self.run_stats.record_damage_taken(prev_hp2 - self.player.hp)
             self.sounds.play("hit")
             self.animations.spawn_hit_sparks(self.player.x, self.player.y)
             self.animations.add_screen_shake(2)
@@ -507,15 +983,33 @@ class Game:
         # Radar
         self.radar.update(now, self.player.x, self.player.y, alive, self.sounds)
 
-        # Dynamic music intensity — force max during boss waves
+        # Dynamic music intensity — only ramp during boss waves, keep ambient otherwise
         if alive:
-            min_dist = min(math.hypot(e.x - self.player.x, e.y - self.player.y) for e in alive)
-            intensity = max(0.0, min(1.0, 1.0 - (min_dist - 200) / 600))
             if self.spawner.boss_wave:
                 intensity = 1.0  # full combat intensity for boss waves
+            else:
+                min_dist = min(math.hypot(e.x - self.player.x, e.y - self.player.y) for e in alive)
+                intensity = max(0.0, min(0.25, 0.25 - (min_dist - 150) / 500))
         else:
             intensity = 0.0
         self.sounds.set_music_intensity(intensity)
+
+        # Portal collision (zone transition)
+        if self.portal and self.portal.check_collision(self.player.rect):
+            next_zone = get_next_zone(self.current_zone)
+            if next_zone:
+                self.run_stats.complete_zone(self.current_zone)
+                self.current_zone = next_zone
+                self._transition_to_zone(next_zone)
+            else:
+                # Completed all zones — victory!
+                self.run_stats.complete_zone(self.current_zone)
+                self._legacy_points_earned = self.legacy.finish_run(
+                    self.spawner.wave, self.kills, self.boss_kills)
+                self.run_summary.activate(
+                    self.run_stats, self.spawner.wave,
+                    self.current_zone, self._legacy_points_earned,
+                    self.player.level, victory=True)
 
         # Boss chest collision
         p_rect = self.player.rect
@@ -530,6 +1024,18 @@ class Game:
         self.animations.update(dt)
         self.camera.update(self.player.x, self.player.y, world_w, world_h)
 
+        # Spawn portal after clearing the boss wave (wave == boss_wave of zone)
+        zone_data = get_zone(self.current_zone)
+        boss_wave = zone_data.get("boss_wave", 10)
+        if (self.spawner.wave >= boss_wave
+                and not self.spawner.wave_active
+                and self.portal is None
+                and len(self.spawner.get_alive_enemies()) == 0):
+            # Spawn portal at map center
+            self.portal = Portal(world_w // 2, world_h // 2)
+            log.info("Portal spawned for zone transition! zone=%s wave=%d",
+                     self.current_zone, self.spawner.wave)
+
         if self.player.hp <= 0:
             # Passive: second_wind — revive once at 30% HP
             if "second_wind" in self.player.passives and not self._second_wind_used:
@@ -540,10 +1046,19 @@ class Game:
                 self.animations.add_screen_shake(6)
                 self.sounds.play("levelup")
                 log.info("Second Wind activated! HP restored to %d", self.player.hp)
-            else:
-                self.game_over = True
+            elif not self._player_dying:
+                # Start death animation — actual game_over set after delay
+                self._player_dying = True
+                self._player_death_time = now
+                self.player.hp = 0
+                self.sounds.play("player_death")
+                self.animations.spawn_death_burst(
+                    self.player.x, self.player.y, (255, 80, 80), count=28)
+                self.animations.add_screen_shake(14)
                 self._legacy_points_earned = self.legacy.finish_run(
                     self.spawner.wave, self.kills, self.boss_kills)
+            elif now - self._player_death_time >= self._player_death_duration:
+                self.game_over = True
 
         # Check for pending level-up -- start fanfare
         if self.player.pending_levelup:
@@ -555,6 +1070,55 @@ class Game:
                 self.player.x, self.player.y, (255, 255, 100), count=24)
             self.animations.add_screen_shake(4)
             self.sounds.play("levelup")
+
+    def _spawn_healing_drop(self, x: float, y: float, kind: str):
+        """Spawn the appropriate healing pickup for a healing prop type."""
+        if kind == "fruit_tree":
+            self.pickups.spawn_apple(x, y)
+        elif kind == "first_aid_box":
+            self.pickups.spawn_medkit(x, y)
+        elif kind == "void_bloom":
+            self.pickups.spawn_void_essence(x, y)
+
+    def _transition_to_zone(self, zone_name: str):
+        """Reset world for new zone, keeping player stats."""
+        log.info("Transitioning to zone: %s", zone_name)
+        # Save player state
+        p = self.player
+        saved = {
+            "hp": p.hp, "max_hp": p.max_hp, "damage": p.damage,
+            "speed": p.speed, "attack_range": p.attack_range,
+            "attack_cooldown": p.attack_cooldown,
+            "weapon_name": p.weapon_name, "weapon": p.weapon,
+            "passives": list(p.passives), "level": p.level,
+            "xp": p.xp, "xp_to_next": p.xp_to_next,
+        }
+        # Reinit world
+        self._init_world()
+        # Restore player state
+        p = self.player
+        for k, v in saved.items():
+            setattr(p, k, v)
+        # Reset portal
+        self.portal = None
+        # Setup new zone
+        zone_data = get_zone(zone_name)
+        self.atmosphere.set_zone(zone_name, zone_data)
+        self.hazard_system.set_zone(zone_name, zone_data)
+        self.spawner.set_zone(zone_data)
+        self.run_stats.set_zone(zone_name)
+        self.sounds.set_zone_music(zone_name)
+
+
+    def _apply_settings(self):
+        """Sync display/audio with current menu settings."""
+        s = self.main_menu.settings
+        # Fullscreen toggle
+        is_fs = bool(pygame.display.get_surface().get_flags() & pygame.FULLSCREEN)
+        want_fs = s.get("fullscreen", False)
+        if want_fs != is_fs:
+            flags = pygame.FULLSCREEN if want_fs else 0
+            self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), flags)
 
     # ------------------------------------------------------------------ draw
     def _draw(self):
@@ -594,12 +1158,27 @@ class Game:
         # Particle animations (death bursts, hit sparks)
         self.animations.draw(self.screen, cx, cy)
 
+        # Atmospheric particles
+        self.atmosphere.draw(self.screen, pygame.time.get_ticks())
+
+        # Environmental hazards
+        self.hazard_system.draw(self.screen, cx, cy, pygame.time.get_ticks())
+
+        # Portal
+        if self.portal:
+            self.portal.draw(self.screen, cx, cy)
+
         # ---- Darkness overlay (after world, before UI) ----
         self.lighting.draw(self.screen, cx, cy, self.player.x, self.player.y)
 
+        # ---- Vision debuff overlay (Nexus null_burst) ----
+        now_draw = pygame.time.get_ticks()
+        if now_draw < self.player.vision_debuff_until:
+            self._draw_vision_debuff(now_draw)
+
         alive_count = len(self.spawner.get_alive_enemies())
         boss_enemies = [e for e in self.spawner.get_alive_enemies()
-                       if e.enemy_type in ("mini_boss", "big_boss")] if self.spawner.boss_wave else None
+                       if e.is_boss] if self.spawner.boss_wave else None
         self.hud.draw(self.screen, self.player, self.spawner.wave, alive_count,
                       self.lighting.darkness, self.spawner.boss_wave, boss_enemies)
 
@@ -620,14 +1199,16 @@ class Game:
                 self.screen.blit(flash_surf, (0, 0))
             # "LEVEL UP!" text that scales up
             scale = min(2.0, 0.5 + elapsed / 300)
-            font_size = int(48 * scale)
-            font = pygame.font.SysFont("consolas", font_size, bold=True)
-            text = font.render("LEVEL UP!", True, (255, 255, 100))
+            font_size = max(12, int(48 * scale))
+            text = get_font("consolas", font_size, True).render("LEVEL UP!", True, (255, 255, 100))
             tr = text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2))
             self.screen.blit(text, tr)
 
         # Level-up overlay
         self.levelup_screen.draw(self.screen)
+
+        # Weapon swap overlay
+        self.weapon_swap.draw(self.screen)
 
         # Passive swap overlay
         self.passive_swap.draw(self.screen)
@@ -635,8 +1216,309 @@ class Game:
         # Chest reward overlay
         self.chest_reward.draw(self.screen)
 
+        # Run summary overlay
+        self.run_summary.draw(self.screen)
+
         if self.game_over:
             self.hud.draw_game_over(self.screen, self.spawner.wave, self.player.level,
                                     self.kills, self._legacy_points_earned)
+        elif self._player_dying:
+            self._draw_player_death_overlay()
+
+        # Pause overlay
+        if self.paused:
+            self._draw_pause_overlay()
+
+        # Auto-attack indicator
+        if self.auto_attack and not self.game_over:
+            aa_text = get_font("consolas", 14, True).render("[F] AUTO-ATTACK ON", True, (255, 200, 50))
+            self.screen.blit(aa_text, (SCREEN_WIDTH // 2 - aa_text.get_width() // 2,
+                                       SCREEN_HEIGHT - 30))
+
+        # Debug overlay
+        if self._debug_mode:
+            alive = self.spawner.get_alive_enemies()
+            fps = self.clock.get_fps()
+            self.debug_overlay.draw(
+                self.screen, int(self.camera.x), int(self.camera.y),
+                self.player, alive,
+                self.projectiles, self.player_projectiles,
+                fps, self.spawner.wave, self.boss_chests)
 
         pygame.display.flip()
+
+    def _draw_vision_debuff(self, now: int):
+        """Render eldritch vision distortion when hit by Nexus null_burst."""
+        remaining = self.player.vision_debuff_until - now
+        intensity = min(1.0, remaining / 5000)
+        t = now * 0.001
+
+        overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+
+        # Purple-green color shift bands
+        for i in range(0, SCREEN_HEIGHT, 40):
+            wave = math.sin(t * 3.0 + i * 0.05) * 0.5 + 0.5
+            alpha = int(45 * intensity * wave)
+            color = (120, 30, 180, alpha) if i % 80 < 40 else (30, 160, 80, alpha)
+            pygame.draw.rect(overlay, color, (0, i, SCREEN_WIDTH, 40))
+
+        # Wobbly scan lines
+        for y in range(0, SCREEN_HEIGHT, 3):
+            offset = int(math.sin(t * 8.0 + y * 0.1) * 4 * intensity)
+            if offset != 0:
+                pygame.draw.line(overlay, (100, 40, 160, int(30 * intensity)),
+                                 (offset, y), (SCREEN_WIDTH + offset, y), 1)
+
+        # Pulsing vignette
+        pulse = 0.5 + 0.5 * math.sin(t * 5.0)
+        vig_alpha = int(80 * intensity * pulse)
+        vig = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+        vig.fill((80, 0, 120, vig_alpha))
+        # Clear center (radial fade)
+        cx, cy = SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2
+        for r in range(min(cx, cy), 0, -20):
+            fade = int(vig_alpha * (r / min(cx, cy)))
+            pygame.draw.circle(vig, (80, 0, 120, fade), (cx, cy), r)
+        self.screen.blit(vig, (0, 0))
+
+        self.screen.blit(overlay, (0, 0))
+
+    def _draw_player_death_overlay(self):
+        """Zoom-in + fade-to-black death transition before game over screen."""
+        now = pygame.time.get_ticks()
+        elapsed = now - self._player_death_time
+        t = min(1.0, elapsed / self._player_death_duration)  # 0..1
+
+        # Phase 1 (0-50%): vignette darkening + red tint
+        # Phase 2 (50-100%): fade to full black
+        if t < 0.5:
+            # Darkening red vignette
+            vign_alpha = int(180 * (t / 0.5))
+            overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+            overlay.fill((80, 0, 0, vign_alpha))
+            self.screen.blit(overlay, (0, 0))
+        else:
+            # Fade to black
+            fade_t = (t - 0.5) / 0.5
+            black_alpha = int(255 * fade_t ** 1.5)
+            overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+            overlay.fill((0, 0, 0, black_alpha))
+            self.screen.blit(overlay, (0, 0))
+
+        # "YOU DIED" text fades in at 60% through
+        if t >= 0.6:
+            text_t = (t - 0.6) / 0.4
+            text_alpha = int(255 * text_t ** 0.7)
+            font = get_font("consolas", 72, True)
+            text = font.render("YOU DIED", True, (220, 40, 40))
+            text.set_alpha(text_alpha)
+            tr = text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2))
+            self.screen.blit(text, tr)
+
+    def _draw_pause_overlay(self):
+        overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 180))
+        self.screen.blit(overlay, (0, 0))
+
+        font_big = get_font("consolas", 48, True)
+        font_med = get_font("consolas", 18, True)
+        font = get_font("consolas", 15)
+        font_small = get_font("consolas", 13)
+
+        # Title
+        text = font_big.render("PAUSED", True, (255, 255, 255))
+        self.screen.blit(text, (SCREEN_WIDTH // 2 - text.get_width() // 2, 30))
+
+        # ── Left panel: Player stats ──
+        lx = 60
+        ly = 100
+        section_color = (255, 215, 0)
+        label_color = (180, 180, 200)
+        value_color = (255, 255, 255)
+
+        header = font_med.render("PLAYER STATS", True, section_color)
+        self.screen.blit(header, (lx, ly))
+        ly += 30
+
+        p = self.player
+        stats = [
+            ("Class", p.char_class.title()),
+            ("Level", str(p.level)),
+            ("HP", f"{p.hp}/{p.max_hp}"),
+            ("Damage", str(p.damage)),
+            ("Speed", f"{p.speed:.1f}"),
+            ("Attack CD", f"{p.attack_cooldown}ms"),
+            ("Weapon", p.weapon.get("name", "?")),
+            ("Zone", self.current_zone.replace("_", " ").title()),
+            ("Wave", str(self.spawner.wave)),
+        ]
+        for label, val in stats:
+            ls = font.render(f"{label}:", True, label_color)
+            vs = font.render(val, True, value_color)
+            self.screen.blit(ls, (lx, ly))
+            self.screen.blit(vs, (lx + 120, ly))
+            ly += 22
+
+        # Passives
+        ly += 8
+        ph = font_med.render("PASSIVES", True, section_color)
+        self.screen.blit(ph, (lx, ly))
+        ly += 26
+        if p.passives:
+            for pname in p.passives:
+                ps = font.render(f"• {pname.replace('_', ' ').title()}", True, (180, 220, 180))
+                self.screen.blit(ps, (lx + 4, ly))
+                ly += 20
+        else:
+            ps = font.render("(none)", True, (120, 120, 140))
+            self.screen.blit(ps, (lx + 4, ly))
+            ly += 20
+
+        # Upgrade tiers
+        if p.upgrade_tiers:
+            ly += 8
+            uh = font_med.render("UPGRADES", True, section_color)
+            self.screen.blit(uh, (lx, ly))
+            ly += 26
+            for uname, tier in p.upgrade_tiers.items():
+                tier_str = {1: "I", 2: "II", 3: "III"}.get(tier, str(tier))
+                us = font.render(f"• {uname} [{tier_str}]", True, (200, 200, 180))
+                self.screen.blit(us, (lx + 4, ly))
+                ly += 20
+
+        # ── Right panel: Hotkeys ──
+        rx = SCREEN_WIDTH // 2 + 60
+        ry = 100
+        hh = font_med.render("HOTKEYS", True, section_color)
+        self.screen.blit(hh, (rx, ry))
+        ry += 30
+
+        hotkeys = [
+            ("W/A/S/D", "Move"),
+            ("Space / Click", "Attack"),
+            ("Shift", "Dash"),
+            ("F", "Toggle auto-attack"),
+            ("P / ESC", "Pause / Resume"),
+            ("R", "View run summary (on death)"),
+            ("Mouse", "Aim direction"),
+        ]
+        for key, desc in hotkeys:
+            ks = font.render(key, True, (255, 215, 0))
+            ds = font.render(f"  {desc}", True, label_color)
+            self.screen.blit(ks, (rx, ry))
+            self.screen.blit(ds, (rx + 140, ry))
+            ry += 22
+
+        # ── Run stats ──
+        ry += 16
+        rsh = font_med.render("RUN STATS", True, section_color)
+        self.screen.blit(rsh, (rx, ry))
+        ry += 30
+
+        rs = self.run_stats
+        elapsed = (pygame.time.get_ticks() - rs.time_started) // 1000
+        mins, secs = divmod(elapsed, 60)
+        run_info = [
+            ("Time", f"{mins}:{secs:02d}"),
+            ("Kills", str(rs.total_kills)),
+            ("Boss Kills", str(rs.boss_kills)),
+            ("Damage Dealt", str(rs.total_damage_dealt)),
+            ("Damage Taken", str(rs.total_damage_taken)),
+            ("Highest Hit", str(rs.highest_hit)),
+        ]
+        for label, val in run_info:
+            ls = font.render(f"{label}:", True, label_color)
+            vs = font.render(val, True, value_color)
+            self.screen.blit(ls, (rx, ry))
+            self.screen.blit(vs, (rx + 120, ry))
+            ry += 22
+
+        # ── Debug extras (only when debug mode is active) ──
+        if self._debug_mode:
+            ry += 16
+            dh = font_med.render("DEBUG INFO", True, (255, 80, 80))
+            self.screen.blit(dh, (rx, ry))
+            ry += 30
+
+            alive_count = len(self.spawner.get_alive_enemies())
+            fps = self.clock.get_fps()
+            cheats = self.debug_menu.cheats if hasattr(self, 'debug_menu') else {}
+            active_cheats = [k for k, v in cheats.items() if v]
+
+            debug_info = [
+                ("FPS", f"{fps:.0f}"),
+                ("Alive Enemies", str(alive_count)),
+                ("Player Pos", f"({int(p.x)}, {int(p.y)})"),
+                ("Darkness", f"{self.lighting.darkness:.2f}"),
+                ("Active Cheats", ", ".join(active_cheats) if active_cheats else "none"),
+            ]
+            for label, val in debug_info:
+                ls = font_small.render(f"{label}:", True, (255, 100, 100))
+                vs = font_small.render(val, True, (255, 180, 180))
+                self.screen.blit(ls, (rx, ry))
+                self.screen.blit(vs, (rx + 120, ry))
+                ry += 18
+
+        # ── Pause menu ──
+        menu_y = SCREEN_HEIGHT - 160
+        for i, opt in enumerate(self._pause_options):
+            is_sel = i == self._pause_selected
+            color = (255, 215, 0) if is_sel else (140, 140, 160)
+            prefix = "> " if is_sel else "  "
+            opt_txt = get_font("consolas", 18, True).render(f"{prefix}{opt}", True, color)
+            ox = SCREEN_WIDTH // 2 - opt_txt.get_width() // 2
+            oy = menu_y + i * 34
+            if is_sel:
+                bar = pygame.Surface((opt_txt.get_width() + 30, 28), pygame.SRCALPHA)
+                bar.fill((255, 215, 0, 20))
+                self.screen.blit(bar, (ox - 15, oy - 2))
+            self.screen.blit(opt_txt, (ox, oy))
+
+        hint_font = get_font("consolas", 14)
+        h1 = hint_font.render("W/S to navigate  |  Enter / E to select  |  P or Esc to resume", True, (80, 80, 100))
+        self.screen.blit(h1, (SCREEN_WIDTH // 2 - h1.get_width() // 2, SCREEN_HEIGHT - 26))
+
+    def _apply_debug_cheats(self):
+        if not self._debug_mode:
+            return
+        cheats = self.debug_menu.cheats
+        self.debug_overlay.active = True
+        self.debug_overlay.set_cheats(cheats)
+        self.debug_overlay.log("Debug mode active")
+        if cheats.get("double_speed"):
+            self.player.speed *= 2
+            self.debug_overlay.log("Cheat: 2x speed")
+        if cheats.get("double_damage"):
+            self.player.damage *= 2
+            self.debug_overlay.log("Cheat: 2x damage")
+        if cheats.get("one_hit_kills"):
+            self.player.damage = 99999
+            self.debug_overlay.log("Cheat: one-hit kills")
+        if cheats.get("infinite_dash"):
+            self.player.dash_cooldown = 0
+            self.debug_overlay.log("Cheat: infinite dash")
+        if cheats.get("max_level"):
+            for _ in range(10):
+                self.player.level += 1
+                self.player.damage += 3
+                self.player.max_hp += 10
+            self.player.hp = self.player.max_hp
+            self.debug_overlay.log("Cheat: max level (10)")
+        # Zone override
+        zone_name = self.debug_menu.zone_names[self.debug_menu.start_zone]
+        if zone_name != self.current_zone:
+            self.current_zone = zone_name
+            self._transition_to_zone(zone_name)
+            self.debug_overlay.log(f"Zone override: {zone_name}")
+        # Wave override
+        if self.debug_menu.start_wave > 1:
+            self.spawner.wave = self.debug_menu.start_wave - 1
+            self.debug_overlay.log(f"Wave override: {self.debug_menu.start_wave}")
+        # Skip to boss
+        if cheats.get("skip_to_boss"):
+            from src.systems.zones import get_zone as _gz
+            zd = _gz(self.current_zone)
+            bw = zd.get("boss_wave", 10)
+            self.spawner.wave = bw - 1
+            self.debug_overlay.log(f"Skip to boss wave {bw}")
+
