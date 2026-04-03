@@ -20,6 +20,21 @@ class CharacterSelectScreen:
         """Returns class key ('knight', 'archer', 'jester') or None."""
         if not self.active:
             return None
+        # Click on a class card
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            mx, my = event.pos
+            card_w, card_h, gap = 220, 340, 30
+            total_w = len(self.classes) * card_w + (len(self.classes) - 1) * gap
+            start_x = SCREEN_WIDTH // 2 - total_w // 2
+            card_y = 120
+            for i in range(len(self.classes)):
+                cx_c = start_x + i * (card_w + gap)
+                if cx_c <= mx <= cx_c + card_w and card_y <= my <= card_y + card_h:
+                    self.chosen_class = self.classes[i]
+                    self.active = False
+                    return self.chosen_class
+            return None
+
         if event.type != pygame.KEYDOWN:
             return None
 
@@ -27,7 +42,7 @@ class CharacterSelectScreen:
             self.selected = (self.selected - 1) % len(self.classes)
         elif event.key in (pygame.K_d, pygame.K_RIGHT):
             self.selected = (self.selected + 1) % len(self.classes)
-        elif event.key in (pygame.K_RETURN, pygame.K_SPACE):
+        elif event.key in (pygame.K_RETURN, pygame.K_SPACE, pygame.K_e):
             self.chosen_class = self.classes[self.selected]
             self.active = False
             return self.chosen_class

@@ -108,6 +108,6 @@ class Radar:
         surface.blit(radar_surf, (cx - r - 2, cy - r - 2))
 
         # Label
-        font = pygame.font.SysFont("consolas", 11)
-        label = font.render("MOTION TRACKER", True, (0, 140, 0))
+        from src.font_cache import get_font
+        label = get_font("consolas", 11).render("MOTION TRACKER", True, (0, 140, 0))
         surface.blit(label, (cx - label.get_width() // 2, cy - r - 16))

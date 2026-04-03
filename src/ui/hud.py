@@ -4,6 +4,7 @@ from src.settings import (
     SCREEN_WIDTH, SCREEN_HEIGHT, RED, GREEN, WHITE, YELLOW, BLACK, LIGHT_GRAY,
     XP_DARKNESS_BONUS, MAX_PASSIVES, PASSIVE_INFO,
 )
+from src.ui.icons import get_passive_icon, get_weapon_icon
 
 
 class HUD:
@@ -44,24 +45,31 @@ class HUD:
         label = self.font_small.render(f"XP {player.xp}/{player.xp_to_next}", True, WHITE)
         surface.blit(label, (bar_x + 4, bar_y + 0))
 
+        # Coin counter
+        coins = getattr(player, "coins", 0)
+        coin_txt = self.font_small.render(f"$ {coins}", True, (255, 200, 50))
+        surface.blit(coin_txt, (bar_x, bar_y + 18))
+
     def _draw_info(self, surface: pygame.Surface, player, wave: int, enemy_count: int,
                    darkness: float = 0.0, boss_wave: bool = False):
         lvl = self.font.render(f"Lv {player.level}", True, YELLOW)
         surface.blit(lvl, (250, 20))
 
-        # Weapon name
+        # Weapon icon + name
+        icon_size = 20
+        wpn_icon_key = getattr(player, "weapon_name", "")
+        if wpn_icon_key:
+            wicon = get_weapon_icon(wpn_icon_key, icon_size)
+            surface.blit(wicon, (250, 42))
         wpn = self.font_small.render(player.weapon["name"], True, LIGHT_GRAY)
-        surface.blit(wpn, (250, 44))
+        surface.blit(wpn, (250 + (icon_size + 4 if wpn_icon_key else 0), 44))
 
-        # Wave info with boss indicator
-        wave_label = f"Wave {wave}  |  Enemies: {enemy_count}"
-        wave_txt = self.font.render(wave_label, True, LIGHT_GRAY)
+        # Wave info — show BOSS prefix inline when boss wave is active
+        boss_prefix = "\u2605 BOSS  " if boss_wave else ""
+        wave_label = f"{boss_prefix}Wave {wave}  |  Enemies: {enemy_count}"
+        wave_color = (255, 80, 80) if boss_wave else LIGHT_GRAY
+        wave_txt = self.font.render(wave_label, True, wave_color)
         surface.blit(wave_txt, (SCREEN_WIDTH - wave_txt.get_width() - 20, 20))
-
-        if boss_wave:
-            boss_txt = self.font.render("!! BOSS WAVE !!", True, (255, 60, 60))
-            bx = SCREEN_WIDTH // 2 - boss_txt.get_width() // 2
-            surface.blit(boss_txt, (bx, 50))
 
         # Darkness / XP multiplier indicator
         if darkness > 0.01:
@@ -86,14 +94,14 @@ class HUD:
                 continue
             y = bar_y + i * (bar_h + 8)
             ratio = max(0, boss.hp / boss.max_hp)
-            # Label
-            label = "BOSS" if boss.enemy_type == "big_boss" else "ELITE"
-            name_surf = self.font_small.render(f"{label}  {boss.hp}/{boss.max_hp}", True, WHITE)
+            # Label — use readable boss name
+            boss_label = boss.enemy_type.replace("_", " ").title()
+            name_surf = self.font_small.render(f"{boss_label}  {boss.hp}/{boss.max_hp}", True, WHITE)
             surface.blit(name_surf, (bar_x, y - 16))
             # Background
             pygame.draw.rect(surface, (60, 0, 0), (bar_x, y, bar_w, bar_h))
             # HP fill
-            color = (255, 50, 50) if boss.enemy_type == "big_boss" else (255, 160, 0)
+            color = (255, 50, 50) if boss.is_big_boss else (255, 160, 0)
             pygame.draw.rect(surface, color, (bar_x, y, int(bar_w * ratio), bar_h))
             # Border
             pygame.draw.rect(surface, WHITE, (bar_x, y, bar_w, bar_h), 2)
@@ -127,11 +135,9 @@ class HUD:
                 alpha = 40 + int(15 * math.sin(now * 0.003 + i))
                 glow.fill((*color, alpha))
                 surface.blit(glow, (x, y))
-                # Icon letter
-                txt = self.font.render(icon, True, color)
-                tx = x + (slot_size - txt.get_width()) // 2
-                ty = y + (slot_size - txt.get_height()) // 2
-                surface.blit(txt, (tx, ty))
+                # Procedural icon
+                picon = get_passive_icon(key, slot_size - 6, color)
+                surface.blit(picon, (x + 3, y + 3))
                 # Border highlight
                 pygame.draw.rect(surface, color, (x, y, slot_size, slot_size), 2,
                                  border_radius=4)

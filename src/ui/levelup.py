@@ -1,7 +1,8 @@
 import pygame
 import random
-from src.settings import SCREEN_WIDTH, SCREEN_HEIGHT, WHITE, YELLOW, BLACK
+from src.settings import SCREEN_WIDTH, SCREEN_HEIGHT, WHITE, YELLOW, BLACK, MAX_PASSIVES
 from src.systems.weapons import WEAPONS
+from src.ui.tooltip import Tooltip, calc_weapon_dps, PASSIVE_DETAILS
 
 
 # Interesting upgrades — a mix of stats, powerful passives, and risky gambles
@@ -28,6 +29,33 @@ LEVEL_UPGRADES = [
 ]
 
 
+# Weapon-specific upgrades — only offered when the player has the matching weapon
+WEAPON_UPGRADES = {
+    # Knight weapons
+    "sword":          {"name": "Flame Slash",      "icon": "🗡", "color": (255, 120, 30),  "effect": "damage",   "value": 12, "desc": "+12 damage with fire sword strikes"},
+    "axe":            {"name": "Cleaving Arc",     "icon": "🪓", "color": (200, 80, 50),   "effect": "range",    "value": 15, "desc": "+15 attack range — wider axe arc"},
+    "spear":          {"name": "Piercing Thrust",  "icon": "⟶", "color": (140, 200, 255), "effect": "damage",   "value": 10, "desc": "+10 damage — spear pierces deeper"},
+    "hammer":         {"name": "Shockwave",        "icon": "⚡", "color": (255, 220, 50),  "effect": "damage",   "value": 14, "desc": "+14 damage — hammer shockwave"},
+    "plasma_blade":   {"name": "Plasma Overcharge","icon": "⚡", "color": (0, 255, 200),   "effect": "cooldown", "value": 80, "desc": "-80ms cooldown — rapid plasma cuts"},
+    "gravity_maul":   {"name": "Gravity Well",     "icon": "◉", "color": (150, 0, 255),   "effect": "damage",   "value": 16, "desc": "+16 damage — gravity crush"},
+    "blade_barrier":  {"name": "Razor Vortex",     "icon": "✦", "color": (255, 100, 100), "effect": "range",    "value": 20, "desc": "+20 range — spinning blade reach"},
+    "shield_bash":    {"name": "Fortified Bash",   "icon": "■", "color": (100, 160, 255), "effect": "max_hp",   "value": 30, "desc": "+30 Max HP — shield reinforcement"},
+    # Archer weapons
+    "dagger":         {"name": "Poison Tips",      "icon": "☠", "color": (80, 220, 80),   "effect": "damage",   "value": 8,  "desc": "+8 damage — venomous strikes"},
+    "cyber_bow":      {"name": "Rapid Volley",     "icon": "➤", "color": (100, 200, 255), "effect": "cooldown", "value": 70, "desc": "-70ms cooldown — faster arrows"},
+    "pulse_rifle":    {"name": "Overcharged Pulse", "icon": "⚡", "color": (255, 80, 200),  "effect": "damage",   "value": 10, "desc": "+10 damage — supercharged pulses"},
+    "scatter_shot":   {"name": "Wide Scatter",     "icon": "✧", "color": (255, 200, 100), "effect": "range",    "value": 15, "desc": "+15 range — wider scatter pattern"},
+    "ricochet_disc":  {"name": "Multi-Bounce",     "icon": "◎", "color": (255, 160, 0),   "effect": "damage",   "value": 10, "desc": "+10 damage — extra ricochet hits"},
+    # Jester weapons
+    "rubber_chicken": {"name": "Extra Bouncy",     "icon": "🐔", "color": (255, 220, 50),  "effect": "damage",   "value": 10, "desc": "+10 damage — bouncier chicken"},
+    "banana_rang":    {"name": "Banana Split",     "icon": "🍌", "color": (255, 255, 80),  "effect": "range",    "value": 15, "desc": "+15 range — wider banana arc"},
+    "joy_buzzer":     {"name": "Megavolt Buzz",    "icon": "⚡", "color": (255, 255, 0),   "effect": "cooldown", "value": 80, "desc": "-80ms cooldown — rapid buzzing"},
+    "pie_launcher":   {"name": "Cream Explosion",  "icon": "◉", "color": (255, 180, 200), "effect": "damage",   "value": 12, "desc": "+12 damage — bigger pie splash"},
+    "confetti_grenade":{"name": "Party Bomb",      "icon": "✦", "color": (255, 100, 255), "effect": "damage",   "value": 14, "desc": "+14 damage — extra confetti boom"},
+    "jack_in_box":    {"name": "Spring Loaded",    "icon": "★", "color": (200, 80, 255),  "effect": "cooldown", "value": 70, "desc": "-70ms cooldown — faster spring"},
+}
+
+
 class LevelUpScreen:
     """Pauses the game and presents 3 random upgrade choices."""
 
@@ -38,22 +66,74 @@ class LevelUpScreen:
         self.font_big = pygame.font.SysFont("consolas", 32, bold=True)
         self.font = pygame.font.SysFont("consolas", 18)
         self.font_small = pygame.font.SysFont("consolas", 14)
+        self._tooltip = Tooltip()
 
     def activate(self, player_weapon_name: str, player_class: str = "knight",
-                 player_passives: list = None):
+                 player_passives: list = None, base_damage: int = 20,
+                 current_weapon: dict = None, upgrade_tiers: dict = None):
         """Generate 3 random choices: mix of stat upgrades, passives, and weapon swaps."""
         self.active = True
         self.selected = 0
+        self._base_damage = base_damage
+        self._current_weapon = current_weapon
         owned = set(player_passives or [])
+        slot_passives = [k for k in (player_passives or []) if k != "glass_cannon"]
+        self._passives_full = len(slot_passives) >= MAX_PASSIVES
+        tiers = upgrade_tiers or {}
         pool = []
 
-        # Add stat + passive upgrades (filter out already-owned passives)
+        TIER_NAMES = {1: "I", 2: "II", 3: "III"}
+
+        # Add stat + passive upgrades (filter out already-owned passives and maxed tiers)
         for u in LEVEL_UPGRADES:
             if u["effect"] == "passive" and u["value"] in owned:
                 continue
             if u["effect"] == "glass_cannon" and "glass_cannon" in owned:
                 continue
-            pool.append({"type": "stat", **u})
+            if u["effect"] == "passive":
+                pool.append({"type": "stat", **u})
+                continue
+            # Stat upgrades can be taken up to tier 3
+            current_tier = tiers.get(u["name"], 0)
+            if current_tier >= 3:
+                continue
+            next_tier = current_tier + 1
+            tier_mult = {1: 1.0, 2: 1.5, 3: 2.0}[next_tier]
+            tier_label = TIER_NAMES[next_tier]
+            entry = dict(u)
+            entry["type"] = "stat"
+            entry["tier"] = next_tier
+            if next_tier > 1:
+                entry["name"] = f"{u['name']} {tier_label}"
+                scaled_val = u["value"]
+                if isinstance(scaled_val, (int, float)) and scaled_val != 0:
+                    scaled_val = type(scaled_val)(scaled_val * tier_mult)
+                entry["value"] = scaled_val
+                entry["desc"] = f"[Tier {tier_label}] {u['desc']}"
+            entry["base_name"] = u["name"]
+            pool.append(entry)
+
+        # Add weapon-specific upgrade for current weapon (if available and not already taken)
+        if player_weapon_name in WEAPON_UPGRADES:
+            wu = WEAPON_UPGRADES[player_weapon_name]
+            wu_name = wu["name"]
+            current_tier = tiers.get(wu_name, 0)
+            if current_tier < 3:
+                next_tier = current_tier + 1
+                tier_mult = {1: 1.0, 2: 1.5, 3: 2.0}[next_tier]
+                entry = dict(wu)
+                entry["type"] = "weapon_upgrade"
+                entry["tier"] = next_tier
+                entry["base_name"] = wu_name
+                if next_tier > 1:
+                    tier_label = {1: "I", 2: "II", 3: "III"}[next_tier]
+                    entry["name"] = f"{wu_name} {tier_label}"
+                    scaled_val = wu["value"]
+                    if isinstance(scaled_val, (int, float)) and scaled_val != 0:
+                        scaled_val = type(scaled_val)(scaled_val * tier_mult)
+                    entry["value"] = scaled_val
+                    entry["desc"] = f"[Tier {tier_label}] {wu['desc']}"
+                pool.append(entry)
 
         # Add 1-2 weapon options (class-appropriate weapons the player doesn't currently have)
         available_weapons = [k for k in WEAPONS
@@ -81,12 +161,39 @@ class LevelUpScreen:
         if not self.active:
             return None
 
+        # Mouse hover - update selection based on card positions
+        if event.type == pygame.MOUSEMOTION:
+            mx, my = event.pos
+            card_w, card_h = 380, 90
+            start_y = 200
+            cx = SCREEN_WIDTH // 2 - card_w // 2
+            for i in range(len(self.choices)):
+                cy = start_y + i * (card_h + 15)
+                if cx <= mx <= cx + card_w and cy <= my <= cy + card_h:
+                    self.selected = i
+                    break
+            return None
+
+        # Mouse click - select card
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            mx, my = event.pos
+            card_w, card_h = 380, 90
+            start_y = 200
+            cx_card = SCREEN_WIDTH // 2 - card_w // 2
+            for i in range(len(self.choices)):
+                cy = start_y + i * (card_h + 15)
+                if cx_card <= mx <= cx_card + card_w and cy <= my <= cy + card_h:
+                    choice = self.choices[i]
+                    self.active = False
+                    return choice
+            return None
+
         if event.type == pygame.KEYDOWN:
             if event.key in (pygame.K_w, pygame.K_UP):
                 self.selected = (self.selected - 1) % len(self.choices)
             elif event.key in (pygame.K_s, pygame.K_DOWN):
                 self.selected = (self.selected + 1) % len(self.choices)
-            elif event.key in (pygame.K_RETURN, pygame.K_SPACE):
+            elif event.key in (pygame.K_RETURN, pygame.K_SPACE, pygame.K_e):
                 choice = self.choices[self.selected]
                 self.active = False
                 return choice
@@ -147,10 +254,57 @@ class LevelUpScreen:
                 surface.blit(desc_surf, (cx + 95, cy + 42))
 
             # Type tag
-            tag = "WEAPON" if choice["type"] == "weapon" else "STAT"
+            ctype = choice.get("type", "stat")
+            tier = choice.get("tier", 0)
+            if ctype == "weapon":
+                tag = "WEAPON"
+            elif ctype == "weapon_upgrade":
+                tag = "WEAPON UPGRADE"
+            elif tier > 1:
+                tag = f"TIER {tier}"
+            else:
+                tag = "STAT"
             tag_surf = self.font_small.render(tag, True, (100, 100, 100))
             surface.blit(tag_surf, (cx + card_w - tag_surf.get_width() - 10, cy + 65))
 
+            # Passives full warning on passive choices
+            if self._passives_full and choice.get("effect") == "passive":
+                warn_color = (255, 180, 50)
+                warn_text = self.font_small.render("\u26a0 SLOTS FULL — SWAP", True, warn_color)
+                wx = cx + 95
+                wy = cy + 62
+                pygame.draw.rect(surface, (60, 40, 10), (wx - 3, wy - 1, warn_text.get_width() + 6, warn_text.get_height() + 2), border_radius=3)
+                surface.blit(warn_text, (wx, wy))
+
         # Hint
-        hint = self.font_small.render("W/S or Up/Down to select  |  Enter/Space or 1-3 to confirm", True, (120, 120, 120))
+        hint = self.font_small.render("W/S or Mouse to select  |  Enter/Click or 1-3 to confirm", True, (120, 120, 120))
         surface.blit(hint, (SCREEN_WIDTH // 2 - hint.get_width() // 2, start_y + 3 * (card_h + 15) + 20))
+
+        # Tooltip for selected upgrade
+        if 0 <= self.selected < len(self.choices):
+            choice = self.choices[self.selected]
+            tip_x = SCREEN_WIDTH // 2 + card_w // 2 + 12
+            tip_y = start_y + self.selected * (card_h + 15)
+            if choice.get("effect") == "weapon":
+                wkey = choice.get("value", "")
+                from src.systems.weapons import WEAPONS as _W
+                wpn = _W.get(wkey, {})
+                if wpn:
+                    self._tooltip.draw_weapon_tooltip(
+                        surface, tip_x, tip_y, wpn,
+                        self._base_damage, self._current_weapon)
+            elif choice.get("effect") == "passive":
+                pkey = choice.get("value", "")
+                self._tooltip.draw_passive_tooltip(surface, tip_x, tip_y, pkey)
+            elif choice.get("type") == "weapon_upgrade":
+                self._tooltip.draw_stat_tooltip(
+                    surface, tip_x, tip_y,
+                    choice.get("name", ""),
+                    choice.get("desc", ""),
+                    f"Weapon: {self._current_weapon.get('name', '?') if self._current_weapon else '?'}")
+            else:
+                self._tooltip.draw_stat_tooltip(
+                    surface, tip_x, tip_y,
+                    choice.get("name", ""),
+                    choice.get("desc", ""),
+                    f"Value: {choice.get('value', '')}") 

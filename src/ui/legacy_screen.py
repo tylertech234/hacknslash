@@ -28,8 +28,23 @@ class LegacyScreen:
         """Returns True when player is done and wants to continue."""
         if not self.active:
             return False
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            mx, my = event.pos
+            card_w, card_h = 500, 55
+            start_y = 185
+            cx_c = SCREEN_WIDTH // 2 - card_w // 2
+            for i, u in enumerate(LEGACY_UPGRADES):
+                cy = start_y + i * (card_h + 6)
+                if cx_c <= mx <= cx_c + card_w and cy <= my <= cy + card_h:
+                    self.legacy.try_purchase(u["key"])
+                    return False
+            # Click the continue hint area at bottom
+            hint_y = start_y + len(LEGACY_UPGRADES) * (card_h + 6) + 10
+            if my >= hint_y:
+                self.active = False
+                return True
         if event.type == pygame.KEYDOWN:
-            if event.key in (pygame.K_RETURN, pygame.K_SPACE):
+            if event.key in (pygame.K_RETURN, pygame.K_SPACE, pygame.K_e):
                 self.active = False
                 return True
             # Number keys 1-6 to buy upgrades
