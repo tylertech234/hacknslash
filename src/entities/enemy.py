@@ -36,6 +36,24 @@ ENEMY_TYPES = {
         "shoot_cooldown": 600, "bullet_damage": 25,
         "xp_value": 800, "status_on_hit": "bleed",
     },
+    "charger": {
+        "hp": 55, "speed": 2.5, "size": 28,
+        "damage": 18, "shoot_range": 0,
+        "shoot_cooldown": 9999, "bullet_damage": 0,
+        "xp_value": 40, "status_on_hit": None,
+    },
+    "shielder": {
+        "hp": 120, "speed": 1.6, "size": 38,
+        "damage": 12, "shoot_range": 0,
+        "shoot_cooldown": 9999, "bullet_damage": 0,
+        "xp_value": 50, "status_on_hit": "slow",
+    },
+    "spitter": {
+        "hp": 40, "speed": 2.0, "size": 30,
+        "damage": 8, "shoot_range": 280,
+        "shoot_cooldown": 1200, "bullet_damage": 10,
+        "xp_value": 35, "status_on_hit": "poison",
+    },
 }
 
 
@@ -79,6 +97,17 @@ class Enemy:
         self.kb_timer = 0
         self.kb_duration = 150 if enemy_type not in ("mini_boss", "big_boss") else 60
 
+        # Charger burst state
+        self._charge_cooldown = 2500
+        self._charge_duration = 400
+        self._last_charge = 0
+        self._charging = False
+        self._charge_dx = 0.0
+        self._charge_dy = 0.0
+
+        # Shielder: frontal shield blocks damage
+        self._shield_angle = 0.0  # angle shield faces
+
         # Simple wander state
         self.wander_dx = 0.0
         self.wander_dy = 0.0
@@ -103,6 +132,17 @@ class Enemy:
         )
 
     def take_damage(self, amount: int, knockback_x: float, knockback_y: float, now: int):
+        # Shielder: frontal shield reduces damage by 70%
+        if self.enemy_type == "shielder" and knockback_x != 0 or knockback_y != 0:
+            import math as _m
+            hit_angle = _m.atan2(knockback_y, knockback_x)
+            face_angle = _m.atan2(self.face_y, self.face_x)
+            diff = abs(hit_angle - face_angle)
+            if diff > _m.pi:
+                diff = 2 * _m.pi - diff
+            # If hit from the front (within 90 degrees of facing)
+            if diff > _m.pi * 0.5:
+                amount = max(1, amount * 3 // 10)
         self.hp -= amount
         self.hit_flash = now
         if self.hp <= 0:
@@ -163,6 +203,21 @@ class Enemy:
                 self.x += (dx / dist) * effective_speed
                 self.y += (dy / dist) * effective_speed
 
+        # Charger: burst dash toward player
+        if self.enemy_type == "charger":
+            if self._charging:
+                if now - self._last_charge > self._charge_duration:
+                    self._charging = False
+                else:
+                    self.x += self._charge_dx * 6.0 * speed_mult
+                    self.y += self._charge_dy * 6.0 * speed_mult
+            elif dist < 200 and now - self._last_charge > self._charge_cooldown:
+                self._charging = True
+                self._last_charge = now
+                if dist > 0:
+                    self._charge_dx = dx / dist
+                    self._charge_dy = dy / dist
+
         half = self.size // 2
         self.x = max(half, min(world_w - half, self.x))
         self.y = max(half, min(world_h - half, self.y))
@@ -219,6 +274,12 @@ class Enemy:
             self._draw_mini_boss(surface, sx, sy, now)
         elif self.enemy_type == "big_boss":
             self._draw_big_boss(surface, sx, sy, now)
+        elif self.enemy_type == "charger":
+            self._draw_charger(surface, sx, sy, now)
+        elif self.enemy_type == "shielder":
+            self._draw_shielder(surface, sx, sy, now)
+        elif self.enemy_type == "spitter":
+            self._draw_spitter(surface, sx, sy, now)
 
         # Status effect particles
         self.statuses.draw_particles(surface, sx, sy, self.size)
@@ -469,3 +530,134 @@ class Enemy:
         label = font.render("BOSS", True, (255, 60, 60))
         surface.blit(label, (sx - label.get_width() // 2, sy - half - 26))
 
+    # ═══════════════════════════════════════════ CHARGER drawing
+    def _draw_charger(self, surface, sx, sy, now):
+        is_hit = now - self.hit_flash < 100
+        half = self.size // 2
+
+        # Arrow / wedge shape pointing toward player
+        tip_x = sx + int(self.face_x * half)
+        tip_y = sy + int(self.face_y * half)
+        # Two rear points
+        perp_x = -self.face_y
+        perp_y = self.face_x
+        rear_x = sx - int(self.face_x * half * 0.6)
+        rear_y = sy - int(self.face_y * half * 0.6)
+        pts = [
+            (tip_x, tip_y),
+            (rear_x + int(perp_x * half * 0.8), rear_y + int(perp_y * half * 0.8)),
+            (rear_x - int(perp_x * half * 0.8), rear_y - int(perp_y * half * 0.8)),
+        ]
+
+        # Charge trail
+        if self._charging:
+            body_color = (255, 100, 50) if not is_hit else (255, 255, 255)
+            # Motion blur trail
+            for i in range(3):
+                t = (i + 1) * 6
+                trail_pts = [(px - int(self._charge_dx * t), py - int(self._charge_dy * t))
+                             for px, py in pts]
+                ts = pygame.Surface((self.size * 3, self.size * 3), pygame.SRCALPHA)
+                offset = self.size * 3 // 2
+                shifted = [(px - sx + offset, py - sy + offset) for px, py in trail_pts]
+                pygame.draw.polygon(ts, (255, 100, 50, 60 - i * 20), shifted)
+                surface.blit(ts, (sx - offset, sy - offset))
+        else:
+            body_color = (220, 60, 30) if not is_hit else (255, 255, 255)
+
+        pygame.draw.polygon(surface, body_color, pts)
+        pygame.draw.polygon(surface, (255, 150, 80), pts, 2)
+
+        # Eye at front
+        eye_x = sx + int(self.face_x * half * 0.3)
+        eye_y = sy + int(self.face_y * half * 0.3)
+        pygame.draw.circle(surface, (255, 200, 50), (eye_x, eye_y), 4)
+        pygame.draw.circle(surface, (0, 0, 0), (eye_x, eye_y), 2)
+
+    # ═══════════════════════════════════════════ SHIELDER drawing
+    def _draw_shielder(self, surface, sx, sy, now):
+        is_hit = now - self.hit_flash < 100
+        half = self.size // 2
+        bob = math.sin(now * 0.003 + self.anim_offset) * 2
+
+        # Heavy armored body
+        body_color = (60, 80, 140) if not is_hit else (255, 255, 255)
+        pygame.draw.ellipse(surface, body_color,
+                            (sx - half, sy - half + bob, self.size, self.size))
+
+        # Armor plates
+        plate_color = (90, 120, 180) if not is_hit else (255, 255, 255)
+        pygame.draw.ellipse(surface, plate_color,
+                            (sx - half, sy - half + bob, self.size, self.size), 3)
+
+        # Frontal shield arc
+        shield_cx = sx + int(self.face_x * half * 0.7)
+        shield_cy = int(sy + bob + self.face_y * half * 0.7)
+        shield_pulse = int(120 + 60 * math.sin(now * 0.006))
+        s = pygame.Surface((self.size + 10, self.size + 10), pygame.SRCALPHA)
+        sc = (self.size + 10) // 2
+        # Shield arc — draw a thick arc from -60 to +60 degrees relative to facing
+        face_angle = math.atan2(self.face_y, self.face_x)
+        arc_start = face_angle - 1.0
+        arc_end = face_angle + 1.0
+        arc_points = []
+        steps = 10
+        for i in range(steps + 1):
+            a = arc_start + (arc_end - arc_start) * i / steps
+            arc_points.append((
+                shield_cx + int(math.cos(a) * (half + 3)),
+                shield_cy + int(math.sin(a) * (half + 3))
+            ))
+        if len(arc_points) >= 2:
+            shield_s = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+            pygame.draw.lines(shield_s, (100, 180, 255, shield_pulse), False, arc_points, 4)
+            surface.blit(shield_s, (0, 0))
+
+        # Eyes
+        eye_color = (100, 200, 255) if not is_hit else (255, 255, 200)
+        pygame.draw.circle(surface, eye_color, (sx - 5, int(sy - 3 + bob)), 4)
+        pygame.draw.circle(surface, eye_color, (sx + 5, int(sy - 3 + bob)), 4)
+        pygame.draw.circle(surface, (0, 0, 0), (sx - 5, int(sy - 3 + bob)), 2)
+        pygame.draw.circle(surface, (0, 0, 0), (sx + 5, int(sy - 3 + bob)), 2)
+
+    # ═══════════════════════════════════════════ SPITTER drawing
+    def _draw_spitter(self, surface, sx, sy, now):
+        is_hit = now - self.hit_flash < 100
+        half = self.size // 2
+        bob = math.sin(now * 0.005 + self.anim_offset) * 3
+
+        # Bloated insect-like body
+        body_color = (50, 120, 40) if not is_hit else (255, 255, 255)
+        # Main body
+        pygame.draw.ellipse(surface, body_color,
+                            (sx - half, sy - half // 2 + bob, self.size, int(self.size * 0.7)))
+        # Bulge (acid sac)
+        sac_color = (80, 200, 50) if not is_hit else (255, 255, 255)
+        sac_pulse = int(half * 0.4 + 2 * math.sin(now * 0.004))
+        pygame.draw.circle(surface, sac_color,
+                           (sx - int(self.face_x * 4), int(sy + bob + 2)),
+                           sac_pulse)
+
+        # Mandibles
+        mand_len = half * 0.6
+        for side in (-1, 1):
+            perp_x = -self.face_y * side
+            perp_y = self.face_x * side
+            mx = sx + int(self.face_x * mand_len + perp_x * 4)
+            my = int(sy + bob + self.face_y * mand_len + perp_y * 4)
+            mand_color = (100, 60, 20) if not is_hit else (255, 255, 255)
+            pygame.draw.line(surface, mand_color,
+                             (sx + int(self.face_x * 4), int(sy + bob)),
+                             (mx, my), 3)
+
+        # Eyes (4 small spider eyes)
+        eye_color = (200, 255, 50) if not is_hit else (255, 255, 200)
+        for dx_off, dy_off in [(-4, -5), (4, -5), (-7, -2), (7, -2)]:
+            pygame.draw.circle(surface, eye_color,
+                               (sx + dx_off, int(sy + dy_off + bob)), 2)
+
+        # Gun flash when shooting
+        if now - self.gun_flash_timer < 200:
+            flash_x = sx + int(self.face_x * half)
+            flash_y = int(sy + bob + self.face_y * half)
+            pygame.draw.circle(surface, (100, 255, 50), (flash_x, flash_y), 6)

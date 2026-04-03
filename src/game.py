@@ -15,7 +15,7 @@ from src.settings import (
     SCREEN_WIDTH, SCREEN_HEIGHT, FPS, TITLE, BLACK,
     TILE_SIZE, MAP_WIDTH, MAP_HEIGHT,
     ENEMY_DARKNESS_HP_BONUS, XP_PER_KILL, XP_DARKNESS_BONUS,
-    DROP_CHANCE,
+    DROP_CHANCE, MAX_PASSIVES,
 )
 from src.entities.player import Player
 from src.systems.combat import CombatSystem
@@ -37,6 +37,7 @@ from src.ui.legacy_screen import LegacyScreen
 from src.systems.animations import AnimationSystem
 from src.systems.boss_chest import BossChest, ChestRewardScreen
 from src.systems.game_actions import process_enemy_death, fire_player_projectile
+from src.ui.passive_swap import PassiveSwapScreen
 
 
 class Game:
@@ -77,6 +78,7 @@ class Game:
         self.radar = Radar()
         self.levelup_screen = LevelUpScreen()
         self.chest_reward = ChestRewardScreen()
+        self.passive_swap = PassiveSwapScreen()
         self.boss_chests: list[BossChest] = []
         self.animations = AnimationSystem()
         self.combat_font = pygame.font.SysFont("consolas", 18, bold=True)
@@ -92,6 +94,10 @@ class Game:
         self._nano_regen_timer = 0
         self._second_wind_used = False
         self._legacy_points_earned = 0
+
+        # Level-up fanfare state
+        self._levelup_fanfare_time = 0
+        self._levelup_fanfare_duration = 400
 
         # Apply legacy bonuses
         bonuses = self.legacy.get_bonuses()
@@ -177,6 +183,13 @@ class Game:
                     self._apply_chest_rewards()
                 continue
 
+            # Passive swap screen intercepts input
+            if self.passive_swap.active:
+                result = self.passive_swap.handle_event(event)
+                if result is not None:
+                    self._apply_passive_swap(result)
+                continue
+
             # Level-up screen intercepts input
             if self.levelup_screen.active:
                 choice = self.levelup_screen.handle_event(event)
@@ -236,8 +249,32 @@ class Game:
             if "glass_cannon" not in p.passives:
                 p.passives.append("glass_cannon")
         elif effect == "passive":
-            if value not in p.passives:
-                p.passives.append(value)
+            self._try_add_passive(value, choice.get("name", value))
+
+    def _try_add_passive(self, key: str, display_name: str):
+        """Add a passive, or open swap screen if slots are full."""
+        p = self.player
+        if key in p.passives:
+            return
+        # Count slot passives (glass_cannon doesn't occupy a slot)
+        slot_passives = [k for k in p.passives if k != "glass_cannon"]
+        if len(slot_passives) < MAX_PASSIVES:
+            p.passives.append(key)
+        else:
+            self.passive_swap.activate(p.passives, key, display_name)
+
+    def _apply_passive_swap(self, result: dict):
+        """Handle result from passive swap screen."""
+        if result["action"] == "swap":
+            old_key = result["remove"]
+            new_key = result["add"]
+            if old_key in self.player.passives:
+                self.player.passives.remove(old_key)
+            if new_key not in self.player.passives:
+                self.player.passives.append(new_key)
+            log.info("Passive swapped: %s -> %s", old_key, new_key)
+        else:
+            log.info("Passive swap skipped")
 
     def _apply_chest_rewards(self):
         """Apply all rewards from a boss chest to the player."""
@@ -262,13 +299,21 @@ class Game:
             elif effect == "weapon":
                 p.equip_weapon(value)
             elif effect == "passive":
-                if value not in p.passives:
-                    p.passives.append(value)
+                self._try_add_passive(value, r.get("name", value))
 
     # ------------------------------------------------------------------ update
     def _update(self, dt: float, now: int):
-        # Pause gameplay during level-up or chest reward screen
-        if self.levelup_screen.active or self.chest_reward.active:
+        # Level-up fanfare timer: open choices after freeze completes
+        if self._levelup_fanfare_time and now - self._levelup_fanfare_time >= self._levelup_fanfare_duration:
+            self._levelup_fanfare_time = 0
+            self.levelup_screen.activate(self.player.weapon_name, self.player.char_class,
+                                         self.player.passives)
+            log.info("Level-up screen activated, choices=%s",
+                     [c.get('name','?') for c in self.levelup_screen.choices])
+
+        # Pause gameplay during level-up, chest reward, passive swap, or fanfare
+        if (self.levelup_screen.active or self.chest_reward.active
+                or self.passive_swap.active or self._levelup_fanfare_time):
             return
 
         keys = pygame.key.get_pressed()
@@ -477,7 +522,7 @@ class Game:
         for chest in self.boss_chests:
             if chest.alive and p_rect.colliderect(chest.rect):
                 chest.alive = False
-                self.chest_reward.open_chest(self.player.char_class, self.player.passives)
+                self.chest_reward.open_chest(self.player.char_class, self.player.passives, self.sounds)
                 log.info("Boss chest opened!")
                 break
         self.boss_chests = [c for c in self.boss_chests if c.alive]
@@ -500,15 +545,15 @@ class Game:
                 self._legacy_points_earned = self.legacy.finish_run(
                     self.spawner.wave, self.kills, self.boss_kills)
 
-        # Check for pending level-up
+        # Check for pending level-up -- start fanfare
         if self.player.pending_levelup:
             log.info("Level-up pending! Player level=%d, weapon=%s",
                      self.player.level, self.player.weapon_name)
             self.player.pending_levelup = False
-            self.levelup_screen.activate(self.player.weapon_name, self.player.char_class,
-                                         self.player.passives)
-            log.info("Level-up screen activated, choices=%s",
-                     [c.get('name','?') for c in self.levelup_screen.choices])
+            self._levelup_fanfare_time = now
+            self.animations.spawn_death_burst(
+                self.player.x, self.player.y, (255, 255, 100), count=24)
+            self.animations.add_screen_shake(4)
             self.sounds.play("levelup")
 
     # ------------------------------------------------------------------ draw
@@ -564,8 +609,28 @@ class Game:
         # Radar (AVP motion tracker)
         self.radar.draw(self.screen, self.player.facing_x, self.player.facing_y)
 
+        # Level-up fanfare flash overlay
+        if self._levelup_fanfare_time:
+            elapsed = pygame.time.get_ticks() - self._levelup_fanfare_time
+            # White flash that fades out
+            flash_alpha = max(0, 180 - int(elapsed * 0.6))
+            if flash_alpha > 0:
+                flash_surf = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+                flash_surf.fill((255, 255, 255, flash_alpha))
+                self.screen.blit(flash_surf, (0, 0))
+            # "LEVEL UP!" text that scales up
+            scale = min(2.0, 0.5 + elapsed / 300)
+            font_size = int(48 * scale)
+            font = pygame.font.SysFont("consolas", font_size, bold=True)
+            text = font.render("LEVEL UP!", True, (255, 255, 100))
+            tr = text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2))
+            self.screen.blit(text, tr)
+
         # Level-up overlay
         self.levelup_screen.draw(self.screen)
+
+        # Passive swap overlay
+        self.passive_swap.draw(self.screen)
 
         # Chest reward overlay
         self.chest_reward.draw(self.screen)

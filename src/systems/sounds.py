@@ -82,6 +82,12 @@ class SoundManager:
         self.sounds["chicken"] = self._make_chicken()
         self.sounds["confetti_boom"] = self._make_confetti_boom()
         self.sounds["parry"] = self._make_parry()
+        self.sounds["wheel_tick"] = self._make_wheel_tick()
+        self.sounds["wheel_stop"] = self._make_wheel_stop()
+        self.sounds["chest_open"] = self._make_chest_open()
+        self.sounds["shield_block"] = self._make_shield_block()
+        self.sounds["enemy_death"] = self._make_enemy_death()
+        self.sounds["charge_whoosh"] = self._make_charge_whoosh()
         self.sounds["radar_beep_far"] = self._make_radar_beep(800, 0.06)
         self.sounds["radar_beep_mid"] = self._make_radar_beep(1200, 0.09)
         self.sounds["radar_beep_close"] = self._make_radar_beep(1800, 0.13)
@@ -177,19 +183,24 @@ class SoundManager:
         return pygame.mixer.Sound(buffer=buf)
 
     def _make_levelup(self) -> pygame.mixer.Sound:
-        """Triumphant double chime."""
+        """Triumphant ascending arpeggio with shimmer."""
         rate = 22050
-        n = int(rate * 0.4)
+        n = int(rate * 0.6)
         buf = array.array("h")
+        # C5 → E5 → G5 → C6  (arpeggio chord)
+        notes = [523, 659, 784, 1047]
+        note_len = n // len(notes)
         for i in range(n):
             t = i / n
-            env = 1.0 - t
-            if t < 0.5:
-                freq = 660
-            else:
-                freq = 880
-            val = math.sin(2 * math.pi * freq * i / rate)
-            buf.append(max(-32768, min(32767, int(val * 0.25 * env * 32767))))
+            note_idx = min(i // note_len, len(notes) - 1)
+            freq = notes[note_idx]
+            env = (1.0 - t) * 0.9 + 0.1
+            # Main tone + octave shimmer
+            val = math.sin(2 * math.pi * freq * i / rate) * 0.6
+            val += math.sin(2 * math.pi * freq * 2 * i / rate) * 0.2
+            # Bright shimmer overtone
+            val += math.sin(2 * math.pi * freq * 3 * i / rate) * 0.1
+            buf.append(max(-32768, min(32767, int(val * 0.3 * env * 32767))))
         return pygame.mixer.Sound(buffer=buf)
 
     def _make_dash(self) -> pygame.mixer.Sound:
@@ -298,6 +309,92 @@ class SoundManager:
             # Impact
             impact = math.sin(2 * math.pi * 300 * i / rate) * 0.2 * max(0, 1 - t * 6)
             sample = int((ring + ring2 + impact) * env * 32767)
+            buf.append(max(-32768, min(32767, sample)))
+        return pygame.mixer.Sound(buffer=buf)
+
+    def _make_wheel_tick(self) -> pygame.mixer.Sound:
+        """Short click for wheel segment passing pointer."""
+        return self._tone(2400, 20, volume=0.12, wave="square")
+
+    def _make_wheel_stop(self) -> pygame.mixer.Sound:
+        """Triumphant ding when wheel stops."""
+        rate = 22050
+        n = int(rate * 0.4)
+        buf = array.array("h")
+        for i in range(n):
+            t = i / rate
+            env = 1.0 - (i / n) ** 0.5
+            val = (math.sin(2 * math.pi * 880 * t) * 0.4 +
+                   math.sin(2 * math.pi * 1320 * t) * 0.3 +
+                   math.sin(2 * math.pi * 1760 * t) * 0.2)
+            sample = int(val * env * 0.25 * 32767)
+            buf.append(max(-32768, min(32767, sample)))
+        return pygame.mixer.Sound(buffer=buf)
+
+    def _make_chest_open(self) -> pygame.mixer.Sound:
+        """Creaky chest opening sound — rising noise + chime."""
+        rate = 22050
+        n = int(rate * 0.5)
+        buf = array.array("h")
+        for i in range(n):
+            t = i / rate
+            env = 1.0 - (i / n)
+            # Rising creak
+            freq = 200 + 600 * (i / n)
+            noise = (((i * 1103515245 + 12345) >> 16) & 0x7FFF) / 16384.0 - 1.0
+            creak = math.sin(2 * math.pi * freq * t) * 0.3 + noise * 0.15
+            # Chime at end
+            chime = 0
+            if i > n * 0.6:
+                chime_env = 1.0 - (i - n * 0.6) / (n * 0.4)
+                chime = math.sin(2 * math.pi * 1047 * t) * 0.4 * chime_env
+            sample = int((creak + chime) * env * 0.2 * 32767)
+            buf.append(max(-32768, min(32767, sample)))
+        return pygame.mixer.Sound(buffer=buf)
+
+    def _make_shield_block(self) -> pygame.mixer.Sound:
+        """Metallic clang for shielder block."""
+        rate = 22050
+        n = int(rate * 0.15)
+        buf = array.array("h")
+        for i in range(n):
+            t = i / rate
+            env = 1.0 - (i / n) ** 0.3
+            val = (math.sin(2 * math.pi * 600 * t) * 0.3 +
+                   math.sin(2 * math.pi * 1500 * t) * 0.2 +
+                   math.sin(2 * math.pi * 3000 * t) * 0.15)
+            sample = int(val * env * 0.2 * 32767)
+            buf.append(max(-32768, min(32767, sample)))
+        return pygame.mixer.Sound(buffer=buf)
+
+    def _make_enemy_death(self) -> pygame.mixer.Sound:
+        """Brief electronic death burst."""
+        rate = 22050
+        n = int(rate * 0.2)
+        buf = array.array("h")
+        for i in range(n):
+            t = i / rate
+            env = 1.0 - (i / n)
+            freq = 400 - 300 * (i / n)
+            val = (2.0 * (t * freq % 1.0) - 1.0) * 0.3
+            noise = (((i * 1103515245 + 12345) >> 16) & 0x7FFF) / 16384.0 - 1.0
+            val += noise * 0.2 * env
+            sample = int(val * env * 0.15 * 32767)
+            buf.append(max(-32768, min(32767, sample)))
+        return pygame.mixer.Sound(buffer=buf)
+
+    def _make_charge_whoosh(self) -> pygame.mixer.Sound:
+        """Rising whoosh for charger enemy dashing."""
+        rate = 22050
+        n = int(rate * 0.3)
+        buf = array.array("h")
+        for i in range(n):
+            t = i / rate
+            env = math.sin(math.pi * i / n)
+            noise = (((i * 1103515245 + 12345) >> 16) & 0x7FFF) / 16384.0 - 1.0
+            freq = 300 + 800 * (i / n)
+            val = noise * 0.4 + math.sin(2 * math.pi * freq * t) * 0.2
+            sample = int(val * env * 0.12 * 32767)
             buf.append(max(-32768, min(32767, sample)))
         return pygame.mixer.Sound(buffer=buf)
 

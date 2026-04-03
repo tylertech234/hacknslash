@@ -52,23 +52,37 @@ class WaveSpawner:
     def _pick_enemy_type(self) -> str:
         """Pick an enemy type based on current wave with progressive unlocking."""
         w = self.wave
-        roll = random.random()
-        if w >= 8:
-            # Mixed: 40% dalek, 40% wraith, 20% chance of extra wraith
-            if roll < 0.45:
+        r = random.random()
+        if w <= 2:
+            return "dalek"
+        elif w <= 4:
+            if r < 0.10:
                 return "wraith"
             return "dalek"
-        elif w >= 5:
-            # Wraiths start appearing
-            if roll < 0.25:
+        elif w <= 5:
+            if r < 0.25:
                 return "wraith"
+            if r < 0.35:
+                return "charger"
             return "dalek"
-        elif w >= 3:
-            # Occasional wraith scout
-            if roll < 0.10:
+        elif w <= 7:
+            if r < 0.25:
                 return "wraith"
+            if r < 0.40:
+                return "charger"
+            if r < 0.50:
+                return "spitter"
             return "dalek"
-        return "dalek"
+        else:
+            if r < 0.25:
+                return "wraith"
+            if r < 0.40:
+                return "charger"
+            if r < 0.55:
+                return "spitter"
+            if r < 0.65:
+                return "shielder"
+            return "dalek"
 
     # ---- Spawn Patterns ----
 

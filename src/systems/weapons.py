@@ -94,6 +94,18 @@ WEAPONS = {
         "orbiter_type": "blade",
         "class": "knight",
     },
+    "shield_bash": {
+        "name": "Shield Bash",
+        "damage_mult": 0.9,
+        "range": 40,
+        "cooldown": 280,
+        "duration": 140,
+        "sweep_deg": 180,
+        "blade_color": (150, 200, 255),
+        "trail_color": (180, 220, 255),
+        "desc": "Fast shield slam. Huge knockback.",
+        "class": "knight",
+    },
 
     # === CYBER ARCHER (ranged-focused) ===
     "dagger": {
@@ -163,6 +175,24 @@ WEAPONS = {
         "proj_lifetime": 600,
         "proj_count": 5,
         "proj_visual": "pellet",
+        "class": "archer",
+    },
+    "ricochet_disc": {
+        "name": "Ricochet Disc",
+        "damage_mult": 1.2,
+        "range": 40,
+        "cooldown": 500,
+        "duration": 150,
+        "sweep_deg": 30,
+        "blade_color": (255, 180, 0),
+        "trail_color": (255, 220, 80),
+        "desc": "Bouncing energy disc. Hits walls & keeps going.",
+        "projectile": True,
+        "proj_speed": 9.0,
+        "proj_lifetime": 2000,
+        "proj_count": 1,
+        "proj_visual": "disc",
+        "bouncing": True,
         "class": "archer",
     },
 
@@ -239,6 +269,21 @@ WEAPONS = {
         "proj_count": 1,
         "class": "jester",
     },
+    "jack_in_box": {
+        "name": "Jack-in-the-Box",
+        "damage_mult": 0.8,
+        "range": 45,
+        "cooldown": 450,
+        "duration": 160,
+        "sweep_deg": 50,
+        "blade_color": (255, 50, 100),
+        "trail_color": (255, 100, 200),
+        "desc": "Orbiting surprise boxes! Pop goes the weasel!",
+        "projectile": True,
+        "orbiter": True,
+        "orbiter_type": "box",
+        "class": "jester",
+    },
 }
 
 # ── Character class definitions ──
@@ -306,8 +351,10 @@ def draw_weapon(surface: pygame.Surface, sx: int, sy: int,
             _draw_axe_swing(surface, sx, sy, swing_angle, blade_len, blade_color, trail_color, progress, sword_angle, sweep)
         elif "Grenade" in wname:
             _draw_grenade_swing(surface, sx, sy, swing_angle, blade_len, blade_color, trail_color, progress, sword_angle, sweep)
-        elif "Dagger" in wname or "Bow" in wname or "Rifle" in wname or "Scatter" in wname or "Banana" in wname or "Pie" in wname:
+        elif "Dagger" in wname or "Bow" in wname or "Rifle" in wname or "Scatter" in wname or "Banana" in wname or "Pie" in wname or "Ricochet" in wname or "Jack" in wname:
             _draw_dagger_swing(surface, sx, sy, swing_angle, blade_len, blade_color, trail_color, progress, sword_angle, sweep)
+        elif "Shield" in wname:
+            _draw_shield_swing(surface, sx, sy, swing_angle, blade_len, blade_color, trail_color, progress, sword_angle, sweep)
         elif "Spear" in wname:
             _draw_spear_thrust(surface, sx, sy, sword_angle, blade_len, blade_color, trail_color, progress)
         elif "Chicken" in wname:
@@ -326,8 +373,10 @@ def draw_weapon(surface: pygame.Surface, sx: int, sy: int,
             _draw_axe_idle(surface, sx, sy, idle_angle, blade_len, blade_color)
         elif "Grenade" in wname:
             _draw_grenade_idle(surface, sx, sy, sword_angle, blade_len, blade_color)
-        elif "Dagger" in wname or "Bow" in wname or "Rifle" in wname or "Scatter" in wname or "Banana" in wname or "Pie" in wname:
+        elif "Dagger" in wname or "Bow" in wname or "Rifle" in wname or "Scatter" in wname or "Banana" in wname or "Pie" in wname or "Ricochet" in wname or "Jack" in wname:
             _draw_dagger_idle(surface, sx, sy, sword_angle, blade_len, blade_color)
+        elif "Shield" in wname:
+            _draw_shield_idle(surface, sx, sy, idle_angle, blade_len, blade_color)
         elif "Spear" in wname:
             _draw_spear_idle(surface, sx, sy, idle_angle, blade_len, blade_color)
         elif "Chicken" in wname:
@@ -660,3 +709,51 @@ def _draw_grenade_idle(surface, sx, sy, angle, blade_len, blade_color):
         cy = by + int(math.sin(a) * 3)
         colors = [(255, 100, 200), (100, 255, 100), (255, 255, 0)]
         pygame.draw.circle(surface, colors[i], (cx, cy), 1)
+
+
+# ---- Shield Bash ----
+def _draw_shield_swing(surface, sx, sy, swing_angle, blade_len, blade_color, trail_color, progress, base_angle, sweep):
+    # Draw a curved shield shape being thrust forward
+    shield_dist = int(blade_len * 0.6 * (0.5 + progress * 0.5))
+    cx = sx + int(math.cos(swing_angle) * shield_dist)
+    cy = sy + int(math.sin(swing_angle) * shield_dist)
+    # Shield as a wide arc
+    pts = []
+    perp = swing_angle + math.pi / 2
+    for i in range(-3, 4):
+        angle = swing_angle + i * 0.15
+        d = shield_dist + abs(i) * 2
+        pts.append((sx + int(math.cos(angle) * d), sy + int(math.sin(angle) * d)))
+    if len(pts) >= 2:
+        pygame.draw.lines(surface, blade_color, False, pts, 5)
+        pygame.draw.lines(surface, (255, 255, 255), False, pts, 2)
+    # Impact flash at full extension
+    if progress > 0.7:
+        flash_r = int(8 * (progress - 0.7) / 0.3)
+        pygame.draw.circle(surface, (255, 255, 200), (cx, cy), flash_r)
+    # Trail
+    for i in range(4):
+        t = max(0, progress - i * 0.08)
+        ta = base_angle - sweep / 2 + sweep * min(1.0, t)
+        tr = shield_dist - i * 5
+        tx = sx + int(math.cos(ta) * tr)
+        ty = sy + int(math.sin(ta) * tr)
+        alpha = max(20, 140 - i * 35)
+        ts = pygame.Surface((8, 8), pygame.SRCALPHA)
+        pygame.draw.circle(ts, (*trail_color, alpha), (4, 4), 4)
+        surface.blit(ts, (tx - 4, ty - 4))
+
+
+def _draw_shield_idle(surface, sx, sy, idle_angle, blade_len, blade_color):
+    # Shield held in front
+    shield_dist = int(blade_len * 0.5)
+    cx = sx + int(math.cos(idle_angle) * shield_dist)
+    cy = sy + int(math.sin(idle_angle) * shield_dist)
+    pts = []
+    for i in range(-3, 4):
+        angle = idle_angle + i * 0.15
+        d = shield_dist + abs(i) * 2
+        pts.append((sx + int(math.cos(angle) * d), sy + int(math.sin(angle) * d)))
+    if len(pts) >= 2:
+        pygame.draw.lines(surface, blade_color, False, pts, 4)
+        pygame.draw.lines(surface, (200, 220, 255), False, pts, 1)

@@ -84,7 +84,9 @@ class BossChest:
 
 
 class ChestRewardScreen:
-    """Shows the upgrades from opening a boss chest."""
+    """Spin-the-wheel boss chest reward screen."""
+
+    NUM_SEGMENTS = 8
 
     def __init__(self):
         self.active = False
@@ -93,13 +95,25 @@ class ChestRewardScreen:
         self.font_big = pygame.font.SysFont("consolas", 28, bold=True)
         self.font = pygame.font.SysFont("consolas", 18)
         self.font_small = pygame.font.SysFont("consolas", 14)
+        self.font_icon = pygame.font.SysFont("consolas", 22, bold=True)
         self.open_time = 0
+        # Wheel state
+        self.angle = 0.0        # current rotation in degrees
+        self.spin_speed = 0.0   # degrees per tick
+        self.phase = "idle"     # spinning | braking | stopped | celebrating
+        self.stop_time = 0
+        self._tick_sound_angle = 0.0
+        self._sound_manager = None
+        self._played_stop = False
 
-    def open_chest(self, player_class: str, player_passives: list = None):
-        """Generate 3-5 random upgrades from a boss chest."""
+    def open_chest(self, player_class: str, player_passives: list = None, sounds=None):
+        """Generate 8 random upgrades and start spinning."""
         self.active = True
         self.open_time = pygame.time.get_ticks()
-        count = random.randint(3, 5)
+        self._sound_manager = sounds
+        self._played_stop = False
+        if sounds:
+            sounds.play("chest_open")
 
         owned = set(player_passives or [])
         pool = []
@@ -108,7 +122,7 @@ class ChestRewardScreen:
                 continue
             pool.append(dict(u))
 
-        # Also offer a class-appropriate weapon upgrade
+        # Also offer class-appropriate weapon upgrades
         class_weapons = [k for k, v in WEAPONS.items()
                         if v.get("class") == player_class]
         for wk in class_weapons:
@@ -121,41 +135,78 @@ class ChestRewardScreen:
                 "value": wk,
             })
 
-        self.rewards = random.sample(pool, min(count, len(pool)))
+        count = self.NUM_SEGMENTS
+        if len(pool) < count:
+            # Duplicate to fill wheel
+            while len(pool) < count:
+                pool.append(random.choice(CHEST_UPGRADES))
+        self.rewards = random.sample(pool, count)
         self.selected = 0
+        self.angle = random.uniform(0, 360)
+        self.spin_speed = random.uniform(8.0, 12.0)
+        self.phase = "spinning"
+        self._tick_sound_angle = self.angle
 
     def handle_event(self, event: pygame.event.Event) -> bool:
-        """Returns True when player dismisses the screen (after choosing)."""
         if not self.active:
             return False
         if event.type == pygame.KEYDOWN:
-            # Number keys to pick a specific reward
-            num_keys = [pygame.K_1, pygame.K_2, pygame.K_3, pygame.K_4, pygame.K_5]
-            for i, k in enumerate(num_keys):
-                if event.key == k and i < len(self.rewards):
-                    self.selected = i
+            if self.phase == "spinning":
+                if event.key in (pygame.K_RETURN, pygame.K_SPACE):
+                    self.phase = "braking"
+            elif self.phase == "celebrating":
+                if event.key in (pygame.K_RETURN, pygame.K_SPACE):
                     self.active = False
                     return True
-            # Arrow / WASD navigation
-            if event.key in (pygame.K_w, pygame.K_UP):
-                self.selected = (self.selected - 1) % len(self.rewards)
-            elif event.key in (pygame.K_s, pygame.K_DOWN):
-                self.selected = (self.selected + 1) % len(self.rewards)
-            elif event.key in (pygame.K_RETURN, pygame.K_SPACE):
-                self.active = False
-                return True
         return False
 
     def get_rewards(self) -> list[dict]:
-        """Return only the selected reward."""
         if 0 <= self.selected < len(self.rewards):
             return [self.rewards[self.selected]]
-        return self.rewards
+        return self.rewards[:1]
+
+    def _update_wheel(self, now):
+        """Called each draw frame to update wheel physics."""
+        if self.phase == "spinning":
+            old_angle = self.angle
+            self.angle = (self.angle + self.spin_speed) % 360
+            # Tick sound when crossing segment boundary
+            seg = 360 / self.NUM_SEGMENTS
+            if int(old_angle / seg) != int(self.angle / seg) and self._sound_manager:
+                self._sound_manager.play("wheel_tick")
+            # Slow natural friction
+            self.spin_speed *= 0.997
+            # Auto-brake after 3 seconds
+            if now - self.open_time > 3000:
+                self.phase = "braking"
+        elif self.phase == "braking":
+            old_angle = self.angle
+            self.angle = (self.angle + self.spin_speed) % 360
+            seg = 360 / self.NUM_SEGMENTS
+            if int(old_angle / seg) != int(self.angle / seg) and self._sound_manager:
+                self._sound_manager.play("wheel_tick")
+            self.spin_speed *= 0.97  # stronger friction
+            if self.spin_speed < 0.15:
+                self.spin_speed = 0
+                self.phase = "stopped"
+                self.stop_time = now
+                # Determine which segment the pointer is on (top = 270 degrees)
+                pointer_angle = (270 - self.angle) % 360
+                seg_size = 360 / self.NUM_SEGMENTS
+                self.selected = int(pointer_angle / seg_size) % self.NUM_SEGMENTS
+        elif self.phase == "stopped":
+            if not self._played_stop and self._sound_manager:
+                self._sound_manager.play("wheel_stop")
+                self._played_stop = True
+            # Brief pause, then celebrate
+            if now - self.stop_time > 300:
+                self.phase = "celebrating"
 
     def draw(self, surface: pygame.Surface):
         if not self.active:
             return
         now = pygame.time.get_ticks()
+        self._update_wheel(now)
 
         # Darken background
         overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
@@ -164,58 +215,92 @@ class ChestRewardScreen:
 
         # Title
         title = self.font_big.render("BOSS CHEST OPENED!", True, (255, 220, 50))
-        surface.blit(title, (SCREEN_WIDTH // 2 - title.get_width() // 2, 100))
+        surface.blit(title, (SCREEN_WIDTH // 2 - title.get_width() // 2, 30))
 
-        count_text = self.font.render(f"Choose an upgrade ({len(self.rewards)} available):", True, WHITE)
-        surface.blit(count_text, (SCREEN_WIDTH // 2 - count_text.get_width() // 2, 145))
+        cx = SCREEN_WIDTH // 2
+        cy = SCREEN_HEIGHT // 2 - 10
+        radius = 200
+        seg_angle = 360 / self.NUM_SEGMENTS
 
-        # Rewards
-        card_w, card_h = 380, 60
-        start_y = 190
+        # Draw wheel segments
         for i, reward in enumerate(self.rewards):
-            cy = start_y + i * (card_h + 10)
-            cx = SCREEN_WIDTH // 2 - card_w // 2
+            start_deg = self.angle + i * seg_angle
+            end_deg = start_deg + seg_angle
 
-            # Reveal animation
-            elapsed = now - self.open_time
-            reveal_delay = i * 200
-            if elapsed < reveal_delay:
-                continue
+            # Segment color (alternating dark/light base + reward tint)
+            r_col = reward.get("color", (150, 150, 150))
+            if i % 2 == 0:
+                base = (max(0, r_col[0] // 3), max(0, r_col[1] // 3), max(0, r_col[2] // 3))
+            else:
+                base = (max(0, r_col[0] // 2), max(0, r_col[1] // 2), max(0, r_col[2] // 2))
 
-            # Highlight selected
-            if i == self.selected:
-                pygame.draw.rect(surface, (60, 60, 80), (cx - 4, cy - 4, card_w + 8, card_h + 8), border_radius=8)
-                pygame.draw.rect(surface, (255, 215, 0), (cx - 4, cy - 4, card_w + 8, card_h + 8), 2, border_radius=8)
+            # Draw filled arc as polygon wedge
+            points = [(cx, cy)]
+            steps = 12
+            for s in range(steps + 1):
+                a = math.radians(start_deg + s * seg_angle / steps)
+                points.append((cx + math.cos(a) * radius, cy + math.sin(a) * radius))
+            if len(points) >= 3:
+                pygame.draw.polygon(surface, base, points)
+                pygame.draw.polygon(surface, r_col, points, 2)
 
-            # Card
-            pygame.draw.rect(surface, (25, 25, 35), (cx, cy, card_w, card_h), border_radius=6)
-            pygame.draw.rect(surface, reward.get("color", (150, 150, 150)),
-                           (cx, cy, card_w, card_h), 2, border_radius=6)
+            # Draw icon in the middle of the segment
+            mid_angle = math.radians(start_deg + seg_angle / 2)
+            icon_r = radius * 0.65
+            ix = cx + math.cos(mid_angle) * icon_r
+            iy = cy + math.sin(mid_angle) * icon_r
+            icon_surf = self.font_icon.render(reward["icon"], True, r_col)
+            surface.blit(icon_surf, (ix - icon_surf.get_width() // 2,
+                                     iy - icon_surf.get_height() // 2))
 
-            # Number key
-            num = self.font.render(f"[{i + 1}]", True, (120, 120, 120))
-            surface.blit(num, (cx + 10, cy + 16))
+        # Draw center circle
+        pygame.draw.circle(surface, (30, 30, 40), (cx, cy), 30)
+        pygame.draw.circle(surface, (255, 220, 50), (cx, cy), 30, 2)
 
-            # Icon
-            icon_color = reward.get("color", WHITE)
-            icon = self.font_big.render(reward["icon"], True, icon_color)
-            surface.blit(icon, (cx + 50, cy + 10))
+        # Draw pointer (triangle at top)
+        ptr_y = cy - radius - 8
+        pygame.draw.polygon(surface, (255, 220, 50), [
+            (cx, ptr_y + 22),
+            (cx - 12, ptr_y),
+            (cx + 12, ptr_y),
+        ])
+        pygame.draw.polygon(surface, (255, 255, 200), [
+            (cx, ptr_y + 22),
+            (cx - 12, ptr_y),
+            (cx + 12, ptr_y),
+        ], 2)
 
-            # Name
-            name = self.font.render(reward["name"], True, WHITE)
-            surface.blit(name, (cx + 90, cy + 16))
+        # Phase-specific UI
+        if self.phase == "spinning":
+            hint = self.font.render("Press SPACE to stop!", True, (200, 200, 200))
+            surface.blit(hint, (cx - hint.get_width() // 2, cy + radius + 30))
+        elif self.phase == "braking":
+            hint = self.font_small.render("Slowing down...", True, (150, 150, 150))
+            surface.blit(hint, (cx - hint.get_width() // 2, cy + radius + 35))
+        elif self.phase in ("stopped", "celebrating"):
+            # Show selected reward with celebration
+            reward = self.rewards[self.selected]
+            r_col = reward.get("color", (255, 255, 255))
 
-            # Type tag
+            # Pulsing glow behind reward name
+            if self.phase == "celebrating":
+                pulse = int(60 + 40 * math.sin(now * 0.008))
+                glow = pygame.Surface((400, 60), pygame.SRCALPHA)
+                glow.fill((*r_col, pulse))
+                surface.blit(glow, (cx - 200, cy + radius + 20))
+
+            # Show what was won
+            won_text = self.font_big.render(f"YOU WON: {reward['name']}", True, r_col)
+            surface.blit(won_text, (cx - won_text.get_width() // 2, cy + radius + 30))
+
             if reward["effect"] == "weapon":
                 tag = "WEAPON"
             elif reward["effect"] == "passive":
                 tag = "PASSIVE"
             else:
-                tag = "STAT"
-            tag_surf = self.font_small.render(tag, True, (100, 100, 100))
-            surface.blit(tag_surf, (cx + card_w - tag_surf.get_width() - 10, cy + 22))
+                tag = "STAT BOOST"
+            tag_surf = self.font.render(tag, True, (180, 180, 180))
+            surface.blit(tag_surf, (cx - tag_surf.get_width() // 2, cy + radius + 65))
 
-        # Hint
-        hint = self.font_small.render("W/S or Up/Down to select  |  Enter/Space or 1-5 to confirm", True, (100, 100, 100))
-        surface.blit(hint, (SCREEN_WIDTH // 2 - hint.get_width() // 2,
-                           start_y + len(self.rewards) * (card_h + 10) + 30))
+            hint = self.font_small.render("Press SPACE to continue", True, (100, 100, 100))
+            surface.blit(hint, (cx - hint.get_width() // 2, cy + radius + 95))

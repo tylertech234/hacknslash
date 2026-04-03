@@ -14,6 +14,30 @@ YELLOW = (255, 215, 0)
 DARK_GRAY = (40, 40, 40)
 LIGHT_GRAY = (180, 180, 180)
 
+# -- Passives --
+MAX_PASSIVES = 4
+
+# icon letter + color for HUD display  (key → (icon, color))
+PASSIVE_INFO = {
+    "vampiric_strike":  ("V", (200, 0, 80)),
+    "chain_lightning":  ("Z", (100, 200, 255)),
+    "thorns":           ("T", (180, 100, 50)),
+    "second_wind":      ("L", (255, 100, 100)),
+    "nano_regen":       ("N", (100, 255, 100)),
+    "berserker":        ("B", (255, 60, 60)),
+    "shield_matrix":    ("M", (100, 150, 255)),
+    "explosive_kills":  ("E", (255, 150, 0)),
+    "magnetic_field":   ("F", (150, 150, 255)),
+    "adrenaline":       ("A", (0, 255, 100)),
+    # Class built-in passives
+    "melee_lifesteal":  ("♥", (255, 80, 80)),
+    "armor_plating":    ("■", (120, 180, 255)),
+    "crit_shots":       ("!", (255, 200, 50)),
+    "evasion":          ("~", (180, 255, 180)),
+    "lucky_crits":      ("★", (255, 215, 0)),
+    "confetti_burst":   ("✦", (255, 100, 255)),
+}
+
 # -- Player --
 PLAYER_SPEED = 4
 PLAYER_MAX_HP = 100

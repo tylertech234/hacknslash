@@ -1,7 +1,8 @@
 import pygame
+import math
 from src.settings import (
     SCREEN_WIDTH, SCREEN_HEIGHT, RED, GREEN, WHITE, YELLOW, BLACK, LIGHT_GRAY,
-    XP_DARKNESS_BONUS,
+    XP_DARKNESS_BONUS, MAX_PASSIVES, PASSIVE_INFO,
 )
 
 
@@ -18,6 +19,7 @@ class HUD:
         self._draw_hp_bar(surface, player)
         self._draw_xp_bar(surface, player)
         self._draw_info(surface, player, wave, enemy_count, darkness, boss_wave)
+        self._draw_passive_slots(surface, player)
         if boss_wave and boss_enemies:
             self._draw_boss_hp_bar(surface, boss_enemies)
         self._draw_low_hp_vignette(surface, player)
@@ -95,6 +97,44 @@ class HUD:
             pygame.draw.rect(surface, color, (bar_x, y, int(bar_w * ratio), bar_h))
             # Border
             pygame.draw.rect(surface, WHITE, (bar_x, y, bar_w, bar_h), 2)
+
+    def _draw_passive_slots(self, surface: pygame.Surface, player):
+        """Draw up to MAX_PASSIVES square slots showing active passives."""
+        slot_size = 36
+        gap = 6
+        # Position: bottom-left, above the screen edge
+        base_x = 20
+        base_y = SCREEN_HEIGHT - slot_size - 16
+        now = pygame.time.get_ticks()
+
+        # Filter out non-slot passives (glass_cannon is a flag, not a slot occupant)
+        display_passives = [p for p in player.passives if p != "glass_cannon"]
+
+        for i in range(MAX_PASSIVES):
+            x = base_x + i * (slot_size + gap)
+            y = base_y
+            # Empty slot background
+            pygame.draw.rect(surface, (30, 30, 40), (x, y, slot_size, slot_size),
+                             border_radius=4)
+            pygame.draw.rect(surface, (80, 80, 100), (x, y, slot_size, slot_size), 2,
+                             border_radius=4)
+
+            if i < len(display_passives):
+                key = display_passives[i]
+                icon, color = PASSIVE_INFO.get(key, ("?", (180, 180, 180)))
+                # Filled slot glow
+                glow = pygame.Surface((slot_size, slot_size), pygame.SRCALPHA)
+                alpha = 40 + int(15 * math.sin(now * 0.003 + i))
+                glow.fill((*color, alpha))
+                surface.blit(glow, (x, y))
+                # Icon letter
+                txt = self.font.render(icon, True, color)
+                tx = x + (slot_size - txt.get_width()) // 2
+                ty = y + (slot_size - txt.get_height()) // 2
+                surface.blit(txt, (tx, ty))
+                # Border highlight
+                pygame.draw.rect(surface, color, (x, y, slot_size, slot_size), 2,
+                                 border_radius=4)
 
     def _draw_low_hp_vignette(self, surface: pygame.Surface, player):
         """Draw red screen edges when player HP is below 20%."""

@@ -28,12 +28,19 @@ def process_enemy_death(enemy, player, alive, animations, combat, sounds,
         color = (100, 200, 255)
     elif enemy.enemy_type in ("mini_boss", "big_boss"):
         color = (255, 160, 0)
+    elif enemy.enemy_type == "charger":
+        color = (255, 100, 50)
+    elif enemy.enemy_type == "shielder":
+        color = (100, 150, 255)
+    elif enemy.enemy_type == "spitter":
+        color = (80, 200, 50)
 
     # -- visual / audio
     animations.spawn_death_burst(enemy.x, enemy.y, color)
     animations.spawn_death_anim(enemy.x, enemy.y, enemy.enemy_type, color)
     is_boss = enemy.enemy_type in ("mini_boss", "big_boss")
     animations.add_screen_shake(4 if is_boss else 2)
+    sounds.play("enemy_death")
 
     # -- passives
     if "melee_lifesteal" in player.passives and not player.weapon.get("projectile"):
