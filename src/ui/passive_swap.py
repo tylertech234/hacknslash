@@ -29,15 +29,32 @@ class PassiveSwapScreen:
         """Returns {'action': 'swap', 'remove': key, 'add': key} or {'action': 'skip'} or None."""
         if not self.active:
             return None
+        n = len(self.current_passives)
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            mx, my = event.pos
+            slot_size, gap = 60, 10
+            total_w = n * (slot_size + gap) - gap
+            start_x = SCREEN_WIDTH // 2 - total_w // 2
+            slot_y = 220
+            for i in range(n):
+                sx = start_x + i * (slot_size + gap)
+                if sx <= mx <= sx + slot_size and slot_y <= my <= slot_y + slot_size:
+                    self.active = False
+                    return {"action": "swap", "remove": self.current_passives[i],
+                            "add": self.new_passive}
+            # Skip button area
+            if my > slot_y + slot_size + 20:
+                self.active = False
+                return {"action": "skip"}
+            return None
         if event.type != pygame.KEYDOWN:
             return None
 
-        n = len(self.current_passives)
         if event.key in (pygame.K_w, pygame.K_UP):
             self.selected = (self.selected - 1) % (n + 1)
         elif event.key in (pygame.K_s, pygame.K_DOWN):
             self.selected = (self.selected + 1) % (n + 1)
-        elif event.key in (pygame.K_RETURN, pygame.K_SPACE):
+        elif event.key in (pygame.K_RETURN, pygame.K_SPACE, pygame.K_e):
             self.active = False
             if self.selected < n:
                 return {"action": "swap", "remove": self.current_passives[self.selected],
