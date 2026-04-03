@@ -10,7 +10,7 @@ log = logging.getLogger("game")
 
 
 def process_enemy_death(enemy, player, alive, animations, combat, sounds,
-                        lighting, boss_chests, kills_tracker, now):
+                        lighting, boss_chests, kills_tracker, pickups, now):
     """Handle a single enemy death: effects, passives, XP, drops, chests.
 
     Args:
@@ -19,14 +19,14 @@ def process_enemy_death(enemy, player, alive, animations, combat, sounds,
     Returns nothing — mutates lists/counters in place.
     """
     kills_tracker["kills"] += 1
-    if enemy.enemy_type in ("mini_boss", "big_boss"):
+    if enemy.is_boss:
         kills_tracker["boss_kills"] += 1
 
     # -- colour by type
     color = (200, 50, 50)
     if enemy.enemy_type == "wraith":
         color = (100, 200, 255)
-    elif enemy.enemy_type in ("mini_boss", "big_boss"):
+    elif enemy.is_boss:
         color = (255, 160, 0)
     elif enemy.enemy_type == "charger":
         color = (255, 100, 50)
@@ -34,13 +34,34 @@ def process_enemy_death(enemy, player, alive, animations, combat, sounds,
         color = (100, 150, 255)
     elif enemy.enemy_type == "spitter":
         color = (80, 200, 50)
+    elif enemy.enemy_type in ("cyber_zombie", "shambler"):
+        color = (80, 120, 60)
+    elif enemy.enemy_type == "cyber_dog":
+        color = (180, 180, 190)
+    elif enemy.enemy_type == "drone":
+        color = (80, 160, 255)
+    elif enemy.enemy_type in ("cultist", "preacher", "eldritch_horror"):
+        color = (160, 60, 200)
+    elif enemy.enemy_type in ("void_wisp", "rift_walker", "null_serpent"):
+        color = (140, 80, 220)
+    elif enemy.enemy_type == "mirror_shade":
+        color = (100, 100, 120)
+    elif enemy.enemy_type in ("gravity_warden", "architect", "nexus"):
+        color = (80, 200, 240)
 
     # -- visual / audio
-    animations.spawn_death_burst(enemy.x, enemy.y, color)
+    is_big_boss = getattr(enemy, "is_big_boss", False)
+    is_boss = enemy.is_boss
+    burst_count = 32 if is_big_boss else (20 if is_boss else 12)
+    animations.spawn_death_burst(enemy.x, enemy.y, color, count=burst_count)
     animations.spawn_death_anim(enemy.x, enemy.y, enemy.enemy_type, color)
-    is_boss = enemy.enemy_type in ("mini_boss", "big_boss")
-    animations.add_screen_shake(4 if is_boss else 2)
-    sounds.play("enemy_death")
+    animations.add_screen_shake(10 if is_big_boss else (5 if is_boss else 2))
+    if is_big_boss:
+        sounds.play("big_boss_death")
+    elif is_boss:
+        sounds.play("boss_death")
+    else:
+        sounds.play("enemy_death")
 
     # -- passives
     if "melee_lifesteal" in player.passives and not player.weapon.get("projectile"):
@@ -67,10 +88,15 @@ def process_enemy_death(enemy, player, alive, animations, combat, sounds,
         animations.spawn_death_burst(enemy.x, enemy.y, (255, 150, 0), count=16)
         sounds.play("confetti_boom")
 
-    # -- XP + drops
+    # -- XP orb (must be picked up)
     xp_mult = 1.0 + lighting.darkness * XP_DARKNESS_BONUS
     xp_base = getattr(enemy, "xp_value", XP_PER_KILL)
-    player.gain_xp(int(xp_base * xp_mult))
+    pickups.spawn_xp_orb(enemy.x, enemy.y, int(xp_base * xp_mult))
+
+    # -- Coin drop (~25% chance; bosses always drop coins)
+    if enemy.is_boss or _rng.random() < 0.25:
+        pickups.spawn_coin(enemy.x, enemy.y)
+
     combat.pending_drops.append((enemy.x, enemy.y))
 
     # -- boss chest

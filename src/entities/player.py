@@ -33,6 +33,9 @@ class Player:
         # Passives
         self.passives = list(cls["passives"])
 
+        # Upgrade tier tracking: {upgrade_name: tier} (1 = first take, max 3)
+        self.upgrade_tiers: dict[str, int] = {}
+
         # Direction the player is facing (unit vector)
         self.facing_x = 0.0
         self.facing_y = 1.0
@@ -60,6 +63,9 @@ class Player:
         self.xp_to_next = XP_TO_LEVEL
         self.pending_levelup = False  # flag for game to show level-up screen
 
+        # Run currency
+        self.coins = 0
+
         # Invincibility frames
         self.invincible = False
         self.invincible_timer = 0
@@ -77,6 +83,9 @@ class Player:
         self._adrenaline_until = 0
         self._shield_matrix_last = -10000  # ready immediately
         self.legacy_dr = 0.0  # legacy damage reduction bonus
+
+        # Vision debuff (from Nexus boss)
+        self.vision_debuff_until = 0
 
     def _apply_weapon_stats(self):
         self.attack_cooldown = self.weapon["cooldown"]

@@ -4,7 +4,7 @@ import array
 
 
 class SoundManager:
-    """Procedurally generated sound effects and 8-bit music."""
+    """Procedurally generated sound effects and zone-specific music."""
 
     def __init__(self):
         pygame.mixer.init(frequency=22050, size=-16, channels=2, buffer=512)
@@ -13,7 +13,14 @@ class SoundManager:
         self._generate_all()
         self._music_playing = False
         self._combat_intensity = 0.0
-        self._generate_music()
+        self._zone_music: dict[str, tuple] = {}
+        self._bgm_base = None
+        self._bgm_combat = None
+        self._current_music_zone = None
+        self._boss_music: dict[str, pygame.mixer.Sound] = {}
+        self.boss_music_playing = False
+        self._generate_zone_music()
+        self._generate_boss_music()
 
     # ------------------------------------------------------------------
     # public helpers
@@ -24,12 +31,26 @@ class SoundManager:
         if snd:
             snd.play()
 
+    def set_zone_music(self, zone_name: str):
+        """Switch to the music pair for the given zone."""
+        if zone_name == self._current_music_zone:
+            return
+        was_playing = self._music_playing
+        if was_playing:
+            self.stop_music()
+        pair = self._zone_music.get(zone_name)
+        if pair:
+            self._bgm_base, self._bgm_combat = pair
+            self._current_music_zone = zone_name
+        if was_playing:
+            self.start_music()
+
     def start_music(self):
         if not self._music_playing and self._bgm_base:
             self._base_channel = pygame.mixer.Channel(1)
             self._combat_channel = pygame.mixer.Channel(2)
             self._base_channel.play(self._bgm_base, loops=-1)
-            self._base_channel.set_volume(0.20)
+            self._base_channel.set_volume(0.15)
             self._combat_channel.play(self._bgm_combat, loops=-1)
             self._combat_channel.set_volume(0.0)
             self._music_playing = True
@@ -43,11 +64,11 @@ class SoundManager:
     def set_music_intensity(self, level: float):
         """Crossfade between calm and combat music layers. 0.0=calm, 1.0=intense."""
         target = max(0.0, min(1.0, level))
-        # Fast ramp up, moderate decay back to calm
+        # Fast ramp up, slow decay back to calm
         if target > self._combat_intensity:
             self._combat_intensity += (target - self._combat_intensity) * 0.08
         else:
-            self._combat_intensity += (target - self._combat_intensity) * 0.02
+            self._combat_intensity += (target - self._combat_intensity) * 0.008
         # Snap to zero when close enough to avoid permanent low hum
         if self._combat_intensity < 0.01:
             self._combat_intensity = 0.0
@@ -64,6 +85,28 @@ class SoundManager:
             self.sounds["radar_beep_mid"].play()
         else:
             self.sounds["radar_beep_far"].play()
+
+    def start_boss_music(self, zone: str):
+        """Play intense boss music; mute regular BGM to background level."""
+        track = self._boss_music.get(zone)
+        if not track:
+            return
+        if self._music_playing and hasattr(self, '_base_channel'):
+            self._base_channel.set_volume(0.04)
+            self._combat_channel.set_volume(0.0)
+        self._boss_channel = pygame.mixer.Channel(5)
+        self._boss_channel.play(track, loops=-1)
+        self._boss_channel.set_volume(0.32)
+        self.boss_music_playing = True
+
+    def stop_boss_music(self):
+        """Stop boss music and restore zone music."""
+        if hasattr(self, '_boss_channel'):
+            self._boss_channel.stop()
+        self.boss_music_playing = False
+        # Restore zone BGM
+        if self._music_playing and hasattr(self, '_base_channel'):
+            self._base_channel.set_volume(0.15)
 
     # ------------------------------------------------------------------
     # generation
@@ -88,9 +131,16 @@ class SoundManager:
         self.sounds["shield_block"] = self._make_shield_block()
         self.sounds["enemy_death"] = self._make_enemy_death()
         self.sounds["charge_whoosh"] = self._make_charge_whoosh()
+        self.sounds["dog_bark"] = self._make_dog_bark()
+        self.sounds["dog_growl"] = self._make_dog_growl()
         self.sounds["radar_beep_far"] = self._make_radar_beep(800, 0.06)
         self.sounds["radar_beep_mid"] = self._make_radar_beep(1200, 0.09)
         self.sounds["radar_beep_close"] = self._make_radar_beep(1800, 0.13)
+        self.sounds["pause"] = self._tone(600, 80, volume=0.15, wave="sin")
+        self.sounds["unpause"] = self._tone(800, 80, volume=0.15, wave="sin")
+        self.sounds["boss_death"] = self._make_boss_death()
+        self.sounds["big_boss_death"] = self._make_big_boss_death()
+        self.sounds["player_death"] = self._make_player_death()
 
     # ---- individual sound generators ----
 
@@ -118,197 +168,287 @@ class SoundManager:
         return pygame.mixer.Sound(buffer=buf)
 
     def _make_swing(self) -> pygame.mixer.Sound:
-        """Quick swoosh — descending noise burst."""
-        rate = 22050
-        n = int(rate * 0.12)
-        buf = array.array("h")
-        for i in range(n):
-            env = 1.0 - i / n
-            noise = (((i * 1103515245 + 12345) >> 16) & 0x7FFF) / 16384.0 - 1.0
-            freq = 800 - 600 * (i / n)
-            tone = math.sin(2 * math.pi * freq * i / rate)
-            sample = int((noise * 0.3 + tone * 0.15) * env * 32767)
-            buf.append(max(-32768, min(32767, sample)))
-        return pygame.mixer.Sound(buffer=buf)
-
-    def _make_shoot(self) -> pygame.mixer.Sound:
-        """Dalek zap — short descending square."""
+        """Rich swoosh — layered noise with tonal sweep and tail."""
         rate = 22050
         n = int(rate * 0.15)
         buf = array.array("h")
         for i in range(n):
-            env = 1.0 - i / n
-            freq = 600 - 400 * (i / n)
-            val = 1.0 if math.sin(2 * math.pi * freq * i / rate) >= 0 else -1.0
-            buf.append(max(-32768, min(32767, int(val * 0.2 * env * 32767))))
+            t = i / rate
+            pos = i / n
+            env = (1.0 - pos) ** 1.5 * min(1.0, pos * 15)
+            freq = 900 - 700 * pos
+            tone = math.sin(2 * math.pi * freq * t) * 0.12
+            tone2 = math.sin(2 * math.pi * freq * 1.5 * t) * 0.06
+            noise = (((i * 1103515245 + 12345) >> 16) & 0x7FFF) / 16384.0 - 1.0
+            # Filtered noise — emphasize mid frequencies
+            sample = int((noise * 0.25 + tone + tone2) * env * 32767)
+            buf.append(max(-32768, min(32767, sample)))
+        return pygame.mixer.Sound(buffer=buf)
+
+    def _make_shoot(self) -> pygame.mixer.Sound:
+        """Dalek zap — layered descending pulse with resonance."""
+        rate = 22050
+        n = int(rate * 0.18)
+        buf = array.array("h")
+        for i in range(n):
+            t = i / rate
+            pos = i / n
+            env = (1.0 - pos) ** 1.3 * min(1.0, pos * 20)
+            freq = 700 - 500 * pos
+            # Square pulse
+            pulse = 1.0 if math.sin(2 * math.pi * freq * t) >= 0 else -1.0
+            # Resonant sine body
+            body = math.sin(2 * math.pi * freq * t) * 0.4
+            # High harmonic sizzle
+            sizzle = math.sin(2 * math.pi * freq * 3 * t) * 0.1 * max(0, 1 - pos * 3)
+            sample = int((pulse * 0.15 + body + sizzle) * env * 32767)
+            buf.append(max(-32768, min(32767, sample)))
         return pygame.mixer.Sound(buffer=buf)
 
     def _make_hit(self) -> pygame.mixer.Sound:
-        """Impact thud."""
+        """Meaty impact — layered thump with crunch."""
         rate = 22050
-        n = int(rate * 0.08)
+        n = int(rate * 0.12)
         buf = array.array("h")
         for i in range(n):
-            env = 1.0 - i / n
+            t = i / rate
+            pos = i / n
+            env = (1.0 - pos) ** 1.2 * min(1.0, pos * 20)
+            # Deep thump
+            thump = math.sin(2 * math.pi * 90 * t) * 0.35
+            thump2 = math.sin(2 * math.pi * 55 * t) * 0.2
+            # Crunch noise
             noise = (((i * 7 + 3) * 1103515245 + 12345) >> 16) & 0x7FFF
-            val = noise / 16384.0 - 1.0
-            tone = math.sin(2 * math.pi * 120 * i / rate)
-            buf.append(max(-32768, min(32767, int((val * 0.25 + tone * 0.3) * env * 32767))))
+            n_val = (noise / 16384.0 - 1.0) * 0.2 * max(0, 1 - pos * 3)
+            # Mid punch
+            punch = math.sin(2 * math.pi * 200 * t) * 0.15 * max(0, 1 - pos * 5)
+            sample = int((thump + thump2 + n_val + punch) * env * 32767)
+            buf.append(max(-32768, min(32767, sample)))
         return pygame.mixer.Sound(buffer=buf)
 
     def _make_step(self) -> pygame.mixer.Sound:
-        """Soft footstep tick."""
+        """Soft footstep with subtle thud and scuff."""
         rate = 22050
-        n = int(rate * 0.04)
+        n = int(rate * 0.06)
         buf = array.array("h")
         for i in range(n):
-            env = 1.0 - i / n
+            t = i / rate
+            pos = i / n
+            env = (1.0 - pos) ** 1.5 * min(1.0, pos * 30)
+            # Low thud
+            thud = math.sin(2 * math.pi * 80 * t) * 0.15 * max(0, 1 - pos * 5)
+            # Scuff noise
             noise = (((i * 13 + 7) * 1103515245 + 12345) >> 16) & 0x7FFF
-            val = noise / 16384.0 - 1.0
-            buf.append(max(-32768, min(32767, int(val * 0.10 * env * 32767))))
+            scuff = (noise / 16384.0 - 1.0) * 0.12
+            sample = int((thud + scuff) * env * 32767)
+            buf.append(max(-32768, min(32767, sample)))
         snd = pygame.mixer.Sound(buffer=buf)
         snd.set_volume(0.3)
         return snd
 
     def _make_pickup(self) -> pygame.mixer.Sound:
-        """Ascending chime."""
-        rate = 22050
-        n = int(rate * 0.2)
-        buf = array.array("h")
-        for i in range(n):
-            env = 1.0 - (i / n) ** 2
-            freq = 500 + 800 * (i / n)
-            val = math.sin(2 * math.pi * freq * i / rate)
-            buf.append(max(-32768, min(32767, int(val * 0.25 * env * 32767))))
-        return pygame.mixer.Sound(buffer=buf)
-
-    def _make_levelup(self) -> pygame.mixer.Sound:
-        """Triumphant ascending arpeggio with shimmer."""
-        rate = 22050
-        n = int(rate * 0.6)
-        buf = array.array("h")
-        # C5 → E5 → G5 → C6  (arpeggio chord)
-        notes = [523, 659, 784, 1047]
-        note_len = n // len(notes)
-        for i in range(n):
-            t = i / n
-            note_idx = min(i // note_len, len(notes) - 1)
-            freq = notes[note_idx]
-            env = (1.0 - t) * 0.9 + 0.1
-            # Main tone + octave shimmer
-            val = math.sin(2 * math.pi * freq * i / rate) * 0.6
-            val += math.sin(2 * math.pi * freq * 2 * i / rate) * 0.2
-            # Bright shimmer overtone
-            val += math.sin(2 * math.pi * freq * 3 * i / rate) * 0.1
-            buf.append(max(-32768, min(32767, int(val * 0.3 * env * 32767))))
-        return pygame.mixer.Sound(buffer=buf)
-
-    def _make_dash(self) -> pygame.mixer.Sound:
-        """Quick whoosh."""
-        rate = 22050
-        n = int(rate * 0.1)
-        buf = array.array("h")
-        for i in range(n):
-            env = (1.0 - i / n) ** 2
-            noise = (((i * 31 + 17) * 1103515245 + 12345) >> 16) & 0x7FFF
-            val = noise / 16384.0 - 1.0
-            buf.append(max(-32768, min(32767, int(val * 0.2 * env * 32767))))
-        return pygame.mixer.Sound(buffer=buf)
-
-    def _make_boss_roar(self) -> pygame.mixer.Sound:
-        """Deep menacing boss entrance rumble."""
-        rate = 22050
-        n = int(rate * 0.6)
-        buf = array.array("h")
-        for i in range(n):
-            t = i / n
-            env = (1.0 - t) * min(1.0, t * 8)  # quick attack, slow decay
-            # Low growl: layered detuned saws
-            freq1 = 55 + 20 * math.sin(t * 6)
-            freq2 = 62 + 15 * math.sin(t * 8)
-            saw1 = 2.0 * ((i / rate * freq1) % 1.0) - 1.0
-            saw2 = 2.0 * ((i / rate * freq2) % 1.0) - 1.0
-            noise = (((i * 7 + 3) * 1103515245 + 12345) >> 16) & 0x7FFF
-            n_val = noise / 16384.0 - 1.0
-            val = (saw1 * 0.25 + saw2 * 0.2 + n_val * 0.15) * env
-            buf.append(max(-32768, min(32767, int(val * 32767))))
-        return pygame.mixer.Sound(buffer=buf)
-
-    def _make_throw(self) -> pygame.mixer.Sound:
-        """Quick sharp throw sound."""
-        rate = 22050
-        n = int(rate * 0.08)
-        buf = array.array("h")
-        for i in range(n):
-            env = (1.0 - i / n) ** 1.5
-            freq = 1200 - 800 * (i / n)
-            val = math.sin(2 * math.pi * freq * i / rate)
-            noise = (((i * 31 + 7) * 1103515245 + 12345) >> 16) & 0x7FFF
-            n_val = noise / 16384.0 - 1.0
-            buf.append(max(-32768, min(32767, int((val * 0.15 + n_val * 0.1) * env * 32767))))
-        return pygame.mixer.Sound(buffer=buf)
-
-    def _make_chicken(self) -> pygame.mixer.Sound:
-        """Rubber chicken squawk — rising then falling pitch wobble."""
+        """Sparkling ascending chime with harmonics."""
         rate = 22050
         n = int(rate * 0.25)
         buf = array.array("h")
         for i in range(n):
-            t = i / n
-            # Envelope: quick attack, sustain, decay
-            if t < 0.05:
-                env = t / 0.05
-            elif t < 0.6:
+            t = i / rate
+            pos = i / n
+            env = (1.0 - pos ** 2) * min(1.0, pos * 10)
+            freq = 600 + 1000 * pos
+            val = math.sin(2 * math.pi * freq * t) * 0.2
+            val += math.sin(2 * math.pi * freq * 2 * t) * 0.1
+            val += math.sin(2 * math.pi * freq * 3 * t) * 0.05
+            # Sparkle: noise bursts
+            if (i % 400) < 50:
+                noise = (((i * 31 + 17) * 1103515245 + 12345) >> 16) & 0x7FFF
+                val += (noise / 16384.0 - 1.0) * 0.06
+            buf.append(max(-32768, min(32767, int(val * env * 32767))))
+        return pygame.mixer.Sound(buffer=buf)
+
+    def _make_levelup(self) -> pygame.mixer.Sound:
+        """Triumphant ascending arpeggio with shimmer and sparkle."""
+        rate = 22050
+        n = int(rate * 0.7)
+        buf = array.array("h")
+        notes = [523, 659, 784, 1047]
+        note_len = n // len(notes)
+        for i in range(n):
+            t_abs = i / rate
+            pos = i / n
+            note_idx = min(i // note_len, len(notes) - 1)
+            freq = notes[note_idx]
+            # Crossfade between notes
+            note_pos = (i % note_len) / note_len
+            env = (1.0 - pos ** 1.5) * min(1.0, pos * 8)
+            # Rich tone stack
+            val = math.sin(2 * math.pi * freq * t_abs) * 0.35
+            val += math.sin(2 * math.pi * freq * 2 * t_abs) * 0.15
+            val += math.sin(2 * math.pi * freq * 3 * t_abs) * 0.08
+            # Bell-like attack per note
+            bell = math.sin(2 * math.pi * freq * 4 * t_abs) * 0.06 * max(0, 1 - note_pos * 3)
+            # Sparkle noise
+            if (i % 350) < 40:
+                noise = (((i * 31 + 17) * 1103515245 + 12345) >> 16) & 0x7FFF
+                bell += (noise / 16384.0 - 1.0) * 0.04
+            sample = int((val + bell) * env * 32767)
+            buf.append(max(-32768, min(32767, sample)))
+        return pygame.mixer.Sound(buffer=buf)
+
+    def _make_dash(self) -> pygame.mixer.Sound:
+        """Punchy whoosh with tonal sweep."""
+        rate = 22050
+        n = int(rate * 0.14)
+        buf = array.array("h")
+        for i in range(n):
+            t = i / rate
+            pos = i / n
+            env = math.sin(math.pi * pos) * (1.0 - pos * 0.3)
+            # Wind noise
+            noise = (((i * 31 + 17) * 1103515245 + 12345) >> 16) & 0x7FFF
+            wind = (noise / 16384.0 - 1.0) * 0.2
+            # Rising tone sweep
+            freq = 200 + 600 * pos
+            tone = math.sin(2 * math.pi * freq * t) * 0.12
+            sample = int((wind + tone) * env * 32767)
+            buf.append(max(-32768, min(32767, sample)))
+        return pygame.mixer.Sound(buffer=buf)
+
+    def _make_boss_roar(self) -> pygame.mixer.Sound:
+        """Deep menacing boss entrance — layered growl with sub-bass."""
+        rate = 22050
+        n = int(rate * 0.8)
+        buf = array.array("h")
+        for i in range(n):
+            t = i / rate
+            pos = i / n
+            env = (1.0 - pos) ** 0.7 * min(1.0, pos * 6)
+            # Sub bass rumble
+            sub = math.sin(2 * math.pi * 35 * t) * 0.2
+            # Detuned growl saws
+            freq1 = 55 + 25 * math.sin(pos * 8)
+            freq2 = 62 + 18 * math.sin(pos * 10)
+            saw1 = 2.0 * ((t * freq1) % 1.0) - 1.0
+            saw2 = 2.0 * ((t * freq2) % 1.0) - 1.0
+            # Gritty distortion
+            growl = max(-0.7, min(0.7, (saw1 * 0.3 + saw2 * 0.25) * 1.4))
+            # Heavy noise
+            noise = (((i * 7 + 3) * 1103515245 + 12345) >> 16) & 0x7FFF
+            n_val = (noise / 16384.0 - 1.0) * 0.18
+            sample = int((sub + growl + n_val) * env * 32767)
+            buf.append(max(-32768, min(32767, sample)))
+        return pygame.mixer.Sound(buffer=buf)
+
+    def _make_throw(self) -> pygame.mixer.Sound:
+        """Sharp knife throw with metallic ring."""
+        rate = 22050
+        n = int(rate * 0.12)
+        buf = array.array("h")
+        for i in range(n):
+            t = i / rate
+            pos = i / n
+            env = (1.0 - pos) ** 1.8 * min(1.0, pos * 25)
+            freq = 1400 - 900 * pos
+            # Sharp blade tone
+            blade = math.sin(2 * math.pi * freq * t) * 0.2
+            # Metallic ring overtone
+            ring = math.sin(2 * math.pi * 2200 * t) * 0.08 * (1.0 - pos)
+            # Air whoosh
+            noise = (((i * 31 + 7) * 1103515245 + 12345) >> 16) & 0x7FFF
+            whoosh = (noise / 16384.0 - 1.0) * 0.12 * env
+            sample = int((blade + ring + whoosh) * env * 32767)
+            buf.append(max(-32768, min(32767, sample)))
+        return pygame.mixer.Sound(buffer=buf)
+
+    def _make_chicken(self) -> pygame.mixer.Sound:
+        # Rubber chicken honk - nasal squawky waveform with comedy vibrato
+        rate = 22050
+        n = int(rate * 0.35)
+        buf = array.array("h")
+        for i in range(n):
+            t = i / rate
+            pos = i / n
+            # Envelope: quick honk attack, sustain, squeaky decay
+            if pos < 0.03:
+                env = pos / 0.03
+            elif pos < 0.15:
                 env = 1.0
+            elif pos < 0.5:
+                env = 1.0 - (pos - 0.15) * 0.3
             else:
-                env = (1.0 - (t - 0.6) / 0.4) ** 2
-            # Pitch: rises then wobbles then falls — like a chicken squawk
-            base_freq = 400 + 600 * math.sin(t * math.pi * 0.8)
-            wobble = math.sin(t * 60) * 80  # fast vibrato
-            freq = base_freq + wobble
-            val = math.sin(2 * math.pi * freq * i / rate)
-            # Add nasal overtone
-            val2 = math.sin(2 * math.pi * freq * 2.5 * i / rate) * 0.3
-            # Slight noise for texture
+                env = max(0, (1.0 - (pos - 0.5) / 0.5) ** 1.5)
+            # Base frequency: big honk up then down
+            base_freq = 280 + 350 * math.sin(pos * math.pi * 0.7)
+            # Fast nasal vibrato
+            vibrato = math.sin(t * 45 * 2 * math.pi) * 120
+            # Comedy wobble
+            wobble = math.sin(t * 12 * 2 * math.pi) * 40
+            freq = base_freq + vibrato + wobble
+            # Nasal square-ish waveform (not pure square)
+            phase = (t * freq) % 1.0
+            if phase < 0.3:
+                wave = 1.0
+            elif phase < 0.5:
+                wave = -0.5
+            elif phase < 0.7:
+                wave = -0.3
+            else:
+                wave = 0.2
+            # Nasal overtone at 3x frequency
+            overtone = math.sin(2 * math.pi * freq * 3 * t) * 0.25
+            # Slight noise for rubber texture
             noise = (((i * 13 + 5) * 1103515245 + 12345) >> 16) & 0x7FFF
-            n_val = (noise / 16384.0 - 1.0) * 0.08
-            sample = int((val * 0.25 + val2 * 0.1 + n_val) * env * 32767)
+            n_val = (noise / 16384.0 - 1.0) * 0.06
+            sample = int((wave * 0.4 + overtone + n_val) * env * 0.6 * 32767)
             buf.append(max(-32768, min(32767, sample)))
         return pygame.mixer.Sound(buffer=buf)
 
     def _make_confetti_boom(self) -> pygame.mixer.Sound:
-        """Comical pop-explosion with party horn overtone."""
+        """Comical pop-explosion with party horn and sparkle."""
         rate = 22050
-        n = int(rate * 0.2)
+        n = int(rate * 0.3)
         buf = array.array("h")
         for i in range(n):
-            t = i / n
-            env = (1.0 - t) ** 1.5
-            # Low thump
-            thump = math.sin(2 * math.pi * (120 - 80 * t) * i / rate) * 0.3
-            # Party horn: rising sine
-            horn = math.sin(2 * math.pi * (300 + 400 * t) * i / rate) * 0.15 * min(1, t * 5)
-            # Noise burst
+            t = i / rate
+            pos = i / n
+            env = (1.0 - pos) ** 1.2 * min(1.0, pos * 15)
+            # Deep boom
+            boom = math.sin(2 * math.pi * (100 - 60 * pos) * t) * 0.3
+            boom2 = math.sin(2 * math.pi * 60 * t) * 0.15 * max(0, 1 - pos * 4)
+            # Party horn: rising nasal tone
+            horn = math.sin(2 * math.pi * (300 + 500 * pos) * t) * 0.12
+            horn += math.sin(2 * math.pi * (300 + 500 * pos) * 3 * t) * 0.05  # nasal overtone
+            # Crackle noise burst
             noise = (((i * 7 + 3) * 1103515245 + 12345) >> 16) & 0x7FFF
-            n_val = (noise / 16384.0 - 1.0) * 0.2 * max(0, 1 - t * 3)
-            sample = int((thump + horn + n_val) * env * 32767)
+            crackle = (noise / 16384.0 - 1.0) * 0.2 * max(0, 1 - pos * 2.5)
+            # Sparkle tail
+            sparkle = 0.0
+            if pos > 0.4:
+                sp_env = (1.0 - (pos - 0.4) / 0.6)
+                sparkle = math.sin(2 * math.pi * 2000 * t) * 0.04 * sp_env
+            sample = int((boom + boom2 + horn + crackle + sparkle) * env * 32767)
             buf.append(max(-32768, min(32767, sample)))
         return pygame.mixer.Sound(buffer=buf)
 
     def _make_parry(self) -> pygame.mixer.Sound:
-        """Metallic clang/ring for a successful parry."""
+        """Satisfying metallic clang with bright ring-out."""
         rate = 22050
-        n = int(rate * 0.18)
+        n = int(rate * 0.25)
         buf = array.array("h")
         for i in range(n):
-            t = i / n
-            env = (1.0 - t) ** 2
-            # High metallic ring
-            ring = math.sin(2 * math.pi * 1200 * i / rate) * 0.25
-            ring2 = math.sin(2 * math.pi * 1800 * i / rate) * 0.15
-            # Impact
-            impact = math.sin(2 * math.pi * 300 * i / rate) * 0.2 * max(0, 1 - t * 6)
-            sample = int((ring + ring2 + impact) * env * 32767)
+            t = i / rate
+            pos = i / n
+            env = (1.0 - pos) ** 1.5 * min(1.0, pos * 30)
+            # Metal impact cluster
+            impact = math.sin(2 * math.pi * 300 * t) * 0.2 * max(0, 1 - pos * 8)
+            # Bright metallic ring harmonics
+            ring1 = math.sin(2 * math.pi * 1200 * t) * 0.2
+            ring2 = math.sin(2 * math.pi * 1800 * t) * 0.12
+            ring3 = math.sin(2 * math.pi * 2400 * t) * 0.06
+            # Noise transient
+            noise = (((i * 17 + 5) * 1103515245 + 12345) >> 16) & 0x7FFF
+            n_val = (noise / 16384.0 - 1.0) * 0.1 * max(0, 1 - pos * 6)
+            sample = int((impact + ring1 + ring2 + ring3 + n_val) * env * 32767)
             buf.append(max(-32768, min(32767, sample)))
         return pygame.mixer.Sound(buffer=buf)
 
@@ -317,84 +457,191 @@ class SoundManager:
         return self._tone(2400, 20, volume=0.12, wave="square")
 
     def _make_wheel_stop(self) -> pygame.mixer.Sound:
-        """Triumphant ding when wheel stops."""
-        rate = 22050
-        n = int(rate * 0.4)
-        buf = array.array("h")
-        for i in range(n):
-            t = i / rate
-            env = 1.0 - (i / n) ** 0.5
-            val = (math.sin(2 * math.pi * 880 * t) * 0.4 +
-                   math.sin(2 * math.pi * 1320 * t) * 0.3 +
-                   math.sin(2 * math.pi * 1760 * t) * 0.2)
-            sample = int(val * env * 0.25 * 32767)
-            buf.append(max(-32768, min(32767, sample)))
-        return pygame.mixer.Sound(buffer=buf)
-
-    def _make_chest_open(self) -> pygame.mixer.Sound:
-        """Creaky chest opening sound — rising noise + chime."""
+        """Triumphant bell ding with rich harmonics."""
         rate = 22050
         n = int(rate * 0.5)
         buf = array.array("h")
         for i in range(n):
             t = i / rate
-            env = 1.0 - (i / n)
-            # Rising creak
-            freq = 200 + 600 * (i / n)
+            pos = i / n
+            env = (1.0 - pos ** 0.6) * min(1.0, pos * 20)
+            # Rich bell chord: A5, E6, A6
+            val = math.sin(2 * math.pi * 880 * t) * 0.3
+            val += math.sin(2 * math.pi * 1320 * t) * 0.2
+            val += math.sin(2 * math.pi * 1760 * t) * 0.12
+            val += math.sin(2 * math.pi * 2640 * t) * 0.06
+            # Sparkle tail
+            if pos > 0.3:
+                sp = math.sin(2 * math.pi * 3520 * t) * 0.03 * (1 - pos)
+                val += sp
+            sample = int(val * env * 32767)
+            buf.append(max(-32768, min(32767, sample)))
+        return pygame.mixer.Sound(buffer=buf)
+
+    def _make_chest_open(self) -> pygame.mixer.Sound:
+        """Creaky chest with wooden groan and magical chime."""
+        rate = 22050
+        n = int(rate * 0.6)
+        buf = array.array("h")
+        for i in range(n):
+            t = i / rate
+            pos = i / n
+            env = min(1.0, pos * 4) * (1.0 - max(0, pos - 0.8) / 0.2)
+            # Wooden creak — FM synthesis
+            creak_freq = 200 + 500 * pos + 80 * math.sin(pos * 15)
+            creak = math.sin(2 * math.pi * creak_freq * t + math.sin(t * 400) * 2) * 0.2
+            # Low groan
+            groan = math.sin(2 * math.pi * 80 * t) * 0.1 * max(0, 1 - pos * 3)
+            # Noise texture
             noise = (((i * 1103515245 + 12345) >> 16) & 0x7FFF) / 16384.0 - 1.0
-            creak = math.sin(2 * math.pi * freq * t) * 0.3 + noise * 0.15
-            # Chime at end
-            chime = 0
-            if i > n * 0.6:
-                chime_env = 1.0 - (i - n * 0.6) / (n * 0.4)
-                chime = math.sin(2 * math.pi * 1047 * t) * 0.4 * chime_env
-            sample = int((creak + chime) * env * 0.2 * 32767)
+            n_val = noise * 0.1 * env
+            # Magical chime bloom
+            chime = 0.0
+            if pos > 0.5:
+                c_env = min(1.0, (pos - 0.5) / 0.15) * max(0, 1 - (pos - 0.65) / 0.35)
+                chime = (math.sin(2 * math.pi * 1047 * t) * 0.25 +
+                         math.sin(2 * math.pi * 1568 * t) * 0.12 +
+                         math.sin(2 * math.pi * 2093 * t) * 0.06) * c_env
+            sample = int((creak + groan + n_val + chime) * env * 32767)
             buf.append(max(-32768, min(32767, sample)))
         return pygame.mixer.Sound(buffer=buf)
 
     def _make_shield_block(self) -> pygame.mixer.Sound:
-        """Metallic clang for shielder block."""
-        rate = 22050
-        n = int(rate * 0.15)
-        buf = array.array("h")
-        for i in range(n):
-            t = i / rate
-            env = 1.0 - (i / n) ** 0.3
-            val = (math.sin(2 * math.pi * 600 * t) * 0.3 +
-                   math.sin(2 * math.pi * 1500 * t) * 0.2 +
-                   math.sin(2 * math.pi * 3000 * t) * 0.15)
-            sample = int(val * env * 0.2 * 32767)
-            buf.append(max(-32768, min(32767, sample)))
-        return pygame.mixer.Sound(buffer=buf)
-
-    def _make_enemy_death(self) -> pygame.mixer.Sound:
-        """Brief electronic death burst."""
+        """Heavy shield impact with resonant ring."""
         rate = 22050
         n = int(rate * 0.2)
         buf = array.array("h")
         for i in range(n):
             t = i / rate
-            env = 1.0 - (i / n)
-            freq = 400 - 300 * (i / n)
-            val = (2.0 * (t * freq % 1.0) - 1.0) * 0.3
+            pos = i / n
+            env = (1.0 - pos) ** 1.2 * min(1.0, pos * 25)
+            # Deep shield thud
+            thud = math.sin(2 * math.pi * 150 * t) * 0.25 * max(0, 1 - pos * 5)
+            # Metallic ring
+            ring = math.sin(2 * math.pi * 600 * t) * 0.2
+            ring += math.sin(2 * math.pi * 1500 * t) * 0.12
+            ring += math.sin(2 * math.pi * 3000 * t) * 0.06
+            # Impact noise
+            noise = (((i * 19 + 11) * 1103515245 + 12345) >> 16) & 0x7FFF
+            n_val = (noise / 16384.0 - 1.0) * 0.1 * max(0, 1 - pos * 4)
+            sample = int((thud + ring + n_val) * env * 32767)
+            buf.append(max(-32768, min(32767, sample)))
+        return pygame.mixer.Sound(buffer=buf)
+
+    def _make_enemy_death(self) -> pygame.mixer.Sound:
+        """Satisfying electronic death — descending saw with crunch."""
+        rate = 22050
+        n = int(rate * 0.25)
+        buf = array.array("h")
+        for i in range(n):
+            t = i / rate
+            pos = i / n
+            env = (1.0 - pos) ** 1.3 * min(1.0, pos * 15)
+            freq = 500 - 380 * pos
+            # Descending saw
+            saw = (2.0 * (t * freq % 1.0) - 1.0) * 0.25
+            # Sub thud
+            thud = math.sin(2 * math.pi * 70 * t) * 0.15 * max(0, 1 - pos * 4)
+            # Noise crunch
             noise = (((i * 1103515245 + 12345) >> 16) & 0x7FFF) / 16384.0 - 1.0
-            val += noise * 0.2 * env
-            sample = int(val * env * 0.15 * 32767)
+            crunch = noise * 0.18 * max(0, 1 - pos * 2.5)
+            sample = int((saw + thud + crunch) * env * 32767)
+            buf.append(max(-32768, min(32767, sample)))
+        return pygame.mixer.Sound(buffer=buf)
+
+    def _make_boss_death(self) -> pygame.mixer.Sound:
+        """Heavy metallic explosion with deep reverb — boss defeated."""
+        rate = 22050
+        n = int(rate * 0.6)
+        buf = array.array("h")
+        for i in range(n):
+            t = i / rate
+            pos = i / n
+            env = (1.0 - pos) ** 1.1 * min(1.0, pos * 10)
+            # Deep sub boom
+            sub = math.sin(2 * math.pi * 55 * t) * 0.35 * max(0, 1 - pos * 2.0)
+            # Mid impact hit
+            mid_env = max(0, 1 - pos * 3.5) ** 1.5
+            mid = math.sin(2 * math.pi * 140 * t) * 0.25 * mid_env
+            # Descending metallic sweep
+            freq = 800 - 700 * min(1.0, pos * 3)
+            sweep = (2.0 * (t * freq % 1.0) - 1.0) * 0.15 * max(0, 1 - pos * 2.2)
+            # Noise explosion burst
+            noise = (((i * 1103515245 + 12345) >> 16) & 0x7FFF) / 16384.0 - 1.0
+            burst = noise * 0.22 * max(0, 1 - pos * 1.8)
+            sample = int((sub + mid + sweep + burst) * env * 32767)
+            buf.append(max(-32768, min(32767, sample)))
+        return pygame.mixer.Sound(buffer=buf)
+
+    def _make_big_boss_death(self) -> pygame.mixer.Sound:
+        """Massive layered explosion — sub-bass shockwave for big boss defeat."""
+        rate = 22050
+        n = int(rate * 1.2)
+        buf = array.array("h")
+        for i in range(n):
+            t = i / rate
+            pos = i / n
+            env = (1.0 - pos) ** 0.85 * min(1.0, pos * 8)
+            # Sub-bass earthquake
+            sub = math.sin(2 * math.pi * 38 * t) * 0.38 * max(0, 1 - pos * 1.3)
+            # Second sub layer for depth
+            sub2 = math.sin(2 * math.pi * 62 * t) * 0.28 * max(0, 1 - pos * 1.6)
+            # Deep boom impact
+            boom_env = max(0, 1 - pos * 2.5) ** 1.2
+            boom = math.sin(2 * math.pi * 110 * t) * 0.25 * boom_env
+            # Wide noise roar
+            noise = (((i * 1103515245 + 12345) >> 16) & 0x7FFF) / 16384.0 - 1.0
+            noise2 = (((i * 22695477 + 1) >> 15) & 0x7FFF) / 16384.0 - 1.0
+            roar = (noise * 0.15 + noise2 * 0.12) * max(0, 1 - pos * 0.9)
+            # High harmonic ring — diminishing
+            ring = math.sin(2 * math.pi * 320 * t) * 0.08 * max(0, 1 - pos * 2.0)
+            sample = int((sub + sub2 + boom + roar + ring) * env * 32767)
+            buf.append(max(-32768, min(32767, sample)))
+        return pygame.mixer.Sound(buffer=buf)
+
+    def _make_player_death(self) -> pygame.mixer.Sound:
+        """Dramatic descending wail + noise swell — player defeated."""
+        rate = 22050
+        n = int(rate * 1.5)
+        buf = array.array("h")
+        for i in range(n):
+            t = i / rate
+            pos = i / n
+            env = (1.0 - pos) ** 0.9 * min(1.0, pos * 5)
+            # Descending mournful tone
+            freq = 440 * (1.0 - pos * 0.65)
+            tone = math.sin(2 * math.pi * freq * t) * 0.3
+            # Detuned lower harmonic
+            freq2 = freq * 0.75
+            tone2 = math.sin(2 * math.pi * freq2 * t) * 0.18
+            # Noise swell rising then fading
+            noise = (((i * 1103515245 + 12345) >> 16) & 0x7FFF) / 16384.0 - 1.0
+            swell_env = math.sin(math.pi * min(1.0, pos * 1.6)) * max(0, 1 - pos * 0.7)
+            swell = noise * 0.14 * swell_env
+            # Sub low rumble at start
+            sub = math.sin(2 * math.pi * 48 * t) * 0.2 * max(0, 1 - pos * 3.5)
+            sample = int((tone + tone2 + swell + sub) * env * 32767)
             buf.append(max(-32768, min(32767, sample)))
         return pygame.mixer.Sound(buffer=buf)
 
     def _make_charge_whoosh(self) -> pygame.mixer.Sound:
-        """Rising whoosh for charger enemy dashing."""
+        """Aggressive rising whoosh with rumble."""
         rate = 22050
-        n = int(rate * 0.3)
+        n = int(rate * 0.35)
         buf = array.array("h")
         for i in range(n):
             t = i / rate
-            env = math.sin(math.pi * i / n)
+            pos = i / n
+            env = math.sin(math.pi * pos) * min(1.0, pos * 5)
+            # Heavy wind noise
             noise = (((i * 1103515245 + 12345) >> 16) & 0x7FFF) / 16384.0 - 1.0
-            freq = 300 + 800 * (i / n)
-            val = noise * 0.4 + math.sin(2 * math.pi * freq * t) * 0.2
-            sample = int(val * env * 0.12 * 32767)
+            wind = noise * 0.25
+            # Rising tonal sweep
+            freq = 250 + 900 * pos
+            tone = math.sin(2 * math.pi * freq * t) * 0.15
+            # Low rumble
+            rumble = math.sin(2 * math.pi * 50 * t) * 0.1 * (1 - pos)
+            sample = int((wind + tone + rumble) * env * 32767)
             buf.append(max(-32768, min(32767, sample)))
         return pygame.mixer.Sound(buffer=buf)
 
@@ -409,121 +656,677 @@ class SoundManager:
             buf.append(max(-32768, min(32767, int(val * volume * env * 32767))))
         return pygame.mixer.Sound(buffer=buf)
 
+    def _make_dog_bark(self) -> pygame.mixer.Sound:
+        """Robotic bark — sharp metallic yap with distortion."""
+        rate = 22050
+        n = int(rate * 0.15)
+        buf = array.array("h")
+        for i in range(n):
+            t = i / rate
+            pos = i / n
+            if pos < 0.05:
+                env = pos / 0.05
+            elif pos < 0.3:
+                env = 1.0
+            else:
+                env = max(0, (1.0 - (pos - 0.3) / 0.7) ** 2)
+            freq = 350 + 200 * math.sin(pos * math.pi * 2)
+            wave = math.sin(2 * math.pi * freq * t)
+            # Clip for metallic distortion
+            wave = max(-0.6, min(0.6, wave * 1.5))
+            # Add buzz overtone
+            buzz = math.sin(2 * math.pi * freq * 3 * t) * 0.15
+            noise = (((i * 13 + 7) * 1103515245 + 12345) >> 16) & 0x7FFF
+            n_val = (noise / 16384.0 - 1.0) * 0.08
+            sample = int((wave * 0.35 + buzz + n_val) * env * 32767)
+            buf.append(max(-32768, min(32767, sample)))
+        return pygame.mixer.Sound(buffer=buf)
+
+    def _make_dog_growl(self) -> pygame.mixer.Sound:
+        """Low mechanical growl — rumbling with servo whine."""
+        rate = 22050
+        n = int(rate * 0.4)
+        buf = array.array("h")
+        for i in range(n):
+            t = i / rate
+            pos = i / n
+            env = min(1.0, pos * 5) * max(0, 1.0 - (pos - 0.6) / 0.4) if pos > 0.6 else min(1.0, pos * 5)
+            # Low rumble
+            rumble = math.sin(2 * math.pi * 65 * t) * 0.3
+            rumble2 = math.sin(2 * math.pi * 72 * t) * 0.2
+            # Servo whine
+            whine = math.sin(2 * math.pi * (800 + 200 * math.sin(t * 10)) * t) * 0.06
+            noise = (((i * 7 + 3) * 1103515245 + 12345) >> 16) & 0x7FFF
+            n_val = (noise / 16384.0 - 1.0) * 0.1
+            sample = int((rumble + rumble2 + whine + n_val) * env * 0.5 * 32767)
+            buf.append(max(-32768, min(32767, sample)))
+        return pygame.mixer.Sound(buffer=buf)
+
     # ------------------------------------------------------------------
     # 8-bit background music
     # ------------------------------------------------------------------
 
-    def _generate_music(self):
-        """Generate two-layer 8-bit chiptune: atmospheric base + battle combat."""
+    # 8-bit background music
+    # ------------------------------------------------------------------
+
+    def _generate_boss_music(self):
+        """Generate intense boss combat tracks per zone — cached separately."""
+        import os
+        import pickle
+        _cache_dir = os.path.join(os.path.dirname(__file__), '..', '..', '.cache')
+        _cache_file = os.path.join(_cache_dir, 'boss_music_v1.pkl')
+        if os.path.exists(_cache_file):
+            try:
+                with open(_cache_file, 'rb') as _f:
+                    _cached = pickle.load(_f)
+                for _zone, _raw_bytes in _cached.items():
+                    self._boss_music[_zone] = pygame.mixer.Sound(buffer=_raw_bytes)
+                return
+            except Exception:
+                pass
         rate = 22050
-        bpm_base = 90   # slow atmospheric
-        bpm_combat = 160  # fast battle
-        bars = 8
+        _raw: dict = {}
+
+        # ================================================================
+        # WASTELAND BOSS — Military march: heavy saw bass + war drums
+        # D minor pentatonic, BPM 168, aggressive and relentless
+        # ================================================================
+        bpm_w = 168
+        spb_w = int(rate * 60.0 / bpm_w)
+        bars_w = 16
+        beats_w = bars_w * 4
+        # D minor riff: D2=73, A2=110, C3=131, D3=147, F3=175, A3=220
+        bass_riff = [73, 73, 110, 73, 131, 73, 147, 110,
+                     73, 110, 131, 147, 110, 73, 73, 110,
+                     147, 147, 131, 110, 73, 73, 110, 131,
+                     73, 147, 110, 73, 131, 147, 110, 73]
+        # Lead arp: D4=294, F4=349, A4=440, C5=523, D5=587
+        lead_riff = [294, 349, 440, 349, 294, 0, 440, 523,
+                     349, 440, 523, 440, 349, 294, 0, 294,
+                     440, 523, 587, 523, 440, 0, 349, 440,
+                     523, 440, 349, 294, 440, 587, 523, 440]
+        # Drums: 1=kick, 2=snare, 3=hat, 4=open hat, 0=rest
+        drum_w = [1, 3, 2, 3, 1, 3, 2, 4, 1, 3, 2, 3, 1, 2, 1, 2]
+        buf_w = array.array("h")
+        for bi in range(beats_w):
+            bf = bass_riff[bi % len(bass_riff)]
+            lf = lead_riff[bi % len(lead_riff)]
+            dr = drum_w[bi % len(drum_w)]
+            for i in range(spb_w):
+                t = i / rate
+                pos = i / spb_w
+                # Heavy distorted saw bass
+                bphase = (t * bf) % 1.0
+                bsaw = 2.0 * bphase - 1.0
+                # Add clipping distortion
+                bsaw = max(-0.7, min(0.7, bsaw * 1.6)) / 0.7
+                bass_v = bsaw * 0.14 * (1.0 - pos * 0.1)
+                # Sub octave
+                sub = math.sin(2 * math.pi * bf * 0.5 * t) * 0.08
+                # Lead: square wave arpeggio, short notes
+                lead_v = 0.0
+                if lf > 0 and pos < 0.5:
+                    lenv = (1.0 - pos / 0.5) ** 1.2
+                    sq = 1.0 if math.sin(2 * math.pi * lf * t) > 0 else -1.0
+                    lead_v = sq * 0.06 * lenv
+                # Hard drum hits
+                drum_v = 0.0
+                if dr == 1 and pos < 0.18:
+                    kick_f = 80 * (1 - pos / 0.18)
+                    drum_v = math.sin(2 * math.pi * kick_f * t) * 0.22 * (1 - pos / 0.18)
+                elif dr == 2 and pos < 0.12:
+                    noise = (((i * 1103515245 + 12345) >> 16) & 0x7FFF) / 16384.0 - 1.0
+                    drum_v = noise * 0.20 * (1 - pos / 0.12)
+                elif dr == 3 and pos < 0.04:
+                    noise = (((i * 6364136223 + 1) >> 15) & 0x7FFF) / 16384.0 - 1.0
+                    drum_v = noise * 0.08 * (1 - pos / 0.04)
+                elif dr == 4 and pos < 0.10:
+                    noise = (((i * 1664525 + 1013904223) >> 14) & 0x7FFF) / 16384.0 - 1.0
+                    drum_v = noise * 0.10 * (1 - pos / 0.10)
+                sample = int((bass_v + sub + lead_v + drum_v) * 32767)
+                buf_w.append(max(-32768, min(32767, sample)))
+        wasteland_boss = pygame.mixer.Sound(buffer=buf_w)
+        self._boss_music["wasteland"] = wasteland_boss
+        _raw["wasteland"] = bytes(buf_w)
+
+        # ================================================================
+        # CITY BOSS — Cyborg terror: glitchy industrial crush
+        # C# minor, BPM 180, electronic dystopia
+        # ================================================================
+        bpm_c = 180
+        spb_c = int(rate * 60.0 / bpm_c)
+        beats_c = 64
+        # C# minor: C#2=69, G#2=104, B2=123, C#3=138, E3=165, G#3=208
+        cbass = [69, 69, 104, 69, 123, 138, 104, 69,
+                 104, 138, 165, 138, 104, 69, 0, 69,
+                 138, 165, 208, 165, 138, 104, 69, 104,
+                 69, 123, 138, 104, 69, 138, 165, 138]
+        # Glitch lead: C#4=277, E4=330, G#4=415, B4=494, C#5=554
+        clead = [277, 0, 330, 415, 277, 0, 494, 415,
+                 330, 415, 494, 554, 415, 330, 0, 277,
+                 415, 494, 554, 0, 415, 330, 277, 0,
+                 494, 415, 330, 277, 415, 554, 494, 415]
+        drum_c = [1, 3, 2, 1, 1, 3, 2, 3, 1, 3, 2, 1, 1, 2, 1, 3]
+        buf_c = array.array("h")
+        for bi in range(beats_c):
+            bf = cbass[bi % len(cbass)]
+            lf = clead[bi % len(clead)]
+            dr = drum_c[bi % len(drum_c)]
+            for i in range(spb_c):
+                t = i / rate
+                pos = i / spb_c
+                # Pulsing industrial bass drone
+                bass_v = 0.0
+                if bf > 0:
+                    # Frequency modulated saw
+                    fm_mod = 1.0 + 0.04 * math.sin(2 * math.pi * 3 * t)
+                    bphase = (t * bf * fm_mod) % 1.0
+                    bsaw = 2.0 * bphase - 1.0
+                    bass_v = bsaw * 0.12 * (0.85 + 0.15 * (1 - pos))
+                    # Sub
+                    bass_v += math.sin(2 * math.pi * bf * 0.5 * t) * 0.08
+                # Glitch lead: detuned square wave
+                lead_v = 0.0
+                if lf > 0 and pos < 0.45:
+                    lenv = (1.0 - pos / 0.45) ** 0.8
+                    # Two detuned oscillators
+                    sq1 = 1.0 if math.sin(2 * math.pi * lf * t) > 0 else -1.0
+                    sq2 = 1.0 if math.sin(2 * math.pi * lf * 1.012 * t) > 0 else -1.0
+                    lead_v = (sq1 * 0.04 + sq2 * 0.03) * lenv
+                # Industrial percussion — punchy kick + hard snare + noise clicks
+                drum_v = 0.0
+                if dr == 1 and pos < 0.20:
+                    kick_f = 90 * (1 - pos / 0.20)
+                    drum_v = (math.sin(2 * math.pi * kick_f * t) * 0.26
+                              * (1 - pos / 0.20) ** 1.3)
+                elif dr == 2 and pos < 0.13:
+                    noise = (((i * 1103515245 + 12345) >> 16) & 0x7FFF) / 16384.0 - 1.0
+                    drum_v = noise * 0.22 * (1 - pos / 0.13)
+                elif dr == 3 and pos < 0.05:
+                    noise = (((i * 6364136223 + 1) >> 15) & 0x7FFF) / 16384.0 - 1.0
+                    drum_v = noise * 0.07 * (1 - pos / 0.05)
+                # Glitch stutter noise bursts on offbeats
+                glitch_v = 0.0
+                if bi % 7 == 3 and 0.48 < pos < 0.52:
+                    gn = (((i * 22695477 + 1) >> 14) & 0x7FFF) / 16384.0 - 1.0
+                    glitch_v = gn * 0.07
+                sample = int((bass_v + lead_v + drum_v + glitch_v) * 32767)
+                buf_c.append(max(-32768, min(32767, sample)))
+        city_boss = pygame.mixer.Sound(buffer=buf_c)
+        self._boss_music["city"] = city_boss
+        _raw["city"] = bytes(buf_c)
+
+        # ================================================================
+        # ABYSS BOSS — Cosmic horror: slow massive bass drops + chaos
+        # Tritone/dissonant intervals. BPM 85, ominous and overwhelming.
+        # ================================================================
+        bpm_a = 85
+        spb_a = int(rate * 60.0 / bpm_a)
+        beats_a = 64
+        # Tritone-heavy Phrygian: E1=41, Bb1=58, E2=82, Bb2=117, F#2=92, B1=62
+        abass = [41, 41, 58, 41, 82, 58, 41, 82,
+                 58, 82, 92, 82, 58, 41, 41, 58,
+                 82, 82, 117, 82, 92, 58, 41, 82,
+                 41, 58, 82, 92, 82, 58, 41, 41]
+        # Whistle/choir lead: E4=330, Bb4=466, F#4=370, B3=247, C4=262
+        alead = [330, 0, 466, 0, 370, 0, 330, 0,
+                 247, 0, 262, 466, 330, 0, 0, 0,
+                 466, 0, 370, 0, 330, 247, 0, 466,
+                 370, 0, 330, 0, 247, 466, 330, 0]
+        drum_a = [1, 0, 0, 2, 0, 0, 1, 0, 2, 0, 1, 0, 0, 2, 0, 1]
+        buf_a = array.array("h")
+        for bi in range(beats_a):
+            bf = abass[bi % len(abass)]
+            lf = alead[bi % len(alead)]
+            dr = drum_a[bi % len(drum_a)]
+            for i in range(spb_a):
+                t = i / rate
+                pos = i / spb_a
+                # Deep sub bass — sine with overtones creates cosmic rumble
+                bass_v = 0.0
+                if bf > 0:
+                    bass_v = math.sin(2 * math.pi * bf * t) * 0.20
+                    bass_v += math.sin(2 * math.pi * bf * 2.0 * t) * 0.06
+                    bass_v += math.sin(2 * math.pi * bf * 3.0 * t) * 0.03
+                    bass_env = 0.7 + 0.3 * math.exp(-pos * 1.5)
+                    bass_v *= bass_env
+                # Choir/whistle: sine with slow tremolo — cosmic wail
+                lead_v = 0.0
+                if lf > 0 and pos < 0.8:
+                    lenv = min(1.0, pos / 0.15) * (0.8 + 0.2 * math.sin(2 * math.pi * 2.5 * t))
+                    if pos > 0.65:
+                        lenv *= (0.8 - pos) / 0.15
+                    choir = math.sin(2 * math.pi * lf * t) * 0.06
+                    # Slight vibrato
+                    choir += math.sin(2 * math.pi * lf * t + math.sin(2*math.pi*4*t)*0.2) * 0.025
+                    lead_v = choir * lenv
+                # Sparse heavy drums — massive kick, rare snare
+                drum_v = 0.0
+                if dr == 1 and pos < 0.30:
+                    # Earth-shaking kick
+                    kick_f = 55 * (1 - pos / 0.30) ** 2
+                    drum_v = math.sin(2 * math.pi * kick_f * t) * 0.28 * (1 - pos / 0.30)
+                elif dr == 2 and pos < 0.20:
+                    noise = (((i * 1103515245 + 12345) >> 16) & 0x7FFF) / 16384.0 - 1.0
+                    drum_v = noise * 0.18 * (1 - pos / 0.20)
+                # Cosmic noise texture — distant void hiss
+                void_noise = (((i * 1103515245 + 12345 + bi * 1337) >> 16) & 0x7FFF) / 16384.0 - 1.0
+                void_swell = 0.2 + 0.8 * (0.5 + 0.5 * math.sin(bi * 0.3 + t * 0.5))
+                void_v = void_noise * 0.012 * void_swell
+                # Chaos stab: random dissonant hit every ~8 beats
+                chaos_v = 0.0
+                if bi % 8 == 5 and pos < 0.08:
+                    dissonant_f = 466 * (1.0 + pos * 0.3)
+                    chaos_v = math.sin(2 * math.pi * dissonant_f * t) * 0.05 * (1 - pos / 0.08)
+                sample = int((bass_v + lead_v + drum_v + void_v + chaos_v) * 32767)
+                buf_a.append(max(-32768, min(32767, sample)))
+        abyss_boss = pygame.mixer.Sound(buffer=buf_a)
+        self._boss_music["abyss"] = abyss_boss
+        _raw["abyss"] = bytes(buf_a)
+
+        # Save cache
+        try:
+            import os as _os
+            _os.makedirs(_cache_dir, exist_ok=True)
+            with open(_cache_file, 'wb') as _f:
+                import pickle as _pk
+                _pk.dump(_raw, _f)
+        except Exception:
+            pass
+
+    def _generate_zone_music(self):
+        """Generate ambient base + combat layers for each zone."""
+        import os
+        import pickle
+        _cache_dir = os.path.join(os.path.dirname(__file__), '..', '..', '.cache')
+        _cache_file = os.path.join(_cache_dir, 'zone_music_v1.pkl')
+        if os.path.exists(_cache_file):
+            try:
+                with open(_cache_file, 'rb') as _f:
+                    _cached = pickle.load(_f)
+                for _zone, (_bb, _cb) in _cached.items():
+                    self._zone_music[_zone] = (
+                        pygame.mixer.Sound(buffer=_bb),
+                        pygame.mixer.Sound(buffer=_cb),
+                    )
+                self._bgm_base, self._bgm_combat = self._zone_music["wasteland"]
+                self._current_music_zone = "wasteland"
+                return
+            except Exception:
+                pass  # Cache corrupt or version mismatch — regenerate
+        _raw: dict = {}
+        rate = 22050
+
+        # ================================================================
+        # FOREST (wasteland) — warm instrumental woodsy beat
+        # ================================================================
+        bpm = 82
+        beat_dur = 60.0 / bpm
+        spb = int(rate * beat_dur)           # samples per beat
+        bars = 16
         beats_per_bar = 4
-        total_beats = bars * beats_per_bar
+        total_beats = bars * beats_per_bar   # 64 beats
 
-        # We make both loops the same sample length so they stay in sync.
-        # Use base BPM for the shared length.
-        beat_base = 60.0 / bpm_base
-        samples_per_beat_base = int(rate * beat_base)
-        total_samples = samples_per_beat_base * total_beats
-
-        # --- ATMOSPHERIC BASE LAYER ---
-        # Slow, sparse, eerie ambient — sine pads + gentle low hum + sparse pings
-        ambient_notes = [
-            110, 110, 0, 131, 0, 0, 110, 0,
-            147, 0, 131, 0, 110, 0, 0, 98,
-            110, 0, 0, 131, 147, 0, 131, 0,
-            110, 0, 98, 0, 0, 110, 0, 0,
-        ]  # 0 = silence
-        pad_notes = [55, 55, 55, 55, 65, 65, 65, 65,
-                     73, 73, 73, 73, 65, 65, 55, 55,
-                     55, 55, 55, 55, 65, 65, 65, 65,
-                     73, 73, 73, 73, 65, 65, 55, 55]
+        # G major pentatonic: G3=196, A3=220, B3=247, D4=294, E4=330
+        # 64-beat flute melody — phrases with breathing room
+        flute_mel = [
+            196, 0,   220, 0,   294, 294, 0,   0,     # bar 1-2: G A  D D
+            330, 0,   294, 0,   247, 0,   220, 0,     # bar 3-4: E D  B A
+            196, 0,   0,   0,   220, 0,   247, 0,     # bar 5-6: G    A B
+            294, 0,   330, 330, 294, 0,   0,   0,     # bar 7-8: D EE D
+            220, 0,   196, 0,   0,   0,   294, 0,     # bar 9-10: A G  D
+            330, 0,   330, 294, 247, 0,   0,   0,     # bar 11-12: E ED B
+            196, 0,   220, 294, 330, 0,   294, 0,     # bar 13-14: G AD E D
+            247, 0,   220, 0,   196, 0,   0,   0,     # bar 15-16: B A G
+        ]
+        # Bass notes (root movement) — one per 2 beats
+        bass_notes = [
+            98, 98, 110, 110, 73, 73, 82, 82,         # G2 G2 A2 A2 D2 D2 E2 E2
+            98, 98, 82, 82, 73, 73, 98, 98,           # G2 G2 E2 E2 D2 D2 G2 G2
+            110, 110, 98, 98, 82, 82, 73, 73,         # A2 A2 G2 G2 E2 E2 D2 D2
+            98, 98, 110, 110, 82, 82, 98, 98,         # G2 G2 A2 A2 E2 E2 G2 G2
+            73, 73, 98, 98, 110, 110, 82, 82,         # D2 D2 G2 G2 A2 A2 E2 E2
+            98, 98, 73, 73, 82, 82, 110, 110,         # G2 G2 D2 D2 E2 E2 A2 A2
+            98, 98, 98, 98, 73, 73, 82, 82,           # G2 G2 G2 G2 D2 D2 E2 E2
+            110, 110, 82, 82, 98, 98, 98, 98,         # A2 A2 E2 E2 G2 G2 G2 G2
+        ]
+        # Drum pattern: 0=rest, 1=kick, 2=snare brush, 3=hat
+        #               8th-note subdivision: 2 sub-beats per beat
+        drum_pat = [1,3, 0,3, 2,3, 0,3,               # bar pattern A
+                    1,3, 0,3, 2,3, 1,3,               # bar pattern B
+                    1,3, 0,3, 2,3, 0,0,               # bar pattern C (breathing)
+                    1,3, 1,3, 2,3, 0,3]               # bar pattern D
+        # Bird chirp timings (beat indices where a chirp happens)
+        chirp_beats = {5, 19, 37, 51, 14, 42, 28, 60}
 
         buf_base = array.array("h")
-        for beat_idx in range(total_beats):
-            nidx = beat_idx % len(ambient_notes)
-            mel_freq = ambient_notes[nidx]
-            pad_freq = pad_notes[nidx % len(pad_notes)]
-            for i in range(samples_per_beat_base):
+        for bi in range(total_beats):
+            fm = flute_mel[bi % len(flute_mel)]
+            bn = bass_notes[bi % len(bass_notes)]
+            for i in range(spb):
                 t = i / rate
-                pos = i / samples_per_beat_base
+                pos = i / spb    # 0..1 within beat
 
-                # Warm sine pad — slow attack/release, very low
-                pad_env = math.sin(pos * math.pi)  # swell shape
-                pad_val = math.sin(2 * math.pi * pad_freq * t) * 0.04 * pad_env
-                # Detuned layer for width
-                pad_val += math.sin(2 * math.pi * (pad_freq * 1.005) * t) * 0.03 * pad_env
+                # ── Warm bass pad (filtered triangle) ──
+                bass_phase = (t * bn) % 1.0
+                bass_tri = 4.0 * abs(bass_phase - 0.5) - 1.0
+                # Gentle volume swell per beat
+                bass_env = 0.8 + 0.2 * (1.0 - pos)
+                bass_val = bass_tri * 0.04 * bass_env
+                # Add sub-octave warmth
+                sub_phase = (t * bn * 0.5) % 1.0
+                bass_val += math.sin(2 * math.pi * sub_phase) * 0.02
 
-                # Sparse melody pings — triangle-ish wave, gentle
-                mel_val = 0.0
-                if mel_freq > 0 and pos < 0.4:
-                    mel_env = (1.0 - pos / 0.4) ** 2
-                    # Triangle wave
-                    phase = (t * mel_freq) % 1.0
-                    tri = 4.0 * abs(phase - 0.5) - 1.0
-                    mel_val = tri * 0.05 * mel_env
+                # ── Flute melody (sine + soft 2nd harmonic) ──
+                flute_val = 0.0
+                if fm > 0:
+                    # Slow attack, long sustain, gentle release
+                    if pos < 0.08:
+                        fl_env = pos / 0.08
+                    elif pos < 0.7:
+                        fl_env = 1.0
+                    else:
+                        fl_env = (1.0 - (pos - 0.7) / 0.3) ** 1.5
+                    fl_env *= 0.06
+                    flute_val = math.sin(2 * math.pi * fm * t) * fl_env
+                    flute_val += math.sin(2 * math.pi * fm * 2 * t) * fl_env * 0.15
+                    # Gentle vibrato
+                    vib = math.sin(2 * math.pi * 5.0 * t) * 0.003
+                    flute_val += math.sin(2 * math.pi * fm * t + vib * 10) * fl_env * 0.1
 
-                sample = int((pad_val + mel_val) * 32767)
-                buf_base.append(max(-32768, min(32767, sample)))
-        self._bgm_base = pygame.mixer.Sound(buffer=buf_base)
+                # ── Soft drums (8th note grid) ──
+                drum_val = 0.0
+                # Two sub-beats per beat
+                sub = 0 if pos < 0.5 else 1
+                sub_pos = (pos - sub * 0.5) / 0.5   # 0..1 within sub-beat
+                d_idx = (bi % 16) * 2 + sub
+                dr = drum_pat[d_idx % len(drum_pat)]
 
-        # --- BATTLE COMBAT LAYER ---
-        # Fast, aggressive — driving drums, saw bass, staccato square arps
-        beat_combat = 60.0 / bpm_combat
-        # Total combat beats to fill same duration
-        combat_total_beats = int(total_samples / (rate * beat_combat))
-        samples_per_beat_combat = int(rate * beat_combat)
-        # We might have a few samples difference; pad at end
-        combat_bass = [110, 110, 131, 131, 147, 147, 131, 131,
-                       110, 110, 98, 98, 131, 131, 147, 147]
-        combat_arp = [440, 523, 659, 523, 440, 587, 659, 784,
-                      523, 659, 784, 659, 523, 440, 587, 523]
-        drum_pattern = [1, 3, 2, 3] * 16  # kick, hat, snare, hat
-
-        buf_combat = array.array("h")
-        for beat_idx in range(combat_total_beats):
-            bidx = beat_idx % len(combat_bass)
-            bas_freq = combat_bass[bidx]
-            arp_freq = combat_arp[beat_idx % len(combat_arp)]
-            drum = drum_pattern[beat_idx % len(drum_pattern)]
-
-            for i in range(samples_per_beat_combat):
-                t = i / rate
-                pos = i / samples_per_beat_combat
-
-                # Aggressive saw bass
-                bas = 2.0 * ((t * bas_freq) % 1.0) - 1.0
-                bas_val = bas * 0.09 * (1.0 - pos * 0.15)
-
-                # Staccato square arp — short notes
-                arp_val = 0.0
-                if pos < 0.35:
-                    arp_env = 1.0 - pos / 0.35
-                    arp = 1.0 if math.sin(2 * math.pi * arp_freq * t) >= 0 else -1.0
-                    arp_val = arp * 0.06 * arp_env
-
-                # Heavy drums
-                drm = 0.0
-                if drum == 1 and pos < 0.15:  # kick
-                    kf = 100 * (1.0 - pos / 0.15)
-                    drm = math.sin(2 * math.pi * kf * t) * 0.20 * (1.0 - pos / 0.15)
-                elif drum == 2 and pos < 0.10:  # snare
+                if dr == 1 and sub_pos < 0.15:
+                    # Kick: soft thump
+                    kick_f = 65 * (1.0 - sub_pos / 0.15)
+                    drum_val = math.sin(2 * math.pi * kick_f * t) * 0.10 * (1.0 - sub_pos / 0.15)
+                elif dr == 2 and sub_pos < 0.08:
+                    # Brush snare: filtered noise
                     noise = (((i * 1103515245 + 12345) >> 16) & 0x7FFF) / 16384.0 - 1.0
-                    drm = noise * 0.16 * (1.0 - pos / 0.10)
-                elif drum == 3 and pos < 0.05:  # hihat
+                    drum_val = noise * 0.04 * (1.0 - sub_pos / 0.08)
+                elif dr == 3 and sub_pos < 0.03:
+                    # Closed hat: very short noise tick
                     noise = (((i * 7 + 3) * 1103515245 + 12345) >> 16) & 0x7FFF
-                    drm = (noise / 16384.0 - 1.0) * 0.06 * (1.0 - pos / 0.05)
+                    drum_val = (noise / 16384.0 - 1.0) * 0.025 * (1.0 - sub_pos / 0.03)
 
-                sample = int((bas_val + arp_val + drm) * 32767)
-                buf_combat.append(max(-32768, min(32767, sample)))
+                # ── Nature texture: gentle wind + occasional bird chirp ──
+                wind_noise = (((i * 1103515245 + 12345 + bi * 997) >> 16) & 0x7FFF) / 16384.0 - 1.0
+                wind_swell = 0.3 + 0.7 * (0.5 + 0.5 * math.sin(bi * 0.12 + t * 0.2))
+                wind = wind_noise * 0.008 * wind_swell
 
-        # Pad to match base layer length
-        while len(buf_combat) < len(buf_base):
-            buf_combat.append(0)
-        # Trim if slightly over
-        while len(buf_combat) > len(buf_base):
-            buf_combat.pop()
+                chirp = 0.0
+                if bi in chirp_beats and pos > 0.3 and pos < 0.5:
+                    chirp_pos = (pos - 0.3) / 0.2
+                    chirp_f = 1200 - 400 * chirp_pos
+                    chirp = math.sin(2 * math.pi * chirp_f * t) * 0.03 * (1.0 - chirp_pos)
 
-        self._bgm_combat = pygame.mixer.Sound(buffer=buf_combat)
+                sample = int((bass_val + flute_val + drum_val + wind + chirp) * 32767)
+                buf_base.append(max(-32768, min(32767, sample)))
+
+        forest_base = pygame.mixer.Sound(buffer=buf_base)
+
+        # Forest combat: driving beat, more aggressive, same key
+        bpm_c = 140
+        beat_c = 60.0 / bpm_c
+        spb_c = int(rate * beat_c)
+        total_s = spb * total_beats
+        ct = total_s // spb_c
+        c_bass = [98, 98, 110, 110, 82, 82, 73, 73,
+                  98, 98, 73, 73, 110, 110, 82, 82]
+        c_arp = [392, 440, 494, 440, 392, 330, 392, 440,
+                 494, 588, 494, 440, 392, 330, 294, 330]
+        c_drums = [1, 3, 2, 3, 1, 3, 2, 3, 1, 2, 1, 2, 3, 1, 2, 1]
+        buf_c = array.array("h")
+        for bi in range(ct):
+            bf = c_bass[bi % len(c_bass)]
+            af = c_arp[bi % len(c_arp)]
+            dr = c_drums[bi % len(c_drums)]
+            for i in range(spb_c):
+                t = i / rate
+                pos = i / spb_c
+                bas = (2.0 * ((t * bf) % 1.0) - 1.0) * 0.08 * (1 - pos * 0.15)
+                arp_val = 0.0
+                if pos < 0.3:
+                    arp_env = 1.0 - pos / 0.3
+                    arp_val = math.sin(2 * math.pi * af * t) * 0.05 * arp_env
+                drm = 0.0
+                if dr == 1 and pos < 0.15:
+                    drm = math.sin(2 * math.pi * (100 * (1 - pos / 0.15)) * t) * 0.18 * (1 - pos / 0.15)
+                elif dr == 2 and pos < 0.1:
+                    noise = (((i * 1103515245 + 12345) >> 16) & 0x7FFF) / 16384.0 - 1.0
+                    drm = noise * 0.14 * (1 - pos / 0.1)
+                elif dr == 3 and pos < 0.05:
+                    noise = (((i * 7 + 3) * 1103515245 + 12345) >> 16) & 0x7FFF
+                    drm = (noise / 16384.0 - 1.0) * 0.05 * (1 - pos / 0.05)
+                sample = int((bas + arp_val + drm) * 32767)
+                buf_c.append(max(-32768, min(32767, sample)))
+        while len(buf_c) < len(buf_base):
+            buf_c.append(0)
+        while len(buf_c) > len(buf_base):
+            buf_c.pop()
+        forest_combat = pygame.mixer.Sound(buffer=buf_c)
+        self._zone_music["wasteland"] = (forest_base, forest_combat)
+        _raw["wasteland"] = (bytes(buf_base), bytes(buf_c))
+
+        # ================================================================
+        # CITY — dark industrial ambient
+        # ================================================================
+        bpm_city = 78
+        beat_dur = 60.0 / bpm_city
+        spb = int(rate * beat_dur)
+        total_beats_city = 64
+
+        c_mel = [0, 0, 131, 0, 0, 139, 0, 0, 147, 0, 0, 0, 131, 0, 0, 0,
+                 156, 0, 0, 0, 0, 147, 0, 0, 131, 0, 0, 139, 0, 0, 0, 0,
+                 0, 0, 0, 147, 0, 0, 156, 0, 0, 0, 0, 147, 0, 139, 0, 0,
+                 131, 0, 0, 0, 0, 0, 0, 0, 0, 139, 0, 131, 0, 0, 0, 0]
+        city_drums = [1, 0, 3, 0, 2, 0, 3, 0,
+                      1, 0, 3, 1, 2, 0, 3, 0,
+                      1, 3, 0, 3, 2, 0, 0, 3,
+                      1, 0, 3, 0, 2, 3, 1, 0]
+        city_bass = [65, 65, 65, 65, 62, 62, 62, 62,
+                     58, 58, 58, 58, 65, 65, 65, 65,
+                     69, 69, 69, 69, 65, 65, 65, 65,
+                     62, 62, 58, 58, 65, 65, 65, 65]
+
+        buf_base = array.array("h")
+        for bi in range(total_beats_city):
+            mel = c_mel[bi % len(c_mel)]
+            bn = city_bass[bi % len(city_bass)]
+            for i in range(spb):
+                t = i / rate
+                pos = i / spb
+                # Industrial drone
+                drone = math.sin(2 * math.pi * bn * t) * 0.025
+                drone += math.sin(2 * math.pi * bn * 1.005 * t) * 0.02
+                # Rhythmic pulse (8th notes)
+                sub = 0 if pos < 0.5 else 1
+                sub_pos = (pos - sub * 0.5) / 0.5
+                d_idx = (bi % 8) * 4 + sub * 2 + (0 if sub_pos < 0.5 else 1)
+                dr = city_drums[d_idx % len(city_drums)]
+                drm = 0.0
+                if dr == 1 and sub_pos < 0.12:
+                    drm = math.sin(2 * math.pi * (90 * (1 - sub_pos / 0.12)) * t) * 0.08 * (1 - sub_pos / 0.12)
+                elif dr == 2 and sub_pos < 0.06:
+                    noise = (((i * 1103515245 + 12345) >> 16) & 0x7FFF) / 16384.0 - 1.0
+                    drm = noise * 0.04 * (1 - sub_pos / 0.06)
+                elif dr == 3 and sub_pos < 0.03:
+                    noise = (((i * 7 + 3) * 1103515245 + 12345) >> 16) & 0x7FFF
+                    drm = (noise / 16384.0 - 1.0) * 0.02 * (1 - sub_pos / 0.03)
+                # Melody
+                mel_val = 0.0
+                if mel > 0 and pos < 0.3:
+                    mel_env = (1.0 - pos / 0.3) ** 2
+                    sq = 1.0 if math.sin(2 * math.pi * mel * t) >= 0 else -1.0
+                    mel_val = sq * 0.03 * mel_env
+                # Atmo hum
+                hum = math.sin(2 * math.pi * 60 * t) * 0.005
+                sample = int((drone + drm + mel_val + hum) * 32767)
+                buf_base.append(max(-32768, min(32767, sample)))
+        city_base = pygame.mixer.Sound(buffer=buf_base)
+
+        # City combat
+        bpm_c = 155
+        beat_c = 60.0 / bpm_c
+        spb_c = int(rate * beat_c)
+        total_s_city = spb * total_beats_city
+        ct = total_s_city // spb_c
+        cb_bass = [131, 131, 139, 139, 147, 147, 156, 156,
+                   147, 147, 139, 139, 131, 131, 123, 123]
+        cb_arp = [523, 554, 587, 554, 523, 494, 523, 554,
+                  587, 622, 659, 622, 587, 554, 523, 494]
+        cb_drums = [1, 2, 1, 3, 1, 2, 1, 2, 1, 3, 2, 3, 1, 2, 3, 1]
+        buf_c = array.array("h")
+        for bi in range(ct):
+            bf = cb_bass[bi % len(cb_bass)]
+            af = cb_arp[bi % len(cb_arp)]
+            dr = cb_drums[bi % len(cb_drums)]
+            for i in range(spb_c):
+                t = i / rate
+                pos = i / spb_c
+                raw = (2.0 * ((t * bf) % 1.0) - 1.0)
+                bas = max(-0.7, min(0.7, raw * 1.3)) * 0.08 * (1 - pos * 0.1)
+                arp_val = 0.0
+                if pos < 0.25:
+                    ae = 1.0 - pos / 0.25
+                    arp_val = (1.0 if math.sin(2 * math.pi * af * t) >= 0 else -1.0) * 0.04 * ae
+                drm = 0.0
+                if dr == 1 and pos < 0.12:
+                    drm = math.sin(2 * math.pi * (110 * (1 - pos / 0.12)) * t) * 0.2 * (1 - pos / 0.12)
+                elif dr == 2 and pos < 0.08:
+                    noise = (((i * 1103515245 + 12345) >> 16) & 0x7FFF) / 16384.0 - 1.0
+                    drm = noise * 0.15 * (1 - pos / 0.08)
+                elif dr == 3 and pos < 0.05:
+                    noise = (((i * 7 + 3) * 1103515245 + 12345) >> 16) & 0x7FFF
+                    drm = (noise / 16384.0 - 1.0) * 0.06 * (1 - pos / 0.05)
+                sample = int((bas + arp_val + drm) * 32767)
+                buf_c.append(max(-32768, min(32767, sample)))
+        while len(buf_c) < len(buf_base):
+            buf_c.append(0)
+        while len(buf_c) > len(buf_base):
+            buf_c.pop()
+        city_combat = pygame.mixer.Sound(buffer=buf_c)
+        self._zone_music["city"] = (city_base, city_combat)
+        _raw["city"] = (bytes(buf_base), bytes(buf_c))
+
+        # ================================================================
+        # ABYSS — Lovecraftian dissonant ambient
+        # ================================================================
+        bpm_abyss = 60
+        beat_dur = 60.0 / bpm_abyss
+        spb = int(rate * beat_dur)
+        total_beats_abyss = 64
+
+        a_mel = [0, 0, 0, 0, 0, 0, 185, 0, 0, 0, 0, 0, 0, 0, 131, 0,
+                 0, 0, 0, 0, 0, 0, 0, 0, 175, 0, 0, 0, 0, 0, 0, 0,
+                 0, 0, 0, 0, 139, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 185,
+                 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 131, 0, 0, 0, 0, 0]
+        abyss_drums = [1, 0, 0, 0, 0, 0, 2, 0,
+                       0, 0, 0, 0, 1, 0, 0, 0,
+                       0, 0, 2, 0, 0, 0, 0, 0,
+                       1, 0, 0, 0, 0, 2, 0, 0]
+
+        buf_base = array.array("h")
+        for bi in range(total_beats_abyss):
+            mel = a_mel[bi % len(a_mel)]
+            for i in range(spb):
+                t = i / rate
+                pos = i / spb
+                phase_shift = math.sin(bi * 0.2 + t * 0.3) * 0.5
+                drone = math.sin(2 * math.pi * 40 * t + phase_shift) * 0.03
+                drone += math.sin(2 * math.pi * 40.7 * t) * 0.025
+                drone += math.sin(2 * math.pi * 57 * t) * 0.015
+                # Sparse percussion
+                sub = 0 if pos < 0.5 else 1
+                sub_pos = (pos - sub * 0.5) / 0.5
+                d_idx = (bi % 8) * 4 + sub * 2 + (0 if sub_pos < 0.5 else 1)
+                dr = abyss_drums[d_idx % len(abyss_drums)]
+                drm = 0.0
+                if dr == 1 and sub_pos < 0.2:
+                    drm = math.sin(2 * math.pi * (55 * (1 - sub_pos / 0.2)) * t) * 0.12 * (1 - sub_pos / 0.2)
+                elif dr == 2 and sub_pos < 0.1:
+                    noise = (((i * 1103515245 + 12345) >> 16) & 0x7FFF) / 16384.0 - 1.0
+                    drm = noise * 0.05 * (1 - sub_pos / 0.1)
+                # Eerie texture
+                whistle_f = 800 + 200 * math.sin(t * 0.7 + bi * 0.5)
+                whistle = math.sin(2 * math.pi * whistle_f * t) * 0.004
+                breath_env = 0.5 + 0.5 * math.sin(bi * 0.15 + t * 0.3)
+                noise = (((i * 1103515245 + 12345 + bi * 1013) >> 16) & 0x7FFF) / 16384.0 - 1.0
+                breath = noise * 0.008 * breath_env
+                mel_val = 0.0
+                if mel > 0:
+                    if pos < 0.5:
+                        mel_env = pos / 0.5 * (1.0 - pos / 0.5) * 2.0
+                    else:
+                        mel_env = (1.0 - (pos - 0.5) / 0.5) ** 3
+                    mel_val = math.sin(2 * math.pi * mel * t) * 0.03 * mel_env
+                    mel_val += math.sin(2 * math.pi * mel * 1.5 * t) * 0.01 * mel_env
+                sample = int((drone + drm + whistle + breath + mel_val) * 32767)
+                buf_base.append(max(-32768, min(32767, sample)))
+        abyss_base = pygame.mixer.Sound(buffer=buf_base)
+
+        # Abyss combat
+        bpm_c = 140
+        beat_c = 60.0 / bpm_c
+        spb_c = int(rate * beat_c)
+        total_s_abyss = spb * total_beats_abyss
+        ct = total_s_abyss // spb_c
+        ab_bass = [82, 82, 78, 78, 82, 82, 87, 87,
+                   78, 78, 82, 82, 73, 73, 78, 78]
+        ab_arp = [330, 370, 392, 415, 330, 370, 440, 415,
+                  392, 370, 330, 370, 415, 392, 370, 330]
+        ab_drums = [1, 0, 2, 0, 1, 3, 0, 2, 1, 0, 3, 0, 1, 2, 3, 0]
+        buf_c = array.array("h")
+        for bi in range(ct):
+            bf = ab_bass[bi % len(ab_bass)]
+            af = ab_arp[bi % len(ab_arp)]
+            dr = ab_drums[bi % len(ab_drums)]
+            for i in range(spb_c):
+                t = i / rate
+                pos = i / spb_c
+                s1 = (2.0 * ((t * bf) % 1.0) - 1.0)
+                s2 = (2.0 * ((t * (bf * 1.02)) % 1.0) - 1.0)
+                bas = (s1 * 0.06 + s2 * 0.04) * (1 - pos * 0.1)
+                arp_val = 0.0
+                if pos < 0.4:
+                    ae = (1.0 - pos / 0.4) ** 1.5
+                    arp_val = math.sin(2 * math.pi * af * t) * 0.04 * ae
+                    arp_val += math.sin(2 * math.pi * af * 1.5 * t) * 0.015 * ae
+                drm = 0.0
+                if dr == 1 and pos < 0.2:
+                    drm = math.sin(2 * math.pi * (70 * (1 - pos / 0.2)) * t) * 0.18 * (1 - pos / 0.2)
+                elif dr == 2 and pos < 0.15:
+                    noise = (((i * 1103515245 + 12345) >> 16) & 0x7FFF) / 16384.0 - 1.0
+                    drm = noise * 0.10 * (1 - pos / 0.15)
+                elif dr == 3 and pos < 0.08:
+                    noise = (((i * 7 + 3) * 1103515245 + 12345) >> 16) & 0x7FFF
+                    drm = (noise / 16384.0 - 1.0) * 0.06 * (1 - pos / 0.08)
+                sample = int((bas + arp_val + drm) * 32767)
+                buf_c.append(max(-32768, min(32767, sample)))
+        while len(buf_c) < len(buf_base):
+            buf_c.append(0)
+        while len(buf_c) > len(buf_base):
+            buf_c.pop()
+        abyss_combat = pygame.mixer.Sound(buffer=buf_c)
+        self._zone_music["abyss"] = (abyss_base, abyss_combat)
+        _raw["abyss"] = (bytes(buf_base), bytes(buf_c))
+
+        # Save cache for fast future loads
+        try:
+            import os
+            os.makedirs(_cache_dir, exist_ok=True)
+            with open(_cache_file, 'wb') as _f:
+                import pickle
+                pickle.dump(_raw, _f)
+        except Exception:
+            pass
+
+        # Default to wasteland (forest)
+        self._bgm_base, self._bgm_combat = self._zone_music["wasteland"]
+        self._current_music_zone = "wasteland"

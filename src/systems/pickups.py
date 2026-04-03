@@ -65,6 +65,11 @@ class Pickup:
         surface.blit(label, (sx - label.get_width() // 2, sy - label.get_height() // 2))
 
 
+# XP orb and Coin descriptors (color + icon + effect)
+_XP_ORB = {"name": "XP", "color": (100, 255, 150), "icon": "XP", "effect": "xp"}
+_COIN   = {"name": "Coin", "color": (255, 200, 50), "icon": "$", "effect": "coin"}
+
+
 class PickupSystem:
     """Manages item drops and player collection."""
 
@@ -78,10 +83,34 @@ class PickupSystem:
             upgrade = random.choice(UPGRADE_TYPES)
             self.pickups.append(Pickup(x, y, upgrade))
 
+    def spawn_xp_orb(self, x: float, y: float, xp_amount: int):
+        """Spawn a collectable XP orb at enemy death position."""
+        orb = dict(_XP_ORB)
+        orb["xp_amount"] = xp_amount
+        p = Pickup(x + random.uniform(-20, 20), y + random.uniform(-20, 20), orb)
+        p.lifetime = 12000
+        self.pickups.append(p)
+
+    def spawn_coin(self, x: float, y: float):
+        """Spawn a coin pickup."""
+        p = Pickup(x + random.uniform(-16, 16), y + random.uniform(-16, 16), dict(_COIN))
+        p.lifetime = 18000
+        self.pickups.append(p)
+
     def spawn_apple(self, x: float, y: float):
         """Drop a healing apple from a fruit tree."""
         apple = {"name": "Apple", "color": (220, 40, 30), "icon": "a", "effect": "apple"}
         self.pickups.append(Pickup(x, y, apple))
+
+    def spawn_medkit(self, x: float, y: float):
+        """Drop a first-aid kit from a city healing box."""
+        medkit = {"name": "First Aid", "color": (255, 80, 80), "icon": "+", "effect": "medkit"}
+        self.pickups.append(Pickup(x, y, medkit))
+
+    def spawn_void_essence(self, x: float, y: float):
+        """Drop void essence from an abyss bloom."""
+        ve = {"name": "Void Essence", "color": (180, 100, 255), "icon": "v", "effect": "void_essence"}
+        self.pickups.append(Pickup(x, y, ve))
 
     def update(self, now: int, player):
         magnet = "magnetic_field" in getattr(player, 'passives', [])
@@ -109,6 +138,10 @@ class PickupSystem:
             player.hp = min(player.max_hp, player.hp + 30)
         elif effect == "apple":
             player.hp = min(player.max_hp, player.hp + 20)
+        elif effect == "medkit":
+            player.hp = min(player.max_hp, player.hp + 35)
+        elif effect == "void_essence":
+            player.hp = min(player.max_hp, player.hp + 25)
         elif effect == "damage":
             player.damage += 5
         elif effect == "speed":
@@ -118,6 +151,10 @@ class PickupSystem:
         elif effect == "max_hp":
             player.max_hp += 15
             player.hp = min(player.max_hp, player.hp + 15)
+        elif effect == "xp":
+            player.gain_xp(upgrade.get("xp_amount", 5))
+        elif effect == "coin":
+            player.coins = getattr(player, "coins", 0) + 1
         self.notifications.append({
             "text": upgrade["name"],
             "color": upgrade["color"],

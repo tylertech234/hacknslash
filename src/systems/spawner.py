@@ -19,6 +19,18 @@ class WaveSpawner:
         self.last_wave_end = 0
         self.boss_wave = False
         self.just_started_wave = False
+        # Zone-aware enemy pool
+        self.zone_enemy_pool = None
+        self.zone_mini_boss = "iron_sentinel"
+        self.zone_boss = "warlord_kron"
+        self.zone_boss_wave = 10
+
+    def set_zone(self, zone_data: dict):
+        """Configure spawner for a specific zone."""
+        self.zone_enemy_pool = zone_data.get("enemy_pool")
+        self.zone_mini_boss = zone_data.get("mini_boss", "iron_sentinel")
+        self.zone_boss = zone_data.get("boss", "warlord_kron")
+        self.zone_boss_wave = zone_data.get("boss_wave", 10)
 
     @property
     def world_w(self) -> int:
@@ -50,8 +62,14 @@ class WaveSpawner:
         )
 
     def _pick_enemy_type(self) -> str:
-        """Pick an enemy type based on current wave with progressive unlocking."""
+        """Pick an enemy type based on current wave and zone pool."""
         w = self.wave
+        if self.zone_enemy_pool:
+            # Unlock more enemy types as waves progress
+            pool = self.zone_enemy_pool
+            max_idx = min(len(pool), 1 + (w - 1) // 2)
+            return random.choice(pool[:max(1, max_idx)])
+        # Fallback: original wasteland progression
         r = random.random()
         if w <= 2:
             return "dalek"
@@ -148,7 +166,7 @@ class WaveSpawner:
 
         count = WAVE_BASE_COUNT + (self.wave - 1) * WAVE_GROWTH
 
-        is_big_boss_wave = self.wave % 5 == 0
+        is_big_boss_wave = self.wave == self.zone_boss_wave
         is_mini_boss_wave = (not is_big_boss_wave) and self.wave % 3 == 0
 
         # -- Boss waves: only spawn bosses, no regular enemies --
@@ -156,13 +174,13 @@ class WaveSpawner:
             self.boss_wave = True
             if is_big_boss_wave:
                 x, y = self._rand_spawn_pos(player_x, player_y)
-                self.enemies.append(Enemy(x, y, "big_boss"))
+                self.enemies.append(Enemy(x, y, self.zone_boss))
                 for _ in range(2):
                     x, y = self._rand_spawn_pos(player_x, player_y)
-                    self.enemies.append(Enemy(x, y, "mini_boss"))
+                    self.enemies.append(Enemy(x, y, self.zone_mini_boss))
             else:
                 x, y = self._rand_spawn_pos(player_x, player_y)
-                self.enemies.append(Enemy(x, y, "mini_boss"))
+                self.enemies.append(Enemy(x, y, self.zone_mini_boss))
 
             # Stamp spawn time for scale-in animation + wave scaling
             wave_hp_mult = 1.0 + (self.wave - 1) * 0.12
