@@ -123,6 +123,6 @@ class Campfire:
 
         # "Rest here" text when active
         if self.active:
-            font = pygame.font.SysFont("consolas", 12)
-            txt = font.render("~ REST ~", True, (255, 200, 100))
+            from src.font_cache import get_font
+            txt = get_font("consolas", 12).render("~ REST ~", True, (255, 200, 100))
             surface.blit(txt, (sx - txt.get_width() // 2, sy + 14))

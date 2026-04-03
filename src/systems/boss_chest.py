@@ -3,6 +3,7 @@ import math
 import random
 from src.settings import SCREEN_WIDTH, SCREEN_HEIGHT, WHITE, YELLOW
 from src.systems.weapons import WEAPONS
+from src.ui.tooltip import Tooltip
 
 
 # Big upgrades that can come from boss chests
@@ -84,34 +85,34 @@ class BossChest:
 
 
 class ChestRewardScreen:
-    """Spin-the-wheel boss chest reward screen."""
-
-    NUM_SEGMENTS = 8
+    """Dramatic chest opening — rolls 1-5 upgrades with scaling fanfare."""
 
     def __init__(self):
         self.active = False
         self.rewards: list[dict] = []
-        self.selected = 0
         self.font_big = pygame.font.SysFont("consolas", 28, bold=True)
         self.font = pygame.font.SysFont("consolas", 18)
         self.font_small = pygame.font.SysFont("consolas", 14)
         self.font_icon = pygame.font.SysFont("consolas", 22, bold=True)
+        self.font_huge = pygame.font.SysFont("consolas", 48, bold=True)
         self.open_time = 0
-        # Wheel state
-        self.angle = 0.0        # current rotation in degrees
-        self.spin_speed = 0.0   # degrees per tick
-        self.phase = "idle"     # spinning | braking | stopped | celebrating
-        self.stop_time = 0
-        self._tick_sound_angle = 0.0
+        self.phase = "idle"  # buildup | revealing | revealed
         self._sound_manager = None
-        self._played_stop = False
+        self._tooltip = Tooltip()
+        self._reveal_index = 0
+        self._reveal_time = 0
+        self._buildup_duration = 1500  # ms of anticipation
+        self._reveal_interval = 400   # ms between each reward reveal
+        self._jackpot = False  # 5 items = jackpot
+        self._particles: list[dict] = []
+        self._player_class = "knight"
 
     def open_chest(self, player_class: str, player_passives: list = None, sounds=None):
-        """Generate 8 random upgrades and start spinning."""
+        """Roll 1-5 random upgrades and start the chest opening sequence."""
         self.active = True
         self.open_time = pygame.time.get_ticks()
         self._sound_manager = sounds
-        self._played_stop = False
+        self._player_class = player_class
         if sounds:
             sounds.play("chest_open")
 
@@ -122,185 +123,268 @@ class ChestRewardScreen:
                 continue
             pool.append(dict(u))
 
-        # Also offer class-appropriate weapon upgrades
-        class_weapons = [k for k, v in WEAPONS.items()
-                        if v.get("class") == player_class]
-        for wk in class_weapons:
-            w = WEAPONS[wk]
-            pool.append({
-                "name": w["name"],
-                "icon": "W",
-                "color": w["blade_color"],
-                "effect": "weapon",
-                "value": wk,
-            })
+        # Roll 1-5 rewards (weighted: 1=30%, 2=30%, 3=25%, 4=10%, 5=5%)
+        roll = random.random()
+        if roll < 0.30:
+            count = 1
+        elif roll < 0.60:
+            count = 2
+        elif roll < 0.85:
+            count = 3
+        elif roll < 0.95:
+            count = 4
+        else:
+            count = 5
 
-        count = self.NUM_SEGMENTS
-        if len(pool) < count:
-            # Duplicate to fill wheel
-            while len(pool) < count:
-                pool.append(random.choice(CHEST_UPGRADES))
+        self._jackpot = count >= 5
+        count = min(count, len(pool))
         self.rewards = random.sample(pool, count)
-        self.selected = 0
-        self.angle = random.uniform(0, 360)
-        self.spin_speed = random.uniform(8.0, 12.0)
-        self.phase = "spinning"
-        self._tick_sound_angle = self.angle
+        self._reveal_index = 0
+        self.phase = "buildup"
+        self._particles = []
 
     def handle_event(self, event: pygame.event.Event) -> bool:
         if not self.active:
             return False
-        if event.type == pygame.KEYDOWN:
-            if self.phase == "spinning":
-                if event.key in (pygame.K_RETURN, pygame.K_SPACE):
-                    self.phase = "braking"
-            elif self.phase == "celebrating":
-                if event.key in (pygame.K_RETURN, pygame.K_SPACE):
-                    self.active = False
-                    return True
+        confirm = False
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            confirm = True
+        if event.type == pygame.KEYDOWN and event.key in (pygame.K_RETURN, pygame.K_SPACE, pygame.K_e):
+            confirm = True
+        if confirm:
+            if self.phase == "buildup":
+                self.phase = "revealing"
+                self._reveal_index = 0
+                self._reveal_time = pygame.time.get_ticks()
+            elif self.phase == "revealing":
+                self._reveal_index = len(self.rewards)
+                self.phase = "revealed"
+                self._reveal_time = pygame.time.get_ticks()
+                if self._jackpot:
+                    self._spawn_explosion()
+                if self._sound_manager:
+                    self._sound_manager.play("wheel_stop")
+            elif self.phase == "revealed":
+                self.active = False
+                return True
         return False
 
     def get_rewards(self) -> list[dict]:
-        if 0 <= self.selected < len(self.rewards):
-            return [self.rewards[self.selected]]
-        return self.rewards[:1]
+        return list(self.rewards)
 
-    def _update_wheel(self, now):
-        """Called each draw frame to update wheel physics."""
-        if self.phase == "spinning":
-            old_angle = self.angle
-            self.angle = (self.angle + self.spin_speed) % 360
-            # Tick sound when crossing segment boundary
-            seg = 360 / self.NUM_SEGMENTS
-            if int(old_angle / seg) != int(self.angle / seg) and self._sound_manager:
-                self._sound_manager.play("wheel_tick")
-            # Slow natural friction
-            self.spin_speed *= 0.997
-            # Auto-brake after 3 seconds
-            if now - self.open_time > 3000:
-                self.phase = "braking"
-        elif self.phase == "braking":
-            old_angle = self.angle
-            self.angle = (self.angle + self.spin_speed) % 360
-            seg = 360 / self.NUM_SEGMENTS
-            if int(old_angle / seg) != int(self.angle / seg) and self._sound_manager:
-                self._sound_manager.play("wheel_tick")
-            self.spin_speed *= 0.97  # stronger friction
-            if self.spin_speed < 0.15:
-                self.spin_speed = 0
-                self.phase = "stopped"
-                self.stop_time = now
-                # Determine which segment the pointer is on (top = 270 degrees)
-                pointer_angle = (270 - self.angle) % 360
-                seg_size = 360 / self.NUM_SEGMENTS
-                self.selected = int(pointer_angle / seg_size) % self.NUM_SEGMENTS
-        elif self.phase == "stopped":
-            if not self._played_stop and self._sound_manager:
-                self._sound_manager.play("wheel_stop")
-                self._played_stop = True
-            # Brief pause, then celebrate
-            if now - self.stop_time > 300:
-                self.phase = "celebrating"
+    def _spawn_explosion(self):
+        """Spawn particles for jackpot (5-item roll)."""
+        cx, cy = SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2
+        for _ in range(80):
+            angle = random.uniform(0, math.pi * 2)
+            speed = random.uniform(2, 10)
+            self._particles.append({
+                "x": float(cx), "y": float(cy),
+                "vx": math.cos(angle) * speed,
+                "vy": math.sin(angle) * speed,
+                "life": random.uniform(0.5, 1.5),
+                "age": 0.0,
+                "color": random.choice([
+                    (255, 220, 50), (255, 180, 30), (255, 255, 150),
+                    (255, 100, 50), (255, 255, 255),
+                ]),
+                "size": random.randint(2, 5),
+            })
+
+    def _update_particles(self, dt_s: float):
+        alive = []
+        for p in self._particles:
+            p["age"] += dt_s
+            if p["age"] < p["life"]:
+                p["x"] += p["vx"]
+                p["y"] += p["vy"]
+                p["vy"] += 5 * dt_s  # gravity
+                alive.append(p)
+        self._particles = alive
 
     def draw(self, surface: pygame.Surface):
         if not self.active:
             return
         now = pygame.time.get_ticks()
-        self._update_wheel(now)
+        elapsed = now - self.open_time
+
+        # Update phase transitions
+        if self.phase == "buildup" and elapsed >= self._buildup_duration:
+            self.phase = "revealing"
+            self._reveal_index = 0
+            self._reveal_time = now
+
+        if self.phase == "revealing":
+            reveal_elapsed = now - self._reveal_time
+            items_to_show = min(len(self.rewards),
+                                reveal_elapsed // self._reveal_interval + 1)
+            if items_to_show > self._reveal_index:
+                self._reveal_index = items_to_show
+                if self._sound_manager:
+                    self._sound_manager.play("wheel_tick")
+            if self._reveal_index >= len(self.rewards):
+                if self.phase != "revealed":
+                    self.phase = "revealed"
+                    self._reveal_time = now
+                    if self._jackpot:
+                        self._spawn_explosion()
+                    if self._sound_manager:
+                        snd = "boss_roar" if self._jackpot else "wheel_stop"
+                        self._sound_manager.play(snd)
+
+        # Particle update
+        self._update_particles(1 / 60)
 
         # Darken background
         overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
-        overlay.fill((0, 0, 0, 200))
+        overlay.fill((0, 0, 0, 210))
         surface.blit(overlay, (0, 0))
 
-        # Title
-        title = self.font_big.render("BOSS CHEST OPENED!", True, (255, 220, 50))
-        surface.blit(title, (SCREEN_WIDTH // 2 - title.get_width() // 2, 30))
-
         cx = SCREEN_WIDTH // 2
-        cy = SCREEN_HEIGHT // 2 - 10
-        radius = 200
-        seg_angle = 360 / self.NUM_SEGMENTS
+        cy = SCREEN_HEIGHT // 2
 
-        # Draw wheel segments
-        for i, reward in enumerate(self.rewards):
-            start_deg = self.angle + i * seg_angle
-            end_deg = start_deg + seg_angle
+        if self.phase == "buildup":
+            self._draw_buildup(surface, cx, cy, now, elapsed)
+        else:
+            self._draw_rewards(surface, cx, cy, now)
 
-            # Segment color (alternating dark/light base + reward tint)
-            r_col = reward.get("color", (150, 150, 150))
-            if i % 2 == 0:
-                base = (max(0, r_col[0] // 3), max(0, r_col[1] // 3), max(0, r_col[2] // 3))
-            else:
-                base = (max(0, r_col[0] // 2), max(0, r_col[1] // 2), max(0, r_col[2] // 2))
+        # Draw particles
+        for p in self._particles:
+            alpha = max(0, int(255 * (1 - p["age"] / p["life"])))
+            ps = pygame.Surface((p["size"] * 2, p["size"] * 2), pygame.SRCALPHA)
+            pygame.draw.circle(ps, (*p["color"], alpha),
+                               (p["size"], p["size"]), p["size"])
+            surface.blit(ps, (int(p["x"]) - p["size"], int(p["y"]) - p["size"]))
 
-            # Draw filled arc as polygon wedge
-            points = [(cx, cy)]
-            steps = 12
-            for s in range(steps + 1):
-                a = math.radians(start_deg + s * seg_angle / steps)
-                points.append((cx + math.cos(a) * radius, cy + math.sin(a) * radius))
-            if len(points) >= 3:
-                pygame.draw.polygon(surface, base, points)
-                pygame.draw.polygon(surface, r_col, points, 2)
+    def _draw_buildup(self, surface, cx, cy, now, elapsed):
+        """Dramatic chest opening anticipation."""
+        progress = min(1.0, elapsed / self._buildup_duration)
 
-            # Draw icon in the middle of the segment
-            mid_angle = math.radians(start_deg + seg_angle / 2)
-            icon_r = radius * 0.65
-            ix = cx + math.cos(mid_angle) * icon_r
-            iy = cy + math.sin(mid_angle) * icon_r
-            icon_surf = self.font_icon.render(reward["icon"], True, r_col)
-            surface.blit(icon_surf, (ix - icon_surf.get_width() // 2,
-                                     iy - icon_surf.get_height() // 2))
+        # Pulsing glow expanding from center
+        glow_r = int(50 + 150 * progress)
+        glow_alpha = int(30 + 70 * progress * (0.5 + 0.5 * math.sin(now * 0.01)))
+        glow_s = pygame.Surface((glow_r * 2, glow_r * 2), pygame.SRCALPHA)
+        pygame.draw.circle(glow_s, (255, 200, 50, glow_alpha),
+                           (glow_r, glow_r), glow_r)
+        surface.blit(glow_s, (cx - glow_r, cy - glow_r))
 
-        # Draw center circle
-        pygame.draw.circle(surface, (30, 30, 40), (cx, cy), 30)
-        pygame.draw.circle(surface, (255, 220, 50), (cx, cy), 30, 2)
+        # Chest icon (growing)
+        chest_size = int(30 + 30 * progress)
+        half = chest_size // 2
+        # Body
+        body_r = pygame.Rect(cx - half, cy - half // 2, chest_size, half + 6)
+        pygame.draw.rect(surface, (120, 80, 30), body_r, border_radius=3)
+        pygame.draw.rect(surface, (200, 160, 60), body_r, 2, border_radius=3)
+        # Lid opening
+        lid_open = int(12 * progress)
+        lid_r = pygame.Rect(cx - half - 2, cy - half // 2 - 6 - lid_open,
+                            chest_size + 4, 8)
+        pygame.draw.rect(surface, (160, 120, 40), lid_r, border_radius=2)
+        pygame.draw.rect(surface, (200, 160, 60), lid_r, 1, border_radius=2)
+        # Lock
+        pygame.draw.circle(surface, (255, 220, 50),
+                           (cx, cy - half // 2 + 2), 4)
 
-        # Draw pointer (triangle at top)
-        ptr_y = cy - radius - 8
-        pygame.draw.polygon(surface, (255, 220, 50), [
-            (cx, ptr_y + 22),
-            (cx - 12, ptr_y),
-            (cx + 12, ptr_y),
-        ])
-        pygame.draw.polygon(surface, (255, 255, 200), [
-            (cx, ptr_y + 22),
-            (cx - 12, ptr_y),
-            (cx + 12, ptr_y),
-        ], 2)
+        # Light rays from chest
+        if progress > 0.3:
+            ray_alpha = int(100 * (progress - 0.3) / 0.7)
+            for i in range(8):
+                angle = now * 0.001 + i * math.pi / 4
+                rx = cx + math.cos(angle) * glow_r * 0.8
+                ry = cy + math.sin(angle) * glow_r * 0.8 - 20
+                ls = pygame.Surface((6, 6), pygame.SRCALPHA)
+                pygame.draw.circle(ls, (255, 255, 200, ray_alpha), (3, 3), 3)
+                surface.blit(ls, (int(rx) - 3, int(ry) - 3))
 
-        # Phase-specific UI
-        if self.phase == "spinning":
-            hint = self.font.render("Press SPACE to stop!", True, (200, 200, 200))
-            surface.blit(hint, (cx - hint.get_width() // 2, cy + radius + 30))
-        elif self.phase == "braking":
-            hint = self.font_small.render("Slowing down...", True, (150, 150, 150))
-            surface.blit(hint, (cx - hint.get_width() // 2, cy + radius + 35))
-        elif self.phase in ("stopped", "celebrating"):
-            # Show selected reward with celebration
-            reward = self.rewards[self.selected]
-            r_col = reward.get("color", (255, 255, 255))
+        # Title
+        title = self.font_big.render("BOSS CHEST", True, (255, 220, 50))
+        surface.blit(title, (cx - title.get_width() // 2, cy - 120))
 
-            # Pulsing glow behind reward name
-            if self.phase == "celebrating":
-                pulse = int(60 + 40 * math.sin(now * 0.008))
-                glow = pygame.Surface((400, 60), pygame.SRCALPHA)
-                glow.fill((*r_col, pulse))
-                surface.blit(glow, (cx - 200, cy + radius + 20))
+        # Suspense text
+        dots = "." * (1 + (now // 400) % 3)
+        hint = self.font.render(f"Opening{dots}", True, (200, 200, 200))
+        surface.blit(hint, (cx - hint.get_width() // 2, cy + 80))
 
-            # Show what was won
-            won_text = self.font_big.render(f"YOU WON: {reward['name']}", True, r_col)
-            surface.blit(won_text, (cx - won_text.get_width() // 2, cy + radius + 30))
+    def _draw_rewards(self, surface, cx, cy, now):
+        """Draw revealed reward cards."""
+        num_rewards = len(self.rewards)
+        shown = min(self._reveal_index, num_rewards)
 
+        # Title with reward count
+        color_title = (255, 255, 100) if num_rewards >= 4 else (255, 220, 50)
+        title_text = "JACKPOT!" if self._jackpot else f"{num_rewards} REWARD{'S' if num_rewards > 1 else ''}!"
+        title = self.font_big.render(title_text, True, color_title)
+        surface.blit(title, (cx - title.get_width() // 2, 40))
+
+        # Jackpot flash background
+        if self._jackpot and self.phase == "revealed":
+            flash = int(30 * (0.5 + 0.5 * math.sin(now * 0.008)))
+            fs = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+            fs.fill((255, 220, 50, flash))
+            surface.blit(fs, (0, 0))
+
+        # Layout cards
+        card_w, card_h = 360, 70
+        total_h = num_rewards * (card_h + 12) - 12
+        start_y = cy - total_h // 2
+
+        for i in range(shown):
+            reward = self.rewards[i]
+            r_col = reward.get("color", (180, 180, 180))
+            card_y = start_y + i * (card_h + 12)
+
+            # Card entrance slide-in
+            reveal_age = now - (self._reveal_time if self.phase == "revealed"
+                                else self._reveal_time + i * self._reveal_interval)
+            if self.phase == "revealing":
+                reveal_age = now - (self._reveal_time + i * self._reveal_interval)
+            slide = min(1.0, max(0.0, reveal_age / 200))
+            card_x = int(cx - card_w // 2 - 60 * (1 - slide))
+            alpha = int(255 * slide)
+
+            # Card background
+            card = pygame.Surface((card_w, card_h), pygame.SRCALPHA)
+            bg_color = (30, 30, 40, min(220, alpha))
+            pygame.draw.rect(card, bg_color, (0, 0, card_w, card_h),
+                             border_radius=6)
+            border_col = (*r_col, min(255, alpha))
+            pygame.draw.rect(card, border_col, (0, 0, card_w, card_h),
+                             2, border_radius=6)
+
+            # Icon circle
+            icon_cx, icon_cy = 35, card_h // 2
+            pygame.draw.circle(card, (*r_col, min(200, alpha)),
+                               (icon_cx, icon_cy), 18)
+            icon_t = self.font_icon.render(reward["icon"], True, (255, 255, 255))
+            icon_t.set_alpha(alpha)
+            card.blit(icon_t, (icon_cx - icon_t.get_width() // 2,
+                               icon_cy - icon_t.get_height() // 2))
+
+            # Name
+            name_t = self.font.render(reward["name"], True, r_col)
+            name_t.set_alpha(alpha)
+            card.blit(name_t, (65, 12))
+
+            # Effect tag
             if reward["effect"] == "weapon":
                 tag = "WEAPON"
             elif reward["effect"] == "passive":
                 tag = "PASSIVE"
             else:
                 tag = "STAT BOOST"
-            tag_surf = self.font.render(tag, True, (180, 180, 180))
-            surface.blit(tag_surf, (cx - tag_surf.get_width() // 2, cy + radius + 65))
+            tag_t = self.font_small.render(tag, True, (150, 150, 160))
+            tag_t.set_alpha(alpha)
+            card.blit(tag_t, (65, 38))
 
-            hint = self.font_small.render("Press SPACE to continue", True, (100, 100, 100))
-            surface.blit(hint, (cx - hint.get_width() // 2, cy + radius + 95))
+            surface.blit(card, (card_x, card_y))
+
+        # Instructions
+        if self.phase == "revealing":
+            hint = self.font_small.render("Press SPACE to skip...",
+                                          True, (120, 120, 120))
+        elif self.phase == "revealed":
+            hint = self.font.render("Press SPACE to continue",
+                                    True, (180, 180, 180))
+        else:
+            hint = self.font_small.render("...", True, (100, 100, 100))
+        surface.blit(hint, (cx - hint.get_width() // 2, SCREEN_HEIGHT - 50))
