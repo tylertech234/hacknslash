@@ -49,7 +49,7 @@ if ($Setup) {
 
     $ZipDest = Join-Path $ButlerDir "butler-windows.zip"
     Invoke-WebRequest `
-        -Uri "https://broth.itch.ovh/butler/windows-amd64/LATEST/archive/default" `
+        -Uri "https://broth.itch.zone/butler/windows-amd64/LATEST/archive/default" `
         -OutFile $ZipDest
 
     Expand-Archive -Path $ZipDest -DestinationPath $ButlerDir -Force
