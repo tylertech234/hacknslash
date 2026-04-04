@@ -6,9 +6,15 @@ __pycache__/
 dist/
 build/
 
+# PyInstaller
+*.spec.bak
+CyberSurvivor-Windows-*.zip
+
 # Runtime-generated files
 .cache/
+logs/
 game.log
 legacy_save.json
 settings_save.json
+compendium_save.json
 _patch_features.py
