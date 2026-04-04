@@ -39,7 +39,7 @@ Python + Pygame top-down hack-and-slash survival game. Procedural graphics and a
 | `src/ui/cursor.py` | Procedural animated crosshair — class-themed, rotates, contracts on click |
 | `src/ui/portal_screen.py` | Between-zone portal menu (Continue / Summary / Compendium) |
 | `src/ui/levelup.py` | Level-up upgrade choices |
-| `src/ui/radar.py` | Motion tracker |
+| `src/ui/minimap.py` | Lightweight full-map minimap showing enemy positions as dots |
 | `src/ui/legacy_screen.py` | Post-death permanent upgrade shop |
 | `src/ui/main_menu.py` | Main menu + settings (resolution, fullscreen, music volume) |
 | `src/ui/run_summary.py` | Post-run statistics summary screen |

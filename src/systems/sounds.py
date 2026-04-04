@@ -7,10 +7,7 @@ class SoundManager:
     """Procedurally generated sound effects and zone-specific music."""
 
     def __init__(self):
-        pygame.mixer.init(frequency=22050, size=-16, channels=2, buffer=512)
-        pygame.mixer.set_num_channels(8)
         self.sounds: dict[str, pygame.mixer.Sound] = {}
-        self._generate_all()
         self._music_playing = False
         self._combat_intensity = 0.0
         self._zone_music: dict[str, tuple] = {}
@@ -19,6 +16,10 @@ class SoundManager:
         self._current_music_zone = None
         self._boss_music: dict[str, pygame.mixer.Sound] = {}
         self.boss_music_playing = False
+
+        pygame.mixer.init(frequency=22050, size=-16, channels=2, buffer=512)
+        pygame.mixer.set_num_channels(8)
+        self._generate_all()
         self._generate_zone_music()
         self._generate_boss_music()
 
@@ -80,11 +81,13 @@ class SoundManager:
     def play_radar_beep(self, dist_ratio: float):
         """Play radar beep — higher pitch for closer enemies."""
         if dist_ratio < 0.33:
-            self.sounds["radar_beep_close"].play()
+            snd = self.sounds.get("radar_beep_close")
         elif dist_ratio < 0.66:
-            self.sounds["radar_beep_mid"].play()
+            snd = self.sounds.get("radar_beep_mid")
         else:
-            self.sounds["radar_beep_far"].play()
+            snd = self.sounds.get("radar_beep_far")
+        if snd:
+            snd.play()
 
     def start_boss_music(self, zone: str):
         """Play intense boss music; mute regular BGM to background level."""
@@ -101,8 +104,7 @@ class SoundManager:
 
     def stop_boss_music(self):
         """Stop boss music and restore zone music."""
-        if hasattr(self, '_boss_channel'):
-            self._boss_channel.stop()
+        self._boss_channel.stop()
         self.boss_music_playing = False
         # Restore zone BGM
         if self._music_playing and hasattr(self, '_base_channel'):

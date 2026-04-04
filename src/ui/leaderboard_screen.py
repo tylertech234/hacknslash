@@ -67,13 +67,8 @@ class LeaderboardScreen:
     # ── Data fetch ─────────────────────────────────────────────────────────────
 
     def _fetch_async(self) -> None:
-        import sys
-        if sys.platform == "emscripten":
-            # Web: brief synchronous fetch is acceptable
-            self._do_fetch()
-        else:
-            t = threading.Thread(target=self._do_fetch, daemon=True)
-            t.start()
+        t = threading.Thread(target=self._do_fetch, daemon=True)
+        t.start()
 
     def _do_fetch(self) -> None:
         rows = self._telemetry.fetch_leaderboard(limit=15)

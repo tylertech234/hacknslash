@@ -155,8 +155,6 @@ class PlayerProfile:
 
 def create_profile() -> PlayerProfile:
     """Load the existing profile or create a brand-new one.  Never raises."""
-    if sys.platform == "emscripten":
-        return _load_web_profile()
     return _load_desktop_profile()
 
 
@@ -218,28 +216,3 @@ def _migrate_root_saves(new_pid: str) -> None:
                     log.info("Migrated %s → profiles/%s/%s", fname, new_pid, fname)
             except OSError as e:
                 log.warning("Migration of %s failed: %s", fname, e)
-
-
-# ── Web implementation ─────────────────────────────────────────────────────────
-
-def _load_web_profile() -> PlayerProfile:
-    root_storage = WebStorage()  # no namespace → root keys
-    data = root_storage.read("profile.json") or {}
-    pid = data.get("player_id") or str(uuid.uuid4())
-
-    game_storage = WebStorage(namespace=pid)
-
-    # Prefer per-player profile metadata; fall back to root data for older saves
-    meta = game_storage.read("profile.json") or {}
-    name = meta.get("display_name", data.get("display_name", ""))
-    consent = meta.get("analytics_consent", data.get("analytics_consent", None))
-
-    profile = PlayerProfile(pid, name, "web", consent, game_storage)
-    profile.save()
-    # Also update root pointer so it always has a current player_id
-    root_storage.write("profile.json", {
-        "player_id": pid,
-        "display_name": name,
-        "analytics_consent": consent,
-    })
-    return profile

@@ -34,7 +34,7 @@ from src.systems.lighting import LightingSystem
 from src.systems.sounds import SoundManager
 from src.systems.legacy import LegacyData
 from src.ui.hud import HUD
-from src.ui.radar import Radar
+from src.ui.minimap import Minimap
 from src.ui.levelup import LevelUpScreen
 from src.ui.charselect import CharacterSelectScreen
 from src.ui.legacy_screen import LegacyScreen
@@ -129,7 +129,7 @@ class Game:
         text = font.render("LOADING...", True, (160, 160, 180))
         self.screen.blit(text, text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2)))
         sub = pygame.font.SysFont("consolas", 14)
-        hint = sub.render("first run generates audio — subsequent loads are instant", True, (80, 80, 100))
+        hint = sub.render("initialising systems...", True, (80, 80, 100))
         self.screen.blit(hint, hint.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 40)))
         pygame.display.flip()
 
@@ -214,7 +214,7 @@ class Game:
             self.sounds.stop_boss_music()
         self.sounds = SoundManager()
         self.hud = HUD()
-        self.radar = Radar()
+        self.minimap = Minimap()
         self.levelup_screen = LevelUpScreen()
         self.chest_reward = ChestRewardScreen()
         self.passive_swap = PassiveSwapScreen()
@@ -461,10 +461,15 @@ class Game:
                 pygame.display.flip()
                 continue
 
-            self._handle_events()
-            if not self.game_over and not self.paused:
-                self._update(dt, now)
-            self._draw()
+            try:
+                self._handle_events()
+                if not self.game_over and not self.paused:
+                    self._update(dt, now)
+                self._draw()
+            except Exception:
+                import traceback as _tb
+                _tb.print_exc()
+                raise
         pygame.quit()
         sys.exit()
 
@@ -1408,8 +1413,7 @@ class Game:
         if len(self.pickups.pickups) < prev_count:
             self.sounds.play("pickup")
 
-        # Radar
-        self.radar.update(now, self.player.x, self.player.y, alive, self.sounds)
+        # Minimap needs no per-frame update — it reads positions at draw time
 
         # Dynamic music intensity — only ramp during boss waves, keep ambient otherwise
         if alive:
@@ -1643,8 +1647,9 @@ class Game:
         # Pickup notifications
         self.pickups.draw_notifications(self.screen)
 
-        # Radar (AVP motion tracker)
-        self.radar.draw(self.screen, self.player.facing_x, self.player.facing_y)
+        # Minimap
+        alive_for_map = self.spawner.get_alive_enemies()
+        self.minimap.draw(self.screen, self.player.x, self.player.y, alive_for_map)
 
         # Level-up fanfare flash overlay
         if self._levelup_fanfare_time:

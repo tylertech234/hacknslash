@@ -220,7 +220,7 @@ class MainMenuScreen:
 
         # Controls hint
         hint = self.font_small.render("W/S to navigate  |  E/Enter to select", True, (70, 70, 90))
-        surface.blit(hint, (SCREEN_WIDTH // 2 - hint.get_width() // 2, 520))
+        surface.blit(hint, (SCREEN_WIDTH // 2 - hint.get_width() // 2, 590))
 
         # Bug icon when dev_options enabled
         if self.settings.get("dev_options"):
