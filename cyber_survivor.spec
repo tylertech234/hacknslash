@@ -34,8 +34,6 @@ a = Analysis(
         'cv2',
         'IPython',
         'jupyter',
-        'setuptools',
-        'xml',
         'xmlrpc',
         'test',
         'unittest',
