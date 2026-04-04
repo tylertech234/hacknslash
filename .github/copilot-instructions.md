@@ -1,7 +1,7 @@
 # Copilot Instructions for Cyber Survivor
 
 ## Project Overview
-Python + Pygame top-down hack-and-slash survival game. ~12,742 LOC across 43 Python files. Procedural graphics and audio (zero external assets). Title: **"Cyber Survivor"**.
+Python + Pygame top-down hack-and-slash survival game. ~14,000 LOC across 46 Python files. Procedural graphics and audio (zero external assets). Title: **"Cyber Survivor"**. Current version: `0.9.1` (Early Access).
 
 ## Architecture
 - Entry: `main.py` → `src/game.py` Game class
@@ -35,7 +35,9 @@ Python + Pygame top-down hack-and-slash survival game. ~12,742 LOC across 43 Pyt
 | `src/ui/toast.py` | Slide-in achievement-style toast notifications |
 | `src/ui/compendium_screen.py` | Compendium browser with procedural monster art + inspect view |
 | `src/ui/hud.py` | In-game HUD (HP/XP bars, boss HP, wave info, coin count, vignette) |
-| `src/ui/charselect.py` | 3-class picker (knight / archer / jester) |
+| `src/ui/charselect.py` | 3-class picker (knight / ranger / jester) |
+| `src/ui/cursor.py` | Procedural animated crosshair — class-themed, rotates, contracts on click |
+| `src/ui/portal_screen.py` | Between-zone portal menu (Continue / Summary / Compendium) |
 | `src/ui/levelup.py` | Level-up upgrade choices |
 | `src/ui/radar.py` | Motion tracker |
 | `src/ui/legacy_screen.py` | Post-death permanent upgrade shop |
@@ -54,12 +56,13 @@ Python + Pygame top-down hack-and-slash survival game. ~12,742 LOC across 43 Pyt
 - **cyber_rat** — tiny, fast melee, erratic jitter movement
 - **cyber_raccoon** — medium melee, sidestep-dodges when hit
 - **mega_cyber_deer** *(sub-boss, wave 5)* — large charging boss, antler slam special
-- **d_lack** — ranged, shoots cyan bullets (renamed from dalek)
+- **d_lek** — ranged, shoots cyan bullets; parallel beam burst attack
 - **charger** — charges in a straight line
 - **shielder** — has a damage-absorbing shield
 - **spitter** — longer-range acid ranged attacker, kites away from player
+- **emperors_elite_guard** — elite ranged flanking unit
 - **iron_sentinel** *(mini-boss)* — 3-way spread shots, missile_barrage special
-- **warlord_kron** *(big boss)* — 5-way spread shots, bleed_storm special
+- **supreme_d_lek** *(big boss)* — 5-way spread shots, bleed_storm special; D-Lek Emperor visual
 
 ### Zone 2 — City ("Ruined Metropolis")
 - **cyber_zombie** — slow, high HP melee
@@ -67,7 +70,7 @@ Python + Pygame top-down hack-and-slash survival game. ~12,742 LOC across 43 Pyt
 - **drone** — ranged flyer
 - **cultist** — ranged, applies fire on hit
 - **shambler** — slow, large AOE melee
-- **preacher** *(mini-boss)* — 3-way fire spread shots, fire_ring special
+- **street_preacher** *(mini-boss)* — 3-way fire spread shots, fire_ring special
 - **eldritch_horror** *(big boss)* — 7-shot fan, eldritch_pull special
 
 ### Zone 3 — Abyss ("The Abyss")
@@ -87,6 +90,14 @@ Python + Pygame top-down hack-and-slash survival game. ~12,742 LOC across 43 Pyt
 - Call `sounds.start_boss_music(zone)` on boss spawn, `sounds.stop_boss_music()` on boss death
 - Boss music is cached to `.cache/boss_music_v1.pkl`, keyed by zone name
 
+## Super Skill System
+- `player.energy` (0–100) fills at +10/kill, +40/boss kill
+- Right-click fires super when energy == max_energy; energy resets to 0
+- **Ranger**: EMP Arrow — `spawn_grenades()` with speed=18, splash_radius=150, damage×15
+- **Knight**: Blade Storm Nova — 12 `ThrownDagger` instances at 30° intervals, 360°
+- **Jester**: Chaos Eruption — 6 `ConfettiGrenade` instances at 60° intervals
+- Implemented in `game.py` `_fire_super_skill()`
+
 ## Conventions
 - All graphics are drawn with `pygame.draw.*` — no image files
 - All audio is generated with `pygame.sndarray` — no sound files
@@ -97,8 +108,13 @@ Python + Pygame top-down hack-and-slash survival game. ~12,742 LOC across 43 Pyt
 - XP drops as collectible pickup orbs (green, 12s lifetime) — handled by `pickups.py`
 - Zone constants live in `zones.py`: `ZONE_ORDER = ["wasteland", "city", "abyss"]`
 - When adding a passive: define in upgrade pool (boss_chest.py or levelup.py), then implement the check in game.py `_update()`, player.py, or combat.py
+- Grenade explosion tuples are **4-tuples**: `(x, y, damage, splash_radius)` — always unpack all four
+- `VERSION` string lives in `src/settings.py` — bump it there and it propagates to main menu watermark and build script
+- Portal menu uses a **frozen screenshot** as background; captured via `self._draw()` + `screen.copy()` at `portal_menu.activate()` time
+- Class name for Archer/Ranger is `"archer"` in code (char_class value) but displayed as **Ranger** in all UI
 
 ## Testing
-- Quick compile check: `python -c "from src.game import Game; print('OK')"`
+- Quick compile + version check: `python -c "from src.game import Game; from src.settings import VERSION; print(f'OK - v{VERSION}')"` 
 - Run game: `python main.py`
+- Build Windows release: `.\build_release.ps1`
 - No test framework — verify by running the game

@@ -59,7 +59,7 @@ You'll see `(.venv)` in your terminal prompt when it's active.
 pip install -r requirements.txt
 ```
 
-This installs **Pygame**, the only dependency.
+This installs **Pygame** and **NumPy** (required for procedural audio generation).
 
 ### 5. Run the game
 
@@ -81,28 +81,49 @@ hacknslash/
 │   ├── settings.py          # All tunable constants (speeds, HP, sizes, colors)
 │   ├── game.py              # Main loop — ties everything together
 │   ├── entities/            # Things in the world
-│   │   ├── player.py        # Player movement, attacks, leveling, 3 character classes
-│   │   └── enemy.py         # Enemy AI, 4 types (Dalek, Wraith, Mini-Boss, Big Boss)
+│   │   ├── player.py        # Player movement, attacks, leveling, 3 classes (knight/ranger/jester)
+│   │   └── enemy.py         # Enemy AI, 21 types across 3 zones
 │   ├── systems/             # Game mechanics
 │   │   ├── combat.py        # Hit detection, damage numbers, XP
 │   │   ├── spawner.py       # Wave spawning, patterns, boss waves, difficulty scaling
 │   │   ├── projectiles.py   # Enemy bullets + player daggers, orbiters, grenades
-│   │   ├── weapons.py       # 16+ weapons across 3 classes, drawing & stats
+│   │   ├── weapons.py       # 18+ weapons across 3 classes, drawing & stats
 │   │   ├── pickups.py       # Item drops (heal, stat boosts, apples)
 │   │   ├── boss_chest.py    # Boss chest drops and reward selection screen
+│   │   ├── compendium.py    # Enemy unlock tracking — first-kill logic, JSON save
+│   │   ├── game_actions.py  # Enemy death processing, coin drops, projectile helpers
 │   │   ├── environment.py   # Trees, rocks, bushes, fruit trees
 │   │   ├── campfire.py      # Healing campfire between waves
 │   │   ├── lighting.py      # Dynamic darkness overlay and light sources
 │   │   ├── animations.py    # Particles, death bursts, screen shake
-│   │   ├── sounds.py        # Procedurally generated SFX and 8-bit music
+│   │   ├── sounds.py        # Procedurally generated SFX + 2-layer chiptune + boss music
 │   │   ├── status_effects.py# Fire, bleed, poison, slow effects
 │   │   ├── camera.py        # Smooth-follow camera
-│   │   └── game_map.py      # Tile-based world grid
+│   │   ├── game_map.py      # Tile-based world grid
+│   │   ├── zones.py         # Zone definitions (wasteland / city / abyss)
+│   │   ├── atmosphere.py    # Atmospheric visual effects per zone
+│   │   ├── hazards.py       # Zone-specific hazards (acid, storms, void rifts)
+│   │   ├── portal.py        # Zone transition portal entity
+│   │   ├── legacy.py        # Roguelite persistence (JSON save)
+│   │   └── run_stats.py     # Per-run statistics tracking
 │   └── ui/                  # User interface
 │       ├── hud.py           # HP/XP bars, wave info, boss HP bar, danger vignette
 │       ├── radar.py         # AVP-style motion tracker
 │       ├── levelup.py       # Level-up upgrade selection
-│       └── charselect.py    # Character class picker
+│       ├── charselect.py    # Character class picker
+│       ├── cursor.py        # Animated procedural crosshair — class-themed
+│       ├── main_menu.py     # Main menu + settings
+│       ├── portal_screen.py # Between-zone portal menu (Continue/Summary/Compendium)
+│       ├── run_summary.py   # Post-run statistics summary screen
+│       ├── compendium_screen.py # Compendium browser with procedural monster art
+│       ├── legacy_screen.py # Post-death permanent upgrade shop
+│       ├── passive_swap.py  # Passive swap screen when all slots are full
+│       ├── toast.py         # Slide-in achievement-style toast notifications
+│       ├── tooltip.py       # Weapon/passive info tooltips
+│       ├── weapon_swap.py   # Weapon swap selection screen
+│       ├── icons.py         # 35 procedural icon drawings
+│       ├── debug_menu.py    # Developer debug menu
+│       └── debug_overlay.py # In-game debug overlay (F3)
 └── assets/                  # Empty placeholder folders (all art/sound is procedural)
 ```
 
@@ -150,6 +171,12 @@ Here's where to edit based on what you're doing:
 | Add a new passive ability | `src/systems/boss_chest.py` or `src/ui/levelup.py` (define) + `src/game.py` or `src/systems/game_actions.py` (implement) |
 | Add a roguelite upgrade | `src/systems/legacy.py` + `src/ui/legacy_screen.py` |
 | Change how damage/combat works | `src/systems/combat.py` |
+| Add/edit zone definitions | `src/systems/zones.py` |
+| Add zone-specific hazards | `src/systems/hazards.py` |
+| Modify the portal/between-zone menu | `src/ui/portal_screen.py` + `src/systems/portal.py` |
+| Edit run statistics tracking | `src/systems/run_stats.py` + `src/ui/run_summary.py` |
+| Edit the compendium bestiary | `src/systems/compendium.py` + `src/ui/compendium_screen.py` |
+| Change the cursor appearance | `src/ui/cursor.py` |
 
 ### Step 3: Test your changes
 
