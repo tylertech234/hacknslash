@@ -42,6 +42,7 @@ from src.ui.passive_swap import PassiveSwapScreen
 from src.ui.weapon_swap import WeaponSwapScreen
 from src.ui.main_menu import MainMenuScreen, load_settings, save_settings
 from src.ui.run_summary import RunSummaryScreen
+from src.ui.portal_screen import PortalMenuScreen
 from src.ui.tooltip import Tooltip
 from src.systems.run_stats import RunStats
 from src.systems.zones import ZONES, ZONE_ORDER, get_zone, get_next_zone
@@ -51,6 +52,10 @@ from src.systems.portal import Portal
 from src.ui.debug_menu import DebugMenu
 from src.ui.debug_overlay import DebugOverlay
 from src.font_cache import get_font
+from src.ui.cursor import draw_cursor as _draw_cursor_fn
+from src.systems.compendium import Compendium, DISPLAY_NAMES as _CDISP, ENEMY_ZONES as _CZONES
+from src.ui.toast import ToastManager
+from src.ui.compendium_screen import CompendiumScreen
 
 
 class Game:
@@ -69,6 +74,9 @@ class Game:
         self.char_select = CharacterSelectScreen()
         self.char_class = None  # set after selection
         self.run_summary = RunSummaryScreen()
+        self.portal_menu = PortalMenuScreen()
+        self._portal_next_zone: str = ""
+        self._portal_summary_mode: bool = False
         self.legacy = LegacyData()
         self.legacy_screen = LegacyScreen(self.legacy)
         self._legacy_points_earned = 0
@@ -76,14 +84,22 @@ class Game:
         self._show_loading_screen()
         self._init_world()
 
+        # Hide OS cursor — we draw our own
+        pygame.mouse.set_visible(False)
+
         # Debug / dev tools
         self.debug_menu = DebugMenu()
         self.debug_overlay = DebugOverlay()
         self.auto_attack = False
         self.paused = False
         self._pause_selected = 0
-        self._pause_options = ["Resume", "Settings", "Quit to Menu"]
+        self._pause_options = ["Resume", "Settings", "Quit to Menu", "Quit Game"]
         self._debug_mode = False
+
+        # Compendium + notifications (persist across runs)
+        self.compendium = Compendium()
+        self.toasts = ToastManager()
+        self.compendium_screen = CompendiumScreen(self.compendium)
 
     def _show_loading_screen(self):
         """Draw a loading frame so the window doesn't appear frozen."""
@@ -112,6 +128,9 @@ class Game:
         self.environment = EnvironmentSystem(self.current_zone)
         self.campfire = Campfire()
         self.lighting = LightingSystem()
+        # Stop any lingering boss music before the old SoundManager is replaced
+        if hasattr(self, 'sounds'):
+            self.sounds.stop_boss_music()
         self.sounds = SoundManager()
         self.hud = HUD()
         self.radar = Radar()
@@ -136,6 +155,17 @@ class Game:
         self.kills = 0
         self.boss_kills = 0
 
+        # Damage vignette feedback
+        self._last_damage_time = 0
+        self._last_damage_pct = 0.0
+        # Kill streak combo feedback
+        self._kill_streak = 0
+        self._kill_streak_time = 0
+
+        # Super skill charge tracking
+        self._super_charging = False
+        # Frozen screenshot behind the portal menu (prevents game world animation flashing)
+        self._portal_bg: pygame.Surface | None = None
         # Passive timers
         self._nano_regen_timer = 0
         self._second_wind_used = False
@@ -149,6 +179,15 @@ class Game:
         self._player_dying = False
         self._player_death_time = 0
         self._player_death_duration = 2200  # ms before game_over screen appears
+
+        # Zone intro cutscene state
+        self._zone_intro_active = True
+        self._zone_intro_start = 0   # set on first drawn frame
+        self._zone_intro_duration = 3000  # ms (fade in → hold → fade out)
+
+        # Wave countdown state (shown between waves)
+        self._wave_countdown_end = 0  # timestamp when countdown finishes
+        self._wave_countdown_secs = 0
 
         # Apply legacy bonuses
         bonuses = self.legacy.get_bonuses()
@@ -172,9 +211,11 @@ class Game:
         # Zone setup
         zone_data = get_zone(self.current_zone)
         self.game_map.set_colors(zone_data.get("tile_colors", {}))
+        self.game_map.set_zone(self.current_zone)
         self.atmosphere.set_zone(self.current_zone, zone_data)
         self.hazard_system.set_zone(self.current_zone, zone_data)
-        self.run_stats.set_weapon(self.player.weapon_name, self.player.weapon.get("name", ""))
+        self.run_stats.set_weapon(self.player.weapon_name, self.player.weapon.get("name", ""),
+                                   self.player.weapon.get("cooldown", 500))
         self.run_stats.set_zone(self.current_zone)
         self.spawner.set_zone(zone_data)
         self.sounds.set_zone_music(self.current_zone)
@@ -196,10 +237,15 @@ class Game:
                         if dm_result == "back":
                             self.debug_menu.active = False
                         continue
+                    if self.compendium_screen.active:
+                        self.compendium_screen.handle_event(event)
+                        continue
                     result = self.main_menu.handle_event(event)
                     if result == "new_run":
                         self._debug_mode = self.main_menu.settings.get("dev_options", False)
                         self.char_select.active = True
+                    elif result == "compendium":
+                        self.compendium_screen.activate()
                     elif result == "debug_menu":
                         self.debug_menu.active = True
                     elif result == "quit":
@@ -207,8 +253,12 @@ class Game:
                 self._apply_settings()
                 if self.debug_menu.active:
                     self.debug_menu.draw(self.screen)
+                elif self.compendium_screen.active:
+                    self.compendium_screen.draw(self.screen)
                 else:
                     self.main_menu.draw(self.screen)
+                _mx, _my = pygame.mouse.get_pos()
+                _draw_cursor_fn(self.screen, _mx, _my, "default", pygame.time.get_ticks())
                 pygame.display.flip()
                 continue
 
@@ -219,10 +269,58 @@ class Game:
                         self.running = False
                     done = self.run_summary.handle_event(event)
                     if done:
-                        self.legacy_screen.activate(
-                            self.spawner.wave, self.kills,
-                            self._legacy_points_earned)
+                        if self._portal_summary_mode:
+                            # Return to portal menu after viewing mid-run summary
+                            self._portal_summary_mode = False
+                            self.portal_menu.active = True
+                        else:
+                            self.legacy_screen.activate(
+                                self.spawner.wave, self.kills,
+                                self._legacy_points_earned)
                 self.run_summary.draw(self.screen)
+                _mx, _my = pygame.mouse.get_pos()
+                _draw_cursor_fn(self.screen, _mx, _my, "default", pygame.time.get_ticks())
+                pygame.display.flip()
+                continue
+
+            # Portal menu phase (between zones)
+            if self.portal_menu.active:
+                for event in pygame.event.get():
+                    if event.type == pygame.QUIT:
+                        self.running = False
+                        break
+                    # Route events to compendium when it's open
+                    if self.compendium_screen.active:
+                        result = self.compendium_screen.handle_event(event)
+                        if result == "back":
+                            # Compendium closed — return to portal menu
+                            self.compendium_screen.active = False
+                    else:
+                        action = self.portal_menu.handle_event(event)
+                        if action == "continue":
+                            self._portal_bg = None
+                            self.current_zone = self._portal_next_zone
+                            self._transition_to_zone(self._portal_next_zone)
+                        elif action == "summary":
+                            self._portal_summary_mode = True
+                            self._legacy_points_earned = 0
+                            self.run_summary.activate(
+                                self.run_stats, self.spawner.wave,
+                                self.current_zone, 0,
+                                self.player.level, victory=False)
+                        elif action == "compendium":
+                            self.compendium_screen.activate()
+                # Draw — compendium fills its own bg; portal menu draws over frozen screenshot
+                if self.compendium_screen.active:
+                    self.compendium_screen.draw(self.screen)
+                else:
+                    if self._portal_bg is not None:
+                        self.screen.blit(self._portal_bg, (0, 0))
+                    else:
+                        self._draw()
+                    self.portal_menu.draw(self.screen)
+                _mx, _my = pygame.mouse.get_pos()
+                _draw_cursor_fn(self.screen, _mx, _my, "default", pygame.time.get_ticks())
                 pygame.display.flip()
                 continue
 
@@ -239,6 +337,8 @@ class Game:
                         self._init_world()
                         self._apply_debug_cheats()
                 self.char_select.draw(self.screen)
+                _mx, _my = pygame.mouse.get_pos()
+                _draw_cursor_fn(self.screen, _mx, _my, "default", pygame.time.get_ticks())
                 pygame.display.flip()
                 continue
 
@@ -253,6 +353,8 @@ class Game:
                         self.main_menu.settings_open = False
                         self.main_menu.selected = 0
                 self.legacy_screen.draw(self.screen)
+                _mx, _my = pygame.mouse.get_pos()
+                _draw_cursor_fn(self.screen, _mx, _my, "default", pygame.time.get_ticks())
                 pygame.display.flip()
                 continue
 
@@ -273,6 +375,8 @@ class Game:
                 if event.key in (pygame.K_ESCAPE, pygame.K_p):
                     if self.game_over:
                         pass  # handled below
+                    elif self._player_dying:
+                        pass  # block pause during death animation
                     else:
                         self.paused = not self.paused
                         if self.paused:
@@ -300,22 +404,24 @@ class Game:
                             self.game_over = False
                             self.main_menu.active = True
                             self.main_menu.settings_open = False
+                        elif opt == "Quit Game":
+                            self.paused = False
+                            self.running = False
+                    elif event.key == pygame.K_f:
+                        self.auto_attack = not self.auto_attack
+                        if self._debug_mode:
+                            self.debug_overlay.log(
+                                f"Auto-attack {'ON' if self.auto_attack else 'OFF'}")
                 continue
 
-                if event.key == pygame.K_f and not self.game_over:
-                    self.auto_attack = not self.auto_attack
-                    if self._debug_mode:
-                        self.debug_overlay.log(
-                            f"Auto-attack {'ON' if self.auto_attack else 'OFF'}")
-                    continue
-
-                if self.game_over:
-                    if event.key == pygame.K_r:
-                        self.run_summary.activate(
-                            self.run_stats, self.spawner.wave,
-                            self.current_zone, self._legacy_points_earned,
-                            self.player.level, victory=False)
-                    continue
+            # Game-over input (R to view run summary)
+            if self.game_over:
+                if event.type == pygame.KEYDOWN and event.key == pygame.K_r:
+                    self.run_summary.activate(
+                        self.run_stats, self.spawner.wave,
+                        self.current_zone, self._legacy_points_earned,
+                        self.player.level, victory=False)
+                continue
 
             # Chest reward screen intercepts input
             if self.chest_reward.active:
@@ -355,6 +461,12 @@ class Game:
 
             if event.type == pygame.KEYDOWN:
                 now = pygame.time.get_ticks()
+                # Toggle auto-attack
+                if event.key == pygame.K_f:
+                    self.auto_attack = not self.auto_attack
+                    if self._debug_mode:
+                        self.debug_overlay.log(
+                            f"Auto-attack {'ON' if self.auto_attack else 'OFF'}")
                 # Attack — Space or Left click proxy via J key
                 if event.key in (pygame.K_SPACE, pygame.K_j):
                     if self.player.try_attack(now):
@@ -373,6 +485,17 @@ class Game:
                         self.sounds.play("swing")
                         self.animations.add_screen_shake(1)
 
+            # Right-click: start super skill charge when energy is full
+            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 3 and not self.game_over:
+                if self.player.energy >= self.player.max_energy:
+                    self._super_charging = True
+
+            # Right-click release: fire super skill
+            if event.type == pygame.MOUSEBUTTONUP and event.button == 3:
+                if self._super_charging and self.player.energy >= self.player.max_energy:
+                    self._fire_super_skill()
+                self._super_charging = False
+
     def _apply_levelup_choice(self, choice: dict):
         p = self.player
         effect = choice["effect"]
@@ -383,6 +506,9 @@ class Game:
         # Track tier for stat upgrades
         if effect not in ("passive", "weapon", "heal") and base_name:
             p.upgrade_tiers[base_name] = tier
+        # Record upgrade for run stats — skip weapon equips and skip choices
+        if effect not in ("weapon", "skip"):
+            self.run_stats.record_upgrade(choice.get("name", base_name or "Unknown"))
         if effect == "max_hp":
             p.max_hp += value
             p.hp = min(p.max_hp, p.hp + value)
@@ -406,6 +532,12 @@ class Game:
                 p.passives.append("glass_cannon")
         elif effect == "passive":
             self._try_add_passive(value, choice.get("name", value))
+        elif effect == "dash_charges":
+            p.dash_charges_max = min(4, p.dash_charges_max + 1)
+            p._dash_charges_remaining = p.dash_charges_max
+            p.upgrade_tiers[base_name] = tier
+        elif effect == "skip":
+            pass  # player forfeited the upgrade
 
     def _try_add_passive(self, key: str, display_name: str):
         """Add a passive, or open swap screen if slots are full."""
@@ -436,9 +568,68 @@ class Game:
         """Handle result from weapon swap screen."""
         if result["action"] == "swap":
             self.player.equip_weapon(result["weapon"])
+            self.run_stats.set_weapon(self.player.weapon_name, self.player.weapon.get("name", ""),
+                                      self.player.weapon.get("cooldown", 500))
             log.info("Weapon swapped to: %s", result["weapon"])
         else:
             log.info("Weapon swap skipped")
+
+    def _fire_super_skill(self):
+        """Fire the class super skill and consume all energy."""
+        p = self.player
+        now = pygame.time.get_ticks()
+        p.energy = 0
+        cls = getattr(p, "char_class", "knight")
+
+        if cls == "archer":
+            # EMP Charged Shot — explosive arrow toward cursor, massive AoE
+            mx, my = pygame.mouse.get_pos()
+            world_x = mx + self.camera.x
+            world_y = my + self.camera.y
+            dx = world_x - p.x
+            dy = world_y - p.y
+            length = math.hypot(dx, dy)
+            if length > 0:
+                dx, dy = dx / length, dy / length
+            damage = int(p.damage * p.damage_multiplier * 15)
+            self.player_projectiles.spawn_grenades(
+                p.x, p.y, dx, dy,
+                damage=damage, count=1, speed=18.0, lifetime=900,
+                splash_radius=150,
+            )
+            self.animations.add_screen_shake(10)
+            self.sounds.play("confetti_boom")
+            self.sounds.play("swing")
+
+        elif cls == "knight":
+            # Blade Storm Nova — 12 daggers in a full 360° ring
+            damage = int(p.damage * p.damage_multiplier * 4)
+            for i in range(12):
+                angle = math.radians(i * 30)
+                dx = math.cos(angle)
+                dy = math.sin(angle)
+                self.player_projectiles.spawn_daggers(
+                    p.x, p.y, dx, dy,
+                    damage=damage, count=1, speed=9.0,
+                    lifetime=1200, visual="dagger",
+                )
+            self.animations.add_screen_shake(8)
+            self.sounds.play("swing")
+
+        elif cls == "jester":
+            # Chaos Eruption — 6 confetti grenades in all directions
+            damage = int(p.damage * p.damage_multiplier * 4)
+            for i in range(6):
+                angle = math.radians(i * 60)
+                dx = math.cos(angle)
+                dy = math.sin(angle)
+                self.player_projectiles.spawn_grenades(
+                    p.x, p.y, dx, dy,
+                    damage=damage, count=1, speed=6.0, lifetime=700,
+                    splash_radius=90,
+                )
+            self.animations.add_screen_shake(12)
+            self.sounds.play("confetti_boom")
 
     def _apply_chest_rewards(self):
         """Apply all rewards from a boss chest to the player."""
@@ -462,8 +653,19 @@ class Game:
                 p.speed += value
             elif effect == "passive":
                 self._try_add_passive(value, r.get("name", value))
+            # Record all chest rewards as upgrades in run stats
+            self.run_stats.record_upgrade(r.get("name", effect))
 
     # ------------------------------------------------------------------ update
+    _ZONE_TOAST_COLORS = {"wasteland": (80, 180, 80), "city": (100, 140, 220), "abyss": (160, 80, 240)}
+
+    def _record_kill_compendium(self, enemy) -> None:
+        """Record enemy kill; show toast on first encounter."""
+        if self.compendium.on_kill(enemy.enemy_type, self.spawner.wave):
+            name = _CDISP.get(enemy.enemy_type, enemy.enemy_type)
+            zc = self._ZONE_TOAST_COLORS.get(_CZONES.get(enemy.enemy_type, ""), (200, 200, 200))
+            self.toasts.show(f"NEW: {name}", "Added to Compendium", zc)
+
     def _update(self, dt: float, now: int):
         # Auto-attack: fire at fastest interval when toggled or mouse held
         if self.auto_attack or pygame.mouse.get_pressed()[0]:
@@ -513,6 +715,9 @@ class Game:
             _dying_keys = _FrozenKeys()
         self.player.update(dt, now, _dying_keys if _dying_keys else keys, world_w, world_h)
 
+        # Track HP this frame to detect any damage for vignette
+        _frame_start_hp = self.player.hp
+
         # Passive: nano_regen — heal 1 HP every 2s
         if "nano_regen" in self.player.passives:
             if now - self._nano_regen_timer >= 2000:
@@ -546,7 +751,23 @@ class Game:
                 self.sounds.play("step")
                 self._step_accumulator = 0.0
 
-        self.spawner.update(now, self.player.x, self.player.y)
+        # Zone intro: start timer on first update, end it after duration
+        if self._zone_intro_active:
+            if self._zone_intro_start == 0:
+                self._zone_intro_start = now
+            elif now - self._zone_intro_start >= self._zone_intro_duration:
+                self._zone_intro_active = False
+                self.spawner.last_wave_end = now  # countdown starts fresh after intro
+        else:
+            self.spawner.update(now, self.player.x, self.player.y)
+
+        # Track wave countdown: when spawner is idle, countdown until next wave
+        if not self.spawner.wave_active and not self._zone_intro_active:
+            time_since_wave_end = now - self.spawner.last_wave_end
+            remaining_ms = max(0, self.spawner.wave_delay - time_since_wave_end)
+            self._wave_countdown_secs = math.ceil(remaining_ms / 1000)
+        else:
+            self._wave_countdown_secs = 0
 
         # Sync wave to atmosphere and hazards
         self.atmosphere.set_wave(self.spawner.wave)
@@ -627,9 +848,25 @@ class Game:
                 base_dmg = int(enemy.bullet_damage * (1.0 + self.lighting.darkness * 0.5))
                 spread_n = getattr(enemy, 'shoot_spread_count', 1)
                 spread_arc = getattr(enemy, 'shoot_spread_arc', 0.0)
+                # D-lack family fires beam bursts (2 shots side by side)
+                is_dlack = enemy.enemy_type == "d_lek"
+                proj_style = "beam" if is_dlack else "circle"
                 if spread_n <= 1:
-                    self.projectiles.spawn(enemy.x, enemy.y,
-                                           self.player.x, self.player.y, base_dmg)
+                    if is_dlack:
+                        # Burst: two parallel beams with slight perpendicular offset
+                        dx = self.player.x - enemy.x
+                        dy = self.player.y - enemy.y
+                        dist_ = math.hypot(dx, dy) or 1
+                        nx, ny = -dy / dist_, dx / dist_  # perpendicular unit
+                        off = 6
+                        for sign in (-1, 1):
+                            ox, oy = enemy.x + nx * off * sign, enemy.y + ny * off * sign
+                            self.projectiles.spawn(ox, oy, self.player.x, self.player.y,
+                                                   base_dmg, proj_style)
+                    else:
+                        self.projectiles.spawn(enemy.x, enemy.y,
+                                               self.player.x, self.player.y, base_dmg,
+                                               proj_style)
                 else:
                     # Fan spread: evenly distribute shots across the arc
                     base_angle = math.atan2(self.player.y - enemy.y,
@@ -639,7 +876,7 @@ class Game:
                         angle = base_angle + offset
                         tx = enemy.x + math.cos(angle) * 300
                         ty = enemy.y + math.sin(angle) * 300
-                        self.projectiles.spawn(enemy.x, enemy.y, tx, ty, base_dmg)
+                        self.projectiles.spawn(enemy.x, enemy.y, tx, ty, base_dmg, proj_style)
                 enemy.wants_to_shoot = False
                 self.sounds.play("enemy_shoot")
 
@@ -842,6 +1079,10 @@ class Game:
                 enemy.special2_attack_hit = False
 
         self.combat.process_player_attack(self.player, alive, now)
+        # Drain melee hit log into run stats
+        for _wkey, _wdmg in self.combat.damage_log:
+            self.run_stats.record_hit(_wkey, _wdmg)
+        self.combat.damage_log.clear()
 
         # Parry: melee attacks deflect enemy projectiles
         if self.player.is_attacking and not self.player.weapon.get("projectile"):
@@ -854,16 +1095,51 @@ class Game:
                     self.animations.spawn_hit_sparks(bullet.x, bullet.y, count=12)
                     self.animations.spawn_death_burst(bullet.x, bullet.y, (150, 200, 255), count=8)
                     self.animations.add_screen_shake(3)
+                    # Passive: parry_deflect — fire the bullet back at nearest enemy
+                    if "parry_deflect" in self.player.passives:
+                        _alive_e = [e for e in self.spawner.get_alive_enemies() if e.alive]
+                        if _alive_e:
+                            _tgt = min(_alive_e,
+                                       key=lambda e: math.hypot(e.x - bullet.x, e.y - bullet.y))
+                            _rdx = _tgt.x - bullet.x
+                            _rdy = _tgt.y - bullet.y
+                            _rdist = math.hypot(_rdx, _rdy)
+                            if _rdist > 0:
+                                self.player_projectiles.spawn_daggers(
+                                    bullet.x, bullet.y,
+                                    _rdx / _rdist, _rdy / _rdist,
+                                    max(1, bullet.damage * 2),
+                                    count=1, speed=10.0, lifetime=1500, visual="bolt")
 
         # Death bursts & screen shake from melee kills + passive triggers
         _kt = {"kills": self.kills, "boss_kills": self.boss_kills}
+        _kills_before = self.kills
+        _boss_kills_before = self.boss_kills
         for enemy in alive:
             if not enemy.alive:
+                self._record_kill_compendium(enemy)
                 process_enemy_death(enemy, self.player, alive, self.animations,
                                     self.combat, self.sounds, self.lighting,
                                     self.boss_chests, _kt, self.pickups, now)
         self.kills = _kt["kills"]
         self.boss_kills = _kt["boss_kills"]
+
+        # Kill streak combo tracker
+        new_kills = self.kills - _kills_before
+        new_boss_kills = self.boss_kills - _boss_kills_before
+        if new_kills > 0:
+            if now - self._kill_streak_time < 2500:
+                self._kill_streak += new_kills
+            else:
+                self._kill_streak = new_kills
+            self._kill_streak_time = now
+
+        # Super energy — 10 per kill, 50 per boss kill
+        if new_kills > 0:
+            self.player.energy = min(
+                self.player.max_energy,
+                self.player.energy + new_kills * 10 + new_boss_kills * 40
+            )
 
         # Mirror shade splitting
         for enemy in alive:
@@ -901,12 +1177,14 @@ class Game:
             now, alive, world_w, world_h, self.player.x, self.player.y)
 
         # Grenade explosion effects
-        for gx, gy, _gdmg in grenade_explosions:
+        for gx, gy, _gdmg, _splash_r in grenade_explosions:
             self.animations.spawn_confetti_explosion(gx, gy)
             self.animations.add_screen_shake(4)
             self.sounds.play("confetti_boom")
 
         for enemy, dmg in thrown_hits:
+            # Record projectile hit in run stats (before crit display modifier)
+            self.run_stats.record_hit(self.player.weapon_name, dmg)
             # Passive: crit_shots — 20% chance double damage on projectile
             if "crit_shots" in self.player.passives and _rng.random() < 0.20:
                 dmg *= 2
@@ -936,12 +1214,14 @@ class Game:
                             self.animations.spawn_hit_sparks(other.x, other.y, count=4)
                             chain_count += 1
                             if not other.alive:
+                                self._record_kill_compendium(other)
                                 process_enemy_death(other, self.player, alive, self.animations,
                                                     self.combat, self.sounds, self.lighting,
                                                     self.boss_chests, _kt, self.pickups, now)
                                 self.kills = _kt["kills"]
                                 self.boss_kills = _kt["boss_kills"]
             if not enemy.alive:
+                self._record_kill_compendium(enemy)
                 process_enemy_death(enemy, self.player, alive, self.animations,
                                     self.combat, self.sounds, self.lighting,
                                     self.boss_chests, _kt, self.pickups, now)
@@ -998,14 +1278,22 @@ class Game:
         if self.portal and self.portal.check_collision(self.player.rect):
             next_zone = get_next_zone(self.current_zone)
             if next_zone:
+                # Show portal menu before transitioning
                 self.run_stats.complete_zone(self.current_zone)
-                self.current_zone = next_zone
-                self._transition_to_zone(next_zone)
+                self._portal_next_zone = next_zone
+                self.portal_menu.activate(self.current_zone, next_zone)
+                self._draw()
+                self._portal_bg = self.screen.copy()
+                self.portal.entered = True  # prevent re-trigger
             else:
                 # Completed all zones — victory!
                 self.run_stats.complete_zone(self.current_zone)
                 self._legacy_points_earned = self.legacy.finish_run(
                     self.spawner.wave, self.kills, self.boss_kills)
+                self.run_stats.finalize()
+                self.run_stats.save_to_log(
+                    self.spawner.wave, self.current_zone,
+                    self.player.level, self.player.char_class, victory=True)
                 self.run_summary.activate(
                     self.run_stats, self.spawner.wave,
                     self.current_zone, self._legacy_points_earned,
@@ -1051,6 +1339,7 @@ class Game:
                 self._player_dying = True
                 self._player_death_time = now
                 self.player.hp = 0
+                self.sounds.stop_boss_music()
                 self.sounds.play("player_death")
                 self.animations.spawn_death_burst(
                     self.player.x, self.player.y, (255, 80, 80), count=28)
@@ -1058,7 +1347,17 @@ class Game:
                 self._legacy_points_earned = self.legacy.finish_run(
                     self.spawner.wave, self.kills, self.boss_kills)
             elif now - self._player_death_time >= self._player_death_duration:
+                self.run_stats.finalize()
+                self.run_stats.save_to_log(
+                    self.spawner.wave, self.current_zone,
+                    self.player.level, self.player.char_class, victory=False)
                 self.game_over = True
+
+        # Detect any damage taken this frame for vignette
+        if self.player.hp < _frame_start_hp:
+            self._last_damage_time = now
+            self._last_damage_pct = (_frame_start_hp - self.player.hp) / max(1, self.player.max_hp)
+            self.sounds.play("player_hit")
 
         # Check for pending level-up -- start fanfare
         if self.player.pending_levelup:
@@ -1103,11 +1402,16 @@ class Game:
         self.portal = None
         # Setup new zone
         zone_data = get_zone(zone_name)
+        self.game_map.set_colors(zone_data.get("tile_colors", {}))
+        self.game_map.set_zone(zone_name)
         self.atmosphere.set_zone(zone_name, zone_data)
         self.hazard_system.set_zone(zone_name, zone_data)
         self.spawner.set_zone(zone_data)
         self.run_stats.set_zone(zone_name)
         self.sounds.set_zone_music(zone_name)
+        # Trigger zone intro for the new zone
+        self._zone_intro_active = True
+        self._zone_intro_start = 0
 
 
     def _apply_settings(self):
@@ -1219,6 +1523,12 @@ class Game:
         # Run summary overlay
         self.run_summary.draw(self.screen)
 
+        # Zone intro cutscene (over full gameplay view, under pause)
+        if self._zone_intro_active:
+            self._draw_zone_intro()
+        elif self._wave_countdown_secs > 0:
+            self._draw_wave_countdown()
+
         if self.game_over:
             self.hud.draw_game_over(self.screen, self.spawner.wave, self.player.level,
                                     self.kills, self._legacy_points_earned)
@@ -1244,6 +1554,66 @@ class Game:
                 self.player, alive,
                 self.projectiles, self.player_projectiles,
                 fps, self.spawner.wave, self.boss_chests)
+
+        # ---- Damage vignette ----
+        now_draw = pygame.time.get_ticks()
+        vignette_age = now_draw - self._last_damage_time
+        _VIG_DUR = 700
+        if vignette_age < _VIG_DUR and not self.game_over:
+            vfade = max(0.0, 1.0 - vignette_age / _VIG_DUR)
+            # Peak alpha scales with damage severity: tiny chip = subtle, big hit = vivid
+            dmg_pct = self._last_damage_pct
+            peak_alpha = int((18 + dmg_pct * 145) * vfade)
+            if peak_alpha > 1:
+                vig = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+                steps = 40
+                half = min(SCREEN_WIDTH, SCREEN_HEIGHT) // 2
+                for i in range(steps):
+                    frac = (1.0 - i / steps) ** 1.8  # steep rolloff toward center
+                    a = int(peak_alpha * frac)
+                    if a < 1:
+                        continue
+                    inset = i * half // steps
+                    rect = pygame.Rect(inset, inset,
+                                       SCREEN_WIDTH - 2 * inset,
+                                       SCREEN_HEIGHT - 2 * inset)
+                    if rect.width < 4 or rect.height < 4:
+                        break
+                    pygame.draw.rect(vig, (215, 10, 10, a), rect, 2,
+                                     border_radius=max(1, 28 - i // 2))
+                self.screen.blit(vig, (0, 0))
+
+        # ---- Kill streak combo text ----
+        streak_age = now_draw - self._kill_streak_time
+        if self._kill_streak >= 2 and streak_age < 1800 and not self.game_over:
+            sfade = max(0.0, 1.0 - streak_age / 1800)
+            scale = min(1.0, 0.4 + streak_age / 200) if streak_age < 200 else max(0.6, 1.0 - (streak_age - 1400) / 400)
+            fs = max(12, int(32 * scale))
+            if self._kill_streak >= 10:
+                streak_color = (255, 50, 50)
+                tag = f"{self._kill_streak}x RAMPAGE!"
+            elif self._kill_streak >= 5:
+                streak_color = (255, 160, 30)
+                tag = f"{self._kill_streak}x SLAUGHTER!"
+            elif self._kill_streak >= 3:
+                streak_color = (255, 230, 50)
+                tag = f"{self._kill_streak}x KILL!"
+            else:
+                streak_color = (200, 255, 100)
+                tag = f"{self._kill_streak}x DOUBLE!"
+            streak_surf = get_font("consolas", fs, True).render(tag, True, streak_color)
+            sa = max(0, int(255 * sfade))
+            streak_surf.set_alpha(sa)
+            sx_pos = SCREEN_WIDTH // 2 - streak_surf.get_width() // 2
+            sy_pos = SCREEN_HEIGHT // 2 - 80 - int(20 * (1.0 - sfade))
+            self.screen.blit(streak_surf, (sx_pos, sy_pos))
+
+        # ---- Toast notifications ----
+        self.toasts.draw(self.screen)
+
+        # ---- Custom cursor (always drawn last) ----
+        mx_c, my_c = pygame.mouse.get_pos()
+        _draw_cursor_fn(self.screen, mx_c, my_c, self.current_zone, now_draw)
 
         pygame.display.flip()
 
@@ -1314,6 +1684,71 @@ class Game:
             text.set_alpha(text_alpha)
             tr = text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2))
             self.screen.blit(text, tr)
+
+    def _draw_zone_intro(self):
+        """Full-screen zone name cutscene: fade in → hold → fade out."""
+        now = pygame.time.get_ticks()
+        if self._zone_intro_start == 0:
+            return
+        t = min(1.0, (now - self._zone_intro_start) / self._zone_intro_duration)
+
+        # Three phases: fade-in (0-0.30), hold (0.30-0.70), fade-out (0.70-1.0)
+        if t < 0.30:
+            overlay_alpha = int(200 * (t / 0.30))
+            text_alpha = int(255 * (t / 0.30))
+        elif t < 0.70:
+            overlay_alpha = 200
+            text_alpha = 255
+        else:
+            fade = (t - 0.70) / 0.30
+            overlay_alpha = int(200 * (1.0 - fade))
+            text_alpha = int(255 * (1.0 - fade))
+
+        # Dark overlay
+        overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, overlay_alpha))
+        self.screen.blit(overlay, (0, 0))
+
+        zone_data = get_zone(self.current_zone)
+        zone_name = zone_data.get("name", self.current_zone.replace("_", " ").title())
+        zone_desc = zone_data.get("desc", "")
+
+        # Zone name (large)
+        font_big = get_font("consolas", 54, True)
+        name_surf = font_big.render(zone_name, True, (255, 230, 80))
+        name_surf.set_alpha(text_alpha)
+        nx = SCREEN_WIDTH // 2 - name_surf.get_width() // 2
+        ny = SCREEN_HEIGHT // 2 - name_surf.get_height() // 2 - 20
+        self.screen.blit(name_surf, (nx, ny))
+
+        # Zone desc (small, slightly delayed)
+        if t > 0.15:
+            desc_t = min(1.0, (t - 0.15) / 0.20)
+            desc_alpha = min(text_alpha, int(180 * desc_t))
+            font_sm = get_font("consolas", 18)
+            desc_surf = font_sm.render(zone_desc, True, (180, 180, 200))
+            desc_surf.set_alpha(desc_alpha)
+            dx = SCREEN_WIDTH // 2 - desc_surf.get_width() // 2
+            dy = ny + name_surf.get_height() + 12
+            self.screen.blit(desc_surf, (dx, dy))
+
+    def _draw_wave_countdown(self):
+        """Show countdown seconds before next wave starts."""
+        secs = self._wave_countdown_secs
+        if secs <= 0:
+            return
+        cx = SCREEN_WIDTH // 2
+        # Big number
+        font_big = get_font("consolas", 72, True)
+        num_surf = font_big.render(str(secs), True, (255, 220, 60))
+        self.screen.blit(num_surf, (cx - num_surf.get_width() // 2,
+                                    SCREEN_HEIGHT // 2 - 70))
+        # Label
+        font_sm = get_font("consolas", 18, True)
+        label = f"WAVE {self.spawner.wave + 1} INCOMING"
+        label_surf = font_sm.render(label, True, (200, 200, 220))
+        self.screen.blit(label_surf, (cx - label_surf.get_width() // 2,
+                                      SCREEN_HEIGHT // 2 + 20))
 
     def _draw_pause_overlay(self):
         overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
