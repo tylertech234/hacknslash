@@ -44,7 +44,7 @@ class MainMenuScreen:
     def __init__(self):
         self.active = True
         self.selected = 0
-        self.options = ["New Run", "Compendium", "Settings", "Quit"]
+        self.options = ["New Run", "Compendium", "Leaderboard", "Settings", "Quit"]
         self.settings_open = False
         self.settings_selected = 0
         self.settings = load_settings()
@@ -117,6 +117,8 @@ class MainMenuScreen:
                 return "new_run"
             elif opt == "Compendium":
                 return "compendium"
+            elif opt == "Leaderboard":
+                return "leaderboard"
             elif opt == "Settings":
                 self.settings_open = True
                 self.settings_selected = 0

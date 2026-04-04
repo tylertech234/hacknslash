@@ -103,6 +103,13 @@ LIGHT_SHRINK_RATE = 0.015           # px lost per frame away from campfire
 LIGHT_RESTORE_RATE = 0.6            # px gained per frame near campfire
 DARKNESS_GROW_RATE = 0.0004         # darkness per frame away from campfire (0→1)
 DARKNESS_DECAY_RATE = 0.003         # darkness lost per frame near campfire
+
+# -- Backend (Supabase) --
+# Fill these in after creating your Supabase project.
+# The anon key is intentionally public — Row Level Security handles access.
+# Neither value should be your service-role key.
+SUPABASE_URL = ""          # e.g. "https://xyzcompany.supabase.co"
+SUPABASE_ANON_KEY = ""     # project anon/public key
 DARKNESS_MAX = 0.85                 # max darkness alpha (0..1)
 XP_DARKNESS_BONUS = 2.0             # max XP multiplier at full darkness
 ENEMY_DARKNESS_HP_BONUS = 0.6       # extra HP fraction at full darkness

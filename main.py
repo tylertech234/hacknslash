@@ -51,10 +51,12 @@ _settings.SCREEN_WIDTH = _w
 _settings.SCREEN_HEIGHT = _h
 
 from src.game import Game  # noqa: E402 — must come after settings patch
+from src.systems.profile import create_profile  # noqa: E402
 
 
 async def main():
-    game = Game()
+    profile = create_profile()
+    game = Game(profile)
     await game.run()
 
 
