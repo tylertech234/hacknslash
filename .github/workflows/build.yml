@@ -1,0 +1,100 @@
+name: Build & Release
+
+on:
+  workflow_dispatch:        # manual trigger from GitHub UI
+  push:
+    tags:
+      - 'v*'               # auto-triggers on any v0.9.1, v1.0.0, etc.
+
+jobs:
+  # ── Build on all three platforms in parallel ────────────────────────────────
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            artifact: CyberSurvivor-Windows
+          - os: ubuntu-latest
+            artifact: CyberSurvivor-Linux
+          - os: macos-latest
+            artifact: CyberSurvivor-macOS
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      # Linux needs SDL2 headers so pygame installs its native libs correctly
+      - name: Install Linux SDL2 libraries
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y \
+            libsdl2-dev libsdl2-mixer-dev libsdl2-image-dev libsdl2-ttf-dev \
+            libfreetype6-dev libportmidi-dev
+
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt pyinstaller
+
+      # Read VERSION from settings.py without importing the full game package
+      - name: Read version
+        id: ver
+        shell: python
+        run: |
+          import os
+          with open("src/settings.py") as f:
+              for line in f:
+                  if line.startswith("VERSION"):
+                      ver = line.split('"')[1]
+                      with open(os.environ["GITHUB_OUTPUT"], "a") as out:
+                          out.write(f"value={ver}\n")
+                      break
+
+      - name: Build with PyInstaller
+        run: pyinstaller cyber_survivor.spec --clean --noconfirm
+
+      - name: Package — Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: >
+          Compress-Archive
+          -Path dist/CyberSurvivor/*
+          -DestinationPath "${{ matrix.artifact }}-v${{ steps.ver.outputs.value }}.zip"
+
+      - name: Package — Linux / macOS
+        if: runner.os != 'Windows'
+        run: |
+          cd dist
+          zip -r "../${{ matrix.artifact }}-v${{ steps.ver.outputs.value }}.zip" CyberSurvivor/
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: "${{ matrix.artifact }}-v${{ steps.ver.outputs.value }}.zip"
+
+  # ── Create a GitHub Release when a version tag is pushed ────────────────────
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true   # puts all zips in the working directory
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: '*.zip'
+          generate_release_notes: true
+          prerelease: ${{ contains(github.ref_name, '-alpha') || contains(github.ref_name, '-beta') || contains(github.ref_name, '-rc') }}

@@ -134,7 +134,7 @@ class CharacterSelectScreen:
             surface.blit(stats, (cx + card_w // 2 - stats.get_width() // 2, stats_y))
 
         # Hint
-        hint = self.font_small.render("A/D or Left/Right to browse  |  Enter/Space or 1-3 to select", True, (80, 80, 100))
+        hint = self.font_small.render("A/D or Left/Right to browse  |  E/Enter/Space or 1-3 to select", True, (80, 80, 100))
         surface.blit(hint, (SCREEN_WIDTH // 2 - hint.get_width() // 2, SCREEN_HEIGHT - 40))
 
     def _draw_preview(self, surface, cx, cy, cls_key, color, now):

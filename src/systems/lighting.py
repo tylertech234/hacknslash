@@ -29,6 +29,9 @@ class LightingSystem:
         # Pre-build the overlay surface (reused each frame)
         self._overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
 
+        # Cache small SRCALPHA circles keyed by radius → avoid per-frame allocs
+        self._cut_cache: dict[int, pygame.Surface] = {}
+
     # ------------------------------------------------------------------
 
     def update(self, player_x: float, player_y: float):
@@ -75,18 +78,29 @@ class LightingSystem:
 
     # ------------------------------------------------------------------
 
-    @staticmethod
-    def _cut_light(overlay: pygame.Surface, cx: int, cy: int, radius: int, base_alpha: int):
-        """Punch a soft radial hole in the overlay."""
-        steps = 8
+    def _cut_light(self, overlay: pygame.Surface, cx: int, cy: int, radius: int, base_alpha: int):
+        """Punch a soft radial hole in the overlay using BLEND_RGBA_MIN.
+
+        pygame.draw.circle has no special_flags; we blit a cached filled
+        circle surface with BLEND_RGBA_MIN instead, which sets each pixel's
+        alpha to min(overlay_alpha, target), carving a smooth gradient hole.
+        """
+        steps = 5  # 5 steps is indistinguishable from 8 and ~37% fewer blits
         for i in range(steps, 0, -1):
-            ratio = i / steps
+            ratio = i / steps          # 1.0 … 0.2
             r = int(radius * ratio)
-            if r < 2:
+            if r < 4:
                 continue
-            # Inner steps are more transparent (cut more darkness)
-            cut = int(base_alpha * (1.0 - (1.0 - ratio) ** 1.5))
-            pygame.draw.circle(overlay, (0, 0, 0, cut), (cx, cy), r)
-        # Fully clear inner core
-        core = max(2, radius // 4)
-        pygame.draw.circle(overlay, (0, 0, 0, 0), (cx, cy), core)
+            # Quadratic falloff: edge stays at base_alpha, centre approaches 0
+            target = int(base_alpha * ratio ** 2)
+            s = self._cut_cache.get(r)
+            if s is None:
+                # Cap cache size to prevent unbounded growth / GC stutter
+                if len(self._cut_cache) > 60:
+                    self._cut_cache.clear()
+                s = pygame.Surface((r * 2 + 2, r * 2 + 2), pygame.SRCALPHA)
+                self._cut_cache[r] = s
+            s.fill((0, 0, 0, 255))
+            pygame.draw.circle(s, (0, 0, 0, target), (r + 1, r + 1), r)
+            overlay.blit(s, (cx - r - 1, cy - r - 1),
+                         special_flags=pygame.BLEND_RGBA_MIN)

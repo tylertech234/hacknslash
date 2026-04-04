@@ -4,7 +4,7 @@ import pygame
 import math
 import json
 import os
-from src.settings import SCREEN_WIDTH, SCREEN_HEIGHT, WHITE, YELLOW, BLACK
+from src.settings import SCREEN_WIDTH, SCREEN_HEIGHT, WHITE, YELLOW, BLACK, VERSION
 
 
 SETTINGS_FILE = os.path.join(os.path.dirname(__file__), "..", "..", "settings_save.json")
@@ -44,7 +44,7 @@ class MainMenuScreen:
     def __init__(self):
         self.active = True
         self.selected = 0
-        self.options = ["New Run", "Settings", "Quit"]
+        self.options = ["New Run", "Compendium", "Settings", "Quit"]
         self.settings_open = False
         self.settings_selected = 0
         self.settings = load_settings()
@@ -115,6 +115,8 @@ class MainMenuScreen:
             if opt == "New Run":
                 self.active = False
                 return "new_run"
+            elif opt == "Compendium":
+                return "compendium"
             elif opt == "Settings":
                 self.settings_open = True
                 self.settings_selected = 0
@@ -190,6 +192,10 @@ class MainMenuScreen:
         else:
             self._draw_menu(surface, now)
 
+        # Version watermark — bottom-right corner
+        ver_surf = self.font_small.render(f"v{VERSION}  Early Access", True, (55, 55, 75))
+        surface.blit(ver_surf, (SCREEN_WIDTH - ver_surf.get_width() - 12, SCREEN_HEIGHT - ver_surf.get_height() - 8))
+
     def _draw_menu(self, surface: pygame.Surface, now: int):
         start_y = 320
         for i, opt in enumerate(self.options):
@@ -211,7 +217,7 @@ class MainMenuScreen:
             surface.blit(text, (x, y))
 
         # Controls hint
-        hint = self.font_small.render("W/S to navigate  |  Enter to select", True, (70, 70, 90))
+        hint = self.font_small.render("W/S to navigate  |  E/Enter to select", True, (70, 70, 90))
         surface.blit(hint, (SCREEN_WIDTH // 2 - hint.get_width() // 2, 520))
 
         # Bug icon when dev_options enabled

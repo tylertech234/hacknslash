@@ -31,6 +31,9 @@ Python + Pygame top-down hack-and-slash survival game. ~12,742 LOC across 43 Pyt
 | `src/systems/hazards.py` | Zone-specific hazards (acid puddle, dust storm, void rift, etc.) |
 | `src/systems/portal.py` | Zone transition portal |
 | `src/systems/run_stats.py` | Per-run statistics tracking |
+| `src/systems/compendium.py` | Enemy unlock tracking — first-kill logic, JSON save, display names |
+| `src/ui/toast.py` | Slide-in achievement-style toast notifications |
+| `src/ui/compendium_screen.py` | Compendium browser with procedural monster art + inspect view |
 | `src/ui/hud.py` | In-game HUD (HP/XP bars, boss HP, wave info, coin count, vignette) |
 | `src/ui/charselect.py` | 3-class picker (knight / archer / jester) |
 | `src/ui/levelup.py` | Level-up upgrade choices |
@@ -48,11 +51,13 @@ Python + Pygame top-down hack-and-slash survival game. ~12,742 LOC across 43 Pyt
 ## Enemy Types (by Zone)
 
 ### Zone 1 — Wasteland ("The Forest")
-- **dalek** — ranged, shoots cyan bullets
-- **wraith** — melee, fast, applies poison
+- **cyber_rat** — tiny, fast melee, erratic jitter movement
+- **cyber_raccoon** — medium melee, sidestep-dodges when hit
+- **mega_cyber_deer** *(sub-boss, wave 5)* — large charging boss, antler slam special
+- **d_lack** — ranged, shoots cyan bullets (renamed from dalek)
 - **charger** — charges in a straight line
 - **shielder** — has a damage-absorbing shield
-- **spitter** — longer-range acid ranged attacker
+- **spitter** — longer-range acid ranged attacker, kites away from player
 - **iron_sentinel** *(mini-boss)* — 3-way spread shots, missile_barrage special
 - **warlord_kron** *(big boss)* — 5-way spread shots, bleed_storm special
 
@@ -66,6 +71,7 @@ Python + Pygame top-down hack-and-slash survival game. ~12,742 LOC across 43 Pyt
 - **eldritch_horror** *(big boss)* — 7-shot fan, eldritch_pull special
 
 ### Zone 3 — Abyss ("The Abyss")
+- **specter** — void-touched wraith, melee, applies bleed (moved from zone 1)
 - **void_wisp** — ranged, fast, low HP
 - **rift_walker** — teleports near player
 - **mirror_shade** — copies player movement

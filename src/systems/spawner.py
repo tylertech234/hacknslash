@@ -15,22 +15,26 @@ class WaveSpawner:
         self.wave = 0
         self.enemies: list[Enemy] = []
         self.wave_active = False
-        self.wave_delay = 1500  # ms between waves
+        self.wave_delay = 5000  # ms between waves (5s countdown shown to player)
         self.last_wave_end = 0
         self.boss_wave = False
         self.just_started_wave = False
         # Zone-aware enemy pool
         self.zone_enemy_pool = None
         self.zone_mini_boss = "iron_sentinel"
-        self.zone_boss = "warlord_kron"
+        self.zone_boss = "supreme_d_lek"
         self.zone_boss_wave = 10
+        self.zone_sub_boss: str | None = None
+        self.zone_sub_boss_wave: int | None = None
 
     def set_zone(self, zone_data: dict):
         """Configure spawner for a specific zone."""
         self.zone_enemy_pool = zone_data.get("enemy_pool")
         self.zone_mini_boss = zone_data.get("mini_boss", "iron_sentinel")
-        self.zone_boss = zone_data.get("boss", "warlord_kron")
+        self.zone_boss = zone_data.get("boss", "supreme_d_lek")
         self.zone_boss_wave = zone_data.get("boss_wave", 10)
+        self.zone_sub_boss = zone_data.get("sub_boss")
+        self.zone_sub_boss_wave = zone_data.get("sub_boss_wave")
 
     @property
     def world_w(self) -> int:
@@ -69,38 +73,40 @@ class WaveSpawner:
             pool = self.zone_enemy_pool
             max_idx = min(len(pool), 1 + (w - 1) // 2)
             return random.choice(pool[:max(1, max_idx)])
-        # Fallback: original wasteland progression
+        # Fallback: original wasteland progression (now using new zone 1 enemies)
         r = random.random()
         if w <= 2:
-            return "dalek"
+            return "cyber_rat"
         elif w <= 4:
-            if r < 0.10:
-                return "wraith"
-            return "dalek"
+            if r < 0.30:
+                return "cyber_raccoon"
+            return "cyber_rat"
         elif w <= 5:
             if r < 0.25:
-                return "wraith"
+                return "cyber_raccoon"
             if r < 0.35:
-                return "charger"
-            return "dalek"
+                return "d_lek"
+            return "cyber_rat"
         elif w <= 7:
             if r < 0.25:
-                return "wraith"
+                return "cyber_raccoon"
             if r < 0.40:
-                return "charger"
+                return "d_lek"
             if r < 0.50:
-                return "spitter"
-            return "dalek"
-        else:
-            if r < 0.25:
-                return "wraith"
-            if r < 0.40:
                 return "charger"
-            if r < 0.55:
+            return "cyber_rat"
+        else:
+            if r < 0.20:
+                return "cyber_raccoon"
+            if r < 0.35:
+                return "d_lek"
+            if r < 0.50:
+                return "charger"
+            if r < 0.60:
                 return "spitter"
-            if r < 0.65:
+            if r < 0.70:
                 return "shielder"
-            return "dalek"
+            return "cyber_rat"
 
     # ---- Spawn Patterns ----
 
@@ -167,17 +173,34 @@ class WaveSpawner:
         count = WAVE_BASE_COUNT + (self.wave - 1) * WAVE_GROWTH
 
         is_big_boss_wave = self.wave == self.zone_boss_wave
-        is_mini_boss_wave = (not is_big_boss_wave) and self.wave % 3 == 0
+        is_sub_boss_wave = (not is_big_boss_wave
+                            and self.zone_sub_boss is not None
+                            and self.wave == self.zone_sub_boss_wave)
+        is_mini_boss_wave = (not is_big_boss_wave and not is_sub_boss_wave
+                             and self.wave % 3 == 0)
 
         # -- Boss waves: only spawn bosses, no regular enemies --
-        if is_big_boss_wave or is_mini_boss_wave:
+        if is_big_boss_wave or is_mini_boss_wave or is_sub_boss_wave:
             self.boss_wave = True
             if is_big_boss_wave:
                 x, y = self._rand_spawn_pos(player_x, player_y)
                 self.enemies.append(Enemy(x, y, self.zone_boss))
+                # Escort guards depend on zone boss type
+                escort_type = (
+                    "emperors_elite_guard"
+                    if self.zone_boss == "supreme_d_lek"
+                    else self.zone_mini_boss
+                )
                 for _ in range(2):
                     x, y = self._rand_spawn_pos(player_x, player_y)
-                    self.enemies.append(Enemy(x, y, self.zone_mini_boss))
+                    self.enemies.append(Enemy(x, y, escort_type))
+            elif is_sub_boss_wave:
+                x, y = self._rand_spawn_pos(player_x, player_y)
+                self.enemies.append(Enemy(x, y, self.zone_sub_boss))
+                # Add a couple of regulars for flavor
+                for _ in range(3):
+                    x, y = self._rand_spawn_pos(player_x, player_y)
+                    self.enemies.append(Enemy(x, y, self._pick_enemy_type()))
             else:
                 x, y = self._rand_spawn_pos(player_x, player_y)
                 self.enemies.append(Enemy(x, y, self.zone_mini_boss))
@@ -249,6 +272,9 @@ class WaveSpawner:
                 self.wave_active = False
                 self.last_wave_end = now
         else:
+            # Stop auto-advancing after the zone's boss wave — portal handles progression
+            if self.wave >= self.zone_boss_wave:
+                return
             if now - self.last_wave_end >= self.wave_delay:
                 self.start_next_wave(now, player_x, player_y)
 

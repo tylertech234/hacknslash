@@ -120,15 +120,13 @@ class StatusManager:
         for e in self.effects:
             color = e.defn["color"]
             if e.key == "fire":
-                # Small flame particles rising
+                # Small flame particles rising — use direct draw (no SRCALPHA alloc)
                 for i in range(3):
                     angle = (now * 0.005 + i * 2.1) % math.tau
                     px = cx + int(math.cos(angle) * size * 0.4)
                     py = cy + int(math.sin(angle) * size * 0.3) - int((now * 0.02 + i * 7) % 12)
                     r = max(1, 3 - int((now * 0.01 + i * 5) % 3))
-                    s = pygame.Surface((r * 2, r * 2), pygame.SRCALPHA)
-                    pygame.draw.circle(s, (*color, 160), (r, r), r)
-                    surface.blit(s, (px - r, py - r))
+                    pygame.draw.circle(surface, color, (px, py), r)
             elif e.key == "bleed":
                 # Dripping red dots
                 for i in range(2):

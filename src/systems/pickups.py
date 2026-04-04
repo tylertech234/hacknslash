@@ -116,15 +116,24 @@ class PickupSystem:
         magnet = "magnetic_field" in getattr(player, 'passives', [])
         for p in self.pickups:
             p.update(now)
-            # Magnetic field: pickups fly toward player
-            if magnet and p.alive:
+            if p.alive:
+                effect = p.upgrade.get("effect", "")
                 dx = player.x - p.x
                 dy = player.y - p.y
                 dist = math.hypot(dx, dy)
-                if 0 < dist < 150:
-                    pull = min(3.0, 150 / max(dist, 1))
-                    p.x += (dx / dist) * pull
-                    p.y += (dy / dist) * pull
+                if dist > 0:
+                    if magnet:
+                        # Enhanced magnetic pull: everything in a wide radius
+                        if dist < 480:
+                            pull = min(7.0, 480 / max(dist, 1))
+                            p.x += (dx / dist) * pull
+                            p.y += (dy / dist) * pull
+                    elif effect in ("xp", "coin"):
+                        # Baseline attraction: XP and coins always drift toward player
+                        if dist < 80:
+                            pull = min(1.8, 80 / max(dist, 1))
+                            p.x += (dx / dist) * pull
+                            p.y += (dy / dist) * pull
             if p.alive and p.rect.colliderect(player.rect):
                 self._apply_upgrade(player, p.upgrade, now)
                 p.alive = False
@@ -135,13 +144,13 @@ class PickupSystem:
     def _apply_upgrade(self, player, upgrade: dict, now: int):
         effect = upgrade["effect"]
         if effect == "heal":
-            player.hp = min(player.max_hp, player.hp + 30)
+            player.hp = min(player.max_hp, player.hp + 60)
         elif effect == "apple":
-            player.hp = min(player.max_hp, player.hp + 20)
+            player.hp = min(player.max_hp, player.hp + 45)
         elif effect == "medkit":
-            player.hp = min(player.max_hp, player.hp + 35)
+            player.hp = min(player.max_hp, player.hp + 70)
         elif effect == "void_essence":
-            player.hp = min(player.max_hp, player.hp + 25)
+            player.hp = min(player.max_hp, player.hp + 50)
         elif effect == "damage":
             player.damage += 5
         elif effect == "speed":

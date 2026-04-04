@@ -4,9 +4,10 @@ from src.settings import ENEMY_BULLET_SPEED, ENEMY_BULLET_SIZE, ENEMY_BULLET_COL
 
 
 class Projectile:
-    """A single bullet fired by a Dalek."""
+    """A single bullet fired by an enemy."""
 
-    def __init__(self, x: float, y: float, dx: float, dy: float, damage: int):
+    def __init__(self, x: float, y: float, dx: float, dy: float, damage: int,
+                 style: str = "circle"):
         self.x = x
         self.y = y
         self.dx = dx
@@ -14,6 +15,7 @@ class Projectile:
         self.speed = ENEMY_BULLET_SPEED
         self.size = ENEMY_BULLET_SIZE
         self.damage = damage
+        self.style = style
         self.alive = True
         self.spawn_time = pygame.time.get_ticks()
         self.lifetime = 4000  # ms
@@ -40,9 +42,20 @@ class Projectile:
             return
         sx = int(self.x - camera_x)
         sy = int(self.y - camera_y)
-        # Glowing bullet
-        pygame.draw.circle(surface, ENEMY_BULLET_COLOR, (sx, sy), self.size)
-        pygame.draw.circle(surface, (200, 255, 240), (sx, sy), self.size // 2)
+        if self.style == "beam":
+            # Elongated beam line in travel direction
+            length = 18
+            width = 3
+            ex = int(self.dx * length)
+            ey = int(self.dy * length)
+            # Draw outer glow line
+            pygame.draw.line(surface, (0, 220, 180), (sx - ex, sy - ey), (sx + ex, sy + ey), width + 2)
+            # Draw bright core
+            pygame.draw.line(surface, (180, 255, 240), (sx - ex, sy - ey), (sx + ex, sy + ey), width - 1)
+        else:
+            # Glowing bullet
+            pygame.draw.circle(surface, ENEMY_BULLET_COLOR, (sx, sy), self.size)
+            pygame.draw.circle(surface, (200, 255, 240), (sx, sy), self.size // 2)
 
 
 class ProjectileSystem:
@@ -51,13 +64,14 @@ class ProjectileSystem:
     def __init__(self):
         self.bullets: list[Projectile] = []
 
-    def spawn(self, x: float, y: float, target_x: float, target_y: float, damage: int):
+    def spawn(self, x: float, y: float, target_x: float, target_y: float, damage: int,
+               style: str = "circle"):
         dx = target_x - x
         dy = target_y - y
         dist = math.hypot(dx, dy)
         if dist == 0:
             return
-        self.bullets.append(Projectile(x, y, dx / dist, dy / dist, damage))
+        self.bullets.append(Projectile(x, y, dx / dist, dy / dist, damage, style))
 
     def update(self, now: int, player, world_w: int, world_h: int):
         for b in self.bullets:
@@ -393,7 +407,7 @@ class PlayerProjectileSystem:
 
     def spawn_grenades(self, x: float, y: float, facing_x: float, facing_y: float,
                        damage: int, count: int = 1, speed: float = 5.5,
-                       lifetime: int = 600):
+                       lifetime: int = 600, splash_radius: int = 60):
         """Spawn confetti grenades."""
         base_angle = math.atan2(facing_y, facing_x)
         for i in range(count):
@@ -404,6 +418,7 @@ class PlayerProjectileSystem:
             g = ConfettiGrenade(x, y, dx, dy, damage)
             g.speed = speed
             g.lifetime = lifetime
+            g.splash_radius = splash_radius
             self.grenades.append(g)
 
     def update(self, now: int, enemies: list, world_w: int, world_h: int,
@@ -465,7 +480,7 @@ class PlayerProjectileSystem:
                 g.exploded = True
             if not g.alive:
                 if g.exploded:
-                    grenade_explosions.append((g.x, g.y, g.damage))
+                    grenade_explosions.append((g.x, g.y, g.damage, g.splash_radius))
                 continue
             g_rect = pygame.Rect(g.x - g.size, g.y - g.size, g.size * 2, g.size * 2)
             for enemy in enemies:
@@ -474,18 +489,18 @@ class PlayerProjectileSystem:
                 if g_rect.colliderect(enemy.rect):
                     g.exploded = True
                     g.alive = False
-                    grenade_explosions.append((g.x, g.y, g.damage))
+                    grenade_explosions.append((g.x, g.y, g.damage, g.splash_radius))
                     break
         self.grenades = [g for g in self.grenades if g.alive]
 
         # Process grenade splash damage
-        for gx, gy, gdmg in grenade_explosions:
+        for gx, gy, gdmg, splash_r in grenade_explosions:
             for enemy in enemies:
                 if not enemy.alive:
                     continue
                 dist = math.hypot(enemy.x - gx, enemy.y - gy)
-                if dist < 60:  # splash radius
-                    falloff = max(0.3, 1.0 - dist / 60)
+                if dist < splash_r:
+                    falloff = max(0.3, 1.0 - dist / splash_r)
                     splash_dmg = int(gdmg * falloff)
                     kb_x = enemy.x - gx
                     kb_y = enemy.y - gy

@@ -24,8 +24,16 @@ def process_enemy_death(enemy, player, alive, animations, combat, sounds,
 
     # -- colour by type
     color = (200, 50, 50)
-    if enemy.enemy_type == "wraith":
-        color = (100, 200, 255)
+    if enemy.enemy_type == "cyber_rat":
+        color = (80, 160, 200)
+    elif enemy.enemy_type == "cyber_raccoon":
+        color = (80, 100, 200)
+    elif enemy.enemy_type == "mega_cyber_deer":
+        color = (255, 140, 20)
+    elif enemy.enemy_type == "d_lek":
+        color = (200, 180, 100)
+    elif enemy.enemy_type == "specter":
+        color = (120, 80, 255)
     elif enemy.is_boss:
         color = (255, 160, 0)
     elif enemy.enemy_type == "charger":
@@ -40,7 +48,7 @@ def process_enemy_death(enemy, player, alive, animations, combat, sounds,
         color = (180, 180, 190)
     elif enemy.enemy_type == "drone":
         color = (80, 160, 255)
-    elif enemy.enemy_type in ("cultist", "preacher", "eldritch_horror"):
+    elif enemy.enemy_type in ("cultist", "street_preacher", "eldritch_horror"):
         color = (160, 60, 200)
     elif enemy.enemy_type in ("void_wisp", "rift_walker", "null_serpent"):
         color = (140, 80, 220)

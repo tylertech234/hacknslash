@@ -8,6 +8,7 @@ NATIVE_HEIGHT = 0  # filled in by main.py
 RESOLUTIONS: dict = {}  # filled in by main.py
 FPS = 60
 TITLE = "Cyber Survivor"
+VERSION = "0.9.1"
 
 # -- Colors --
 BLACK = (0, 0, 0)
@@ -76,8 +77,8 @@ ENEMY_EYE_COLOR = (0, 200, 255)     # Dalek eyestalk glow
 ENEMY_SKIRT_COLOR = (90, 82, 74)    # Dalek skirt
 
 # -- Spawning --
-WAVE_BASE_COUNT = 30
-WAVE_GROWTH = 12
+WAVE_BASE_COUNT = 8
+WAVE_GROWTH = 4
 SPAWN_MARGIN = 80                   # px from screen edge
 
 # -- XP / Leveling --

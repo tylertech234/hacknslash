@@ -128,7 +128,7 @@ class LegacyScreen:
 
         # Hint
         hint = self.font_small.render(
-            "Press 1-6 to buy upgrades  |  Enter to continue",
+            "Press 1-6 to buy upgrades  |  E/Enter to continue",
             True, (100, 100, 100))
         surface.blit(hint, (SCREEN_WIDTH // 2 - hint.get_width() // 2,
                            start_y + len(LEGACY_UPGRADES) * (card_h + 6) + 20))

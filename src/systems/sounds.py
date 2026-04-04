@@ -141,6 +141,7 @@ class SoundManager:
         self.sounds["boss_death"] = self._make_boss_death()
         self.sounds["big_boss_death"] = self._make_big_boss_death()
         self.sounds["player_death"] = self._make_player_death()
+        self.sounds["player_hit"] = self._make_player_hit()
 
     # ---- individual sound generators ----
 
@@ -225,6 +226,30 @@ class SoundManager:
             sample = int((thump + thump2 + n_val + punch) * env * 32767)
             buf.append(max(-32768, min(32767, sample)))
         return pygame.mixer.Sound(buffer=buf)
+
+    def _make_player_hit(self) -> pygame.mixer.Sound:
+        """Sharp body-hit — high crack + low thump, distinct from melee hit."""
+        rate = 22050
+        n = int(rate * 0.20)
+        buf = array.array("h")
+        for i in range(n):
+            t = i / rate
+            pos = i / n
+            env = (1.0 - pos) ** 0.9 * min(1.0, pos * 50)
+            # Sharp crack transient (brief high-freq noise burst)
+            crack_env = max(0.0, 1.0 - pos * 12)
+            crack_noise = (((i * 31337 + 9) * 1103515245 + 12345) >> 16) & 0x7FFF
+            crack = (crack_noise / 16384.0 - 1.0) * 0.5 * crack_env
+            # Low body thump
+            thump = math.sin(2 * math.pi * 65 * t) * 0.35
+            # Descending pain whine
+            whine_env = max(0.0, 1.0 - pos * 6)
+            whine = math.sin(2 * math.pi * (900 - 600 * pos) * t) * 0.18 * whine_env
+            sample = int((crack + thump + whine) * env * 32767)
+            buf.append(max(-32768, min(32767, sample)))
+        snd = pygame.mixer.Sound(buffer=buf)
+        snd.set_volume(0.75)
+        return snd
 
     def _make_step(self) -> pygame.mixer.Sound:
         """Soft footstep with subtle thud and scuff."""

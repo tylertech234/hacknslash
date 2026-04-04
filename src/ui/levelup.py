@@ -18,14 +18,16 @@ LEVEL_UPGRADES = [
     # Passive abilities
     {"name": "Vampiric Strike", "icon": "V", "color": (200, 0, 80),    "effect": "passive", "value": "vampiric_strike", "desc": "Heal 3 HP on each hit"},
     {"name": "Chain Lightning", "icon": "Z", "color": (100, 200, 255), "effect": "passive", "value": "chain_lightning", "desc": "Hits arc to 2 nearby enemies"},
-    {"name": "Thorns",          "icon": "T", "color": (180, 100, 50),  "effect": "passive", "value": "thorns",          "desc": "Reflect 30% melee damage taken"},
+    {"name": "Thorns",          "icon": "T", "color": (180, 100, 50),  "effect": "passive", "value": "thorns",          "desc": "Reflect 75% melee damage taken back at attacker"},
     {"name": "Second Wind",     "icon": "L", "color": (255, 100, 100), "effect": "passive", "value": "second_wind",     "desc": "Revive once at 30% HP on death"},
     {"name": "Nano Regen",      "icon": "N", "color": (100, 255, 100), "effect": "passive", "value": "nano_regen",      "desc": "Regenerate 1 HP every 2 seconds"},
     {"name": "Berserker",       "icon": "B", "color": (255, 60, 60),   "effect": "passive", "value": "berserker",       "desc": "+50% damage when below 30% HP"},
     {"name": "Shield Matrix",   "icon": "M", "color": (100, 150, 255), "effect": "passive", "value": "shield_matrix",   "desc": "Block one hit every 10 seconds"},
     {"name": "Explosive Kills", "icon": "E", "color": (255, 150, 0),   "effect": "passive", "value": "explosive_kills", "desc": "25% chance for enemies to explode on death"},
-    {"name": "Magnetic Field",  "icon": "F", "color": (150, 150, 255), "effect": "passive", "value": "magnetic_field",  "desc": "Pickups fly to you from further away"},
+    {"name": "Magnetic Field",  "icon": "F", "color": (150, 150, 255), "effect": "passive", "value": "magnetic_field",  "desc": "ALL pickups fly to you from much further away"},
     {"name": "Adrenaline Rush", "icon": "A", "color": (0, 255, 100),   "effect": "passive", "value": "adrenaline",      "desc": "+30% speed for 3s after each kill"},
+    {"name": "Rapid Dash",      "icon": ">", "color": (100, 220, 255), "effect": "dash_charges", "value": 1, "desc": "+1 dash charge before cooldown (stack up to 4 total)"},
+    {"name": "Parry Deflect",   "icon": "P", "color": (200, 255, 180), "effect": "passive", "value": "parry_deflect", "class_restrict": "archer", "desc": "Parried bullets fire back at nearest enemy (2x damage). Ranger only."},
 ]
 
 
@@ -45,7 +47,9 @@ WEAPON_UPGRADES = {
     "cyber_bow":      {"name": "Rapid Volley",     "icon": "➤", "color": (100, 200, 255), "effect": "cooldown", "value": 70, "desc": "-70ms cooldown — faster arrows"},
     "pulse_rifle":    {"name": "Overcharged Pulse", "icon": "⚡", "color": (255, 80, 200),  "effect": "damage",   "value": 10, "desc": "+10 damage — supercharged pulses"},
     "scatter_shot":   {"name": "Wide Scatter",     "icon": "✧", "color": (255, 200, 100), "effect": "range",    "value": 15, "desc": "+15 range — wider scatter pattern"},
-    "ricochet_disc":  {"name": "Multi-Bounce",     "icon": "◎", "color": (255, 160, 0),   "effect": "damage",   "value": 10, "desc": "+10 damage — extra ricochet hits"},
+    "ricochet_disc":       {"name": "Multi-Bounce",      "icon": "◎", "color": (255, 160, 0),   "effect": "damage",   "value": 10, "desc": "+10 damage — extra ricochet hits"},
+    "explosive_crossbow":  {"name": "Warhead Tips",      "icon": "💥", "color": (255, 120, 30),  "effect": "damage",   "value": 14, "desc": "+14 damage — bigger detonation"},
+    "burst_crossbow":      {"name": "Rapid Chamber",     "icon": "➤", "color": (100, 220, 255),  "effect": "cooldown", "value": 70, "desc": "-70ms cooldown — faster burst cycle"},
     # Jester weapons
     "rubber_chicken": {"name": "Extra Bouncy",     "icon": "🐔", "color": (255, 220, 50),  "effect": "damage",   "value": 10, "desc": "+10 damage — bouncier chicken"},
     "banana_rang":    {"name": "Banana Split",     "icon": "🍌", "color": (255, 255, 80),  "effect": "range",    "value": 15, "desc": "+15 range — wider banana arc"},
@@ -84,8 +88,10 @@ class LevelUpScreen:
 
         TIER_NAMES = {1: "I", 2: "II", 3: "III"}
 
-        # Add stat + passive upgrades (filter out already-owned passives and maxed tiers)
+        # Add stat + passive upgrades (filter out already-owned passives, maxed tiers, and class-restricted upgrades)
         for u in LEVEL_UPGRADES:
+            if u.get("class_restrict") and u["class_restrict"] != player_class:
+                continue
             if u["effect"] == "passive" and u["value"] in owned:
                 continue
             if u["effect"] == "glass_cannon" and "glass_cannon" in owned:
@@ -164,12 +170,14 @@ class LevelUpScreen:
         # Mouse hover - update selection based on card positions
         if event.type == pygame.MOUSEMOTION:
             mx, my = event.pos
-            card_w, card_h = 380, 90
-            start_y = 200
-            cx = SCREEN_WIDTH // 2 - card_w // 2
-            for i in range(len(self.choices)):
-                cy = start_y + i * (card_h + 15)
-                if cx <= mx <= cx + card_w and cy <= my <= cy + card_h:
+            card_w, card_h = 360, 130
+            gap = 18
+            n = len(self.choices)
+            start_x = SCREEN_WIDTH // 2 - (n * card_w + (n - 1) * gap) // 2
+            card_y = SCREEN_HEIGHT // 2 - card_h // 2 - 20
+            for i in range(n):
+                cx = start_x + i * (card_w + gap)
+                if cx <= mx <= cx + card_w and card_y <= my <= card_y + card_h:
                     self.selected = i
                     break
             return None
@@ -177,21 +185,23 @@ class LevelUpScreen:
         # Mouse click - select card
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             mx, my = event.pos
-            card_w, card_h = 380, 90
-            start_y = 200
-            cx_card = SCREEN_WIDTH // 2 - card_w // 2
-            for i in range(len(self.choices)):
-                cy = start_y + i * (card_h + 15)
-                if cx_card <= mx <= cx_card + card_w and cy <= my <= cy + card_h:
+            card_w, card_h = 360, 130
+            gap = 18
+            n = len(self.choices)
+            start_x = SCREEN_WIDTH // 2 - (n * card_w + (n - 1) * gap) // 2
+            card_y = SCREEN_HEIGHT // 2 - card_h // 2 - 20
+            for i in range(n):
+                cx_card = start_x + i * (card_w + gap)
+                if cx_card <= mx <= cx_card + card_w and card_y <= my <= card_y + card_h:
                     choice = self.choices[i]
                     self.active = False
                     return choice
             return None
 
         if event.type == pygame.KEYDOWN:
-            if event.key in (pygame.K_w, pygame.K_UP):
+            if event.key in (pygame.K_a, pygame.K_LEFT, pygame.K_w, pygame.K_UP):
                 self.selected = (self.selected - 1) % len(self.choices)
-            elif event.key in (pygame.K_s, pygame.K_DOWN):
+            elif event.key in (pygame.K_d, pygame.K_RIGHT, pygame.K_s, pygame.K_DOWN):
                 self.selected = (self.selected + 1) % len(self.choices)
             elif event.key in (pygame.K_RETURN, pygame.K_SPACE, pygame.K_e):
                 choice = self.choices[self.selected]
@@ -203,7 +213,10 @@ class LevelUpScreen:
                     choice = self.choices[idx]
                     self.active = False
                     return choice
-        return None
+            elif event.key in (pygame.K_BACKSPACE, pygame.K_TAB):
+                # Skip / forfeit this upgrade
+                self.active = False
+                return {"effect": "skip", "name": "Skip", "value": None}
 
     def draw(self, surface: pygame.Surface):
         if not self.active:
@@ -218,12 +231,15 @@ class LevelUpScreen:
         title = self.font_big.render("LEVEL UP — Choose an Upgrade", True, YELLOW)
         surface.blit(title, (SCREEN_WIDTH // 2 - title.get_width() // 2, 120))
 
-        # Cards
-        card_w, card_h = 380, 90
-        start_y = 200
+        # Cards — horizontal 3-column layout
+        card_w, card_h = 360, 130
+        gap = 18
+        n = len(self.choices)
+        start_x = SCREEN_WIDTH // 2 - (n * card_w + (n - 1) * gap) // 2
+        card_y = SCREEN_HEIGHT // 2 - card_h // 2 - 20
         for i, choice in enumerate(self.choices):
-            cy = start_y + i * (card_h + 15)
-            cx = SCREEN_WIDTH // 2 - card_w // 2
+            cx = start_x + i * (card_w + gap)
+            cy = card_y
 
             # Highlight selected
             if i == self.selected:
@@ -241,17 +257,30 @@ class LevelUpScreen:
             # Icon
             icon_color = choice.get("color", WHITE)
             icon = self.font_big.render(choice["icon"], True, icon_color)
-            surface.blit(icon, (cx + 50, cy + 15))
+            surface.blit(icon, (cx + 50, cy + 18))
 
             # Name
             name = self.font.render(choice["name"], True, WHITE)
-            surface.blit(name, (cx + 95, cy + 15))
+            surface.blit(name, (cx + 95, cy + 18))
 
-            # Description
+            # Description — word-wrap to fit card width
             desc = choice.get("desc", "")
             if desc:
-                desc_surf = self.font_small.render(desc, True, (160, 160, 160))
-                surface.blit(desc_surf, (cx + 95, cy + 42))
+                # Break into lines of ~34 chars so they fit the ~255px available space
+                words = desc.split()
+                lines, line_buf = [], []
+                for word in words:
+                    test = " ".join(line_buf + [word])
+                    if len(test) > 34 and line_buf:
+                        lines.append(" ".join(line_buf))
+                        line_buf = [word]
+                    else:
+                        line_buf.append(word)
+                if line_buf:
+                    lines.append(" ".join(line_buf))
+                for li, line_text in enumerate(lines[:2]):
+                    dl = self.font_small.render(line_text, True, (160, 160, 160))
+                    surface.blit(dl, (cx + 95, cy + 46 + li * 16))
 
             # Type tag
             ctype = choice.get("type", "stat")
@@ -265,26 +294,26 @@ class LevelUpScreen:
             else:
                 tag = "STAT"
             tag_surf = self.font_small.render(tag, True, (100, 100, 100))
-            surface.blit(tag_surf, (cx + card_w - tag_surf.get_width() - 10, cy + 65))
+            surface.blit(tag_surf, (cx + card_w - tag_surf.get_width() - 10, cy + card_h - 22))
 
             # Passives full warning on passive choices
             if self._passives_full and choice.get("effect") == "passive":
                 warn_color = (255, 180, 50)
                 warn_text = self.font_small.render("\u26a0 SLOTS FULL — SWAP", True, warn_color)
                 wx = cx + 95
-                wy = cy + 62
+                wy = cy + 80
                 pygame.draw.rect(surface, (60, 40, 10), (wx - 3, wy - 1, warn_text.get_width() + 6, warn_text.get_height() + 2), border_radius=3)
                 surface.blit(warn_text, (wx, wy))
 
         # Hint
-        hint = self.font_small.render("W/S or Mouse to select  |  Enter/Click or 1-3 to confirm", True, (120, 120, 120))
-        surface.blit(hint, (SCREEN_WIDTH // 2 - hint.get_width() // 2, start_y + 3 * (card_h + 15) + 20))
+        hint = self.font_small.render("A/D or Mouse to select  |  E/Enter/Click or 1-3 to confirm  |  Backspace to skip", True, (120, 120, 120))
+        surface.blit(hint, (SCREEN_WIDTH // 2 - hint.get_width() // 2, card_y + card_h + 10))
 
         # Tooltip for selected upgrade
         if 0 <= self.selected < len(self.choices):
             choice = self.choices[self.selected]
-            tip_x = SCREEN_WIDTH // 2 + card_w // 2 + 12
-            tip_y = start_y + self.selected * (card_h + 15)
+            tip_x = start_x + self.selected * (card_w + gap)
+            tip_y = card_y + card_h + 30
             if choice.get("effect") == "weapon":
                 wkey = choice.get("value", "")
                 from src.systems.weapons import WEAPONS as _W

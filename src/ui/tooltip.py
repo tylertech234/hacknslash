@@ -17,6 +17,7 @@ PASSIVE_DETAILS = {
     "explosive_kills":  {"name": "Explosive Kills",   "effect": "25% chance enemies explode on death (AoE)", "type": "AoE"},
     "magnetic_field":   {"name": "Magnetic Field",    "effect": "Pickups fly to you from 3x distance", "type": "Utility"},
     "adrenaline":       {"name": "Adrenaline Rush",   "effect": "+30% speed for 3s after each kill", "type": "Mobility"},
+    "parry_deflect":    {"name": "Parry Deflect",     "effect": "Parried bullets return to sender at 2x dmg (melee only)", "type": "Offense"},
     "glass_cannon":     {"name": "Glass Cannon",      "effect": "+30% damage, -20 Max HP", "type": "Risky"},
     "melee_lifesteal":  {"name": "Melee Lifesteal",   "effect": "Heal 2 HP on melee kills", "type": "Sustain"},
     "armor_plating":    {"name": "Armor Plating",     "effect": "Take 15% less damage from all sources", "type": "Defense"},

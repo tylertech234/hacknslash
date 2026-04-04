@@ -32,7 +32,7 @@ WEAPONS = {
     },
     "spear": {
         "name": "Spear",
-        "damage_mult": 1.1,
+        "damage_mult": 1.3,
         "range": 90,
         "cooldown": 500,
         "duration": 250,
@@ -69,7 +69,7 @@ WEAPONS = {
     },
     "gravity_maul": {
         "name": "Gravity Maul",
-        "damage_mult": 2.8,
+        "damage_mult": 3.5,
         "range": 60,
         "cooldown": 1000,
         "duration": 450,
@@ -110,7 +110,7 @@ WEAPONS = {
     # === CYBER ARCHER (ranged-focused) ===
     "dagger": {
         "name": "Throwing Dagger",
-        "damage_mult": 1.0,
+        "damage_mult": 1.4,
         "range": 40,
         "cooldown": 350,
         "duration": 120,
@@ -127,7 +127,7 @@ WEAPONS = {
     },
     "cyber_bow": {
         "name": "Cyber Bow",
-        "damage_mult": 1.8,
+        "damage_mult": 2.4,
         "range": 50,
         "cooldown": 550,
         "duration": 200,
@@ -145,9 +145,9 @@ WEAPONS = {
     },
     "pulse_rifle": {
         "name": "Pulse Rifle",
-        "damage_mult": 0.7,
+        "damage_mult": 1.0,
         "range": 35,
-        "cooldown": 150,
+        "cooldown": 220,
         "duration": 80,
         "sweep_deg": 15,
         "blade_color": (255, 100, 50),
@@ -162,7 +162,7 @@ WEAPONS = {
     },
     "scatter_shot": {
         "name": "Scatter Shot",
-        "damage_mult": 0.6,
+        "damage_mult": 0.9,
         "range": 30,
         "cooldown": 600,
         "duration": 100,
@@ -179,7 +179,7 @@ WEAPONS = {
     },
     "ricochet_disc": {
         "name": "Ricochet Disc",
-        "damage_mult": 1.2,
+        "damage_mult": 1.5,
         "range": 40,
         "cooldown": 500,
         "duration": 150,
@@ -193,6 +193,40 @@ WEAPONS = {
         "proj_count": 1,
         "proj_visual": "disc",
         "bouncing": True,
+        "class": "archer",
+    },
+    "explosive_crossbow": {
+        "name": "Explosive Crossbow",
+        "damage_mult": 2.2,
+        "range": 45,
+        "cooldown": 900,
+        "duration": 220,
+        "sweep_deg": 20,
+        "blade_color": (255, 160, 40),
+        "trail_color": (255, 220, 100),
+        "desc": "Explosive-tipped bolt. Arcs and detonates on impact.",
+        "projectile": True,
+        "grenade": True,
+        "proj_speed": 7.0,
+        "proj_lifetime": 700,
+        "proj_count": 1,
+        "class": "archer",
+    },
+    "burst_crossbow": {
+        "name": "Tri-Burst Crossbow",
+        "damage_mult": 1.1,
+        "range": 42,
+        "cooldown": 480,
+        "duration": 100,
+        "sweep_deg": 30,
+        "blade_color": (100, 220, 255),
+        "trail_color": (180, 240, 255),
+        "desc": "Fires 3 bolts per trigger pull in a tight burst.",
+        "projectile": True,
+        "proj_speed": 10.5,
+        "proj_lifetime": 800,
+        "proj_count": 3,
+        "proj_visual": "arrow",
         "class": "archer",
     },
 
@@ -238,7 +272,7 @@ WEAPONS = {
     },
     "pie_launcher": {
         "name": "Pie Launcher",
-        "damage_mult": 1.5,
+        "damage_mult": 2.2,
         "range": 40,
         "cooldown": 700,
         "duration": 200,
@@ -254,9 +288,9 @@ WEAPONS = {
     },
     "confetti_grenade": {
         "name": "Confetti Grenade",
-        "damage_mult": 1.8,
+        "damage_mult": 2.8,
         "range": 40,
-        "cooldown": 800,
+        "cooldown": 600,
         "duration": 180,
         "sweep_deg": 30,
         "blade_color": (255, 100, 200),
@@ -290,16 +324,17 @@ WEAPONS = {
 CHARACTER_CLASSES = {
     "knight": {
         "name": "Knight",
-        "desc": "Heavy armor, devastating melee. Born to fight up close.",
+        "desc": "Heavy armor. Each blow sends foes flying. Born to fight up close.",
         "color": (0, 180, 255),
         "start_weapon": "sword",
-        "hp_bonus": 30,
-        "damage_bonus": 5,
+        "hp_bonus": 15,
+        "damage_bonus": -2,
         "speed_bonus": 0,
+        "knockback_bonus": 3.0,
         "passives": ["melee_lifesteal", "armor_plating"],
     },
     "archer": {
-        "name": "Archer",
+        "name": "Ranger",
         "desc": "Fast and deadly at range. Keep your distance.",
         "color": (0, 255, 150),
         "start_weapon": "dagger",
@@ -315,7 +350,7 @@ CHARACTER_CLASSES = {
         "start_weapon": "rubber_chicken",
         "hp_bonus": 0,
         "damage_bonus": 0,
-        "speed_bonus": 0.5,
+        "speed_bonus": 1.5,
         "passives": ["lucky_crits", "confetti_burst"],
     },
 }
@@ -340,10 +375,22 @@ def draw_weapon(surface: pygame.Surface, sx: int, sy: int,
     duration = weapon["duration"]
     wname = weapon["name"]
 
+    # Visual blade length is capped regardless of attack_range upgrades.
+    # Extra range shows as an energy arc instead of a longer weapon.
+    BASE_VISUAL_LEN = 42
+    visual_len = min(attack_range, BASE_VISUAL_LEN)
+
     if is_attacking:
         progress = min(1.0, (now - attack_timer) / duration)
         swing_angle = sword_angle - sweep / 2 + sweep * progress
-        blade_len = attack_range + 10
+        blade_len = visual_len + 10
+
+        # Strike-zone arc: drawn at actual attack_range if range > base
+        if attack_range > BASE_VISUAL_LEN:
+            _draw_strike_arc(surface, sx, sy, attack_range,
+                             swing_angle, base_angle=sword_angle - sweep / 2,
+                             sweep=sweep, progress=progress,
+                             color=blade_color)
 
         if "Hammer" in wname or "Maul" in wname:
             _draw_hammer_swing(surface, sx, sy, swing_angle, blade_len, blade_color, trail_color, progress, sword_angle, sweep)
@@ -364,7 +411,7 @@ def draw_weapon(surface: pygame.Surface, sx: int, sy: int,
         else:
             _draw_sword_swing(surface, sx, sy, swing_angle, blade_len, blade_color, trail_color, progress, sword_angle, sweep)
     else:
-        blade_len = attack_range - 10
+        blade_len = visual_len - 10
         idle_angle = sword_angle + 0.3
 
         if "Hammer" in wname or "Maul" in wname:
@@ -387,6 +434,30 @@ def draw_weapon(surface: pygame.Surface, sx: int, sy: int,
             _draw_sword_idle(surface, sx, sy, idle_angle, blade_len, blade_color)
 
 
+def _draw_strike_arc(surface, sx, sy, attack_range, swing_angle, base_angle, sweep, progress, color):
+    """Draw a translucent energy arc at attack_range showing the extended hit zone."""
+    # Sweep so far: from start angle to current swing angle
+    arc_start = base_angle
+    arc_end = swing_angle
+    arc_len = max(0.05, abs(arc_end - arc_start))
+    # Number of points along the arc
+    steps = max(3, int(arc_len / 0.12))
+    pts = []
+    for i in range(steps + 1):
+        t = i / steps
+        a = arc_start + (arc_end - arc_start) * t
+        px = sx + int(math.cos(a) * attack_range)
+        py = sy + int(math.sin(a) * attack_range)
+        pts.append((px, py))
+    if len(pts) >= 2:
+        alpha = int(100 + 80 * progress)
+        arc_color = (min(255, color[0] + 80), min(255, color[1] + 80), min(255, color[2] + 80))
+        pygame.draw.lines(surface, arc_color, False, pts, 3)
+        # Bright tip dot
+        tip = pts[-1]
+        pygame.draw.circle(surface, arc_color, tip, 5)
+
+
 # ---- Sword ----
 def _draw_sword_swing(surface, sx, sy, swing_angle, blade_len, blade_color, trail_color, progress, base_angle, sweep):
     bx = sx + int(math.cos(swing_angle) * blade_len)
@@ -394,16 +465,15 @@ def _draw_sword_swing(surface, sx, sy, swing_angle, blade_len, blade_color, trai
     pygame.draw.line(surface, blade_color, (sx, sy), (bx, by), 4)
     pygame.draw.line(surface, (255, 255, 255), (sx, sy), (bx, by), 2)
     pygame.draw.circle(surface, (255, 255, 200), (bx, by), 4)
-    for i in range(5):
-        t = max(0, progress - i * 0.06)
+    # Draw simple trail dots (no SRCALPHA)
+    for i in range(4):
+        t = max(0, progress - i * 0.08)
         ta = base_angle - sweep / 2 + sweep * min(1.0, t)
-        tr = blade_len - i * 3
+        tr = blade_len - i * 4
         tx = sx + int(math.cos(ta) * tr)
         ty = sy + int(math.sin(ta) * tr)
-        alpha = max(20, 160 - i * 35)
-        ts = pygame.Surface((6, 6), pygame.SRCALPHA)
-        pygame.draw.circle(ts, (*trail_color, alpha), (3, 3), 3)
-        surface.blit(ts, (tx - 3, ty - 3))
+        fade = max(60, 200 - i * 50)
+        pygame.draw.circle(surface, (min(255, trail_color[0]), min(255, trail_color[1]), min(255, trail_color[2])), (tx, ty), max(1, 3 - i))
 
 
 def _draw_sword_idle(surface, sx, sy, idle_angle, blade_len, blade_color):

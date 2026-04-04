@@ -26,6 +26,11 @@ class AtmosphericSystem:
         # Screen glitch (abyss)
         self._glitch_timer = 0
         self._glitch_lines: list[tuple] = []
+        # Cached surfaces — allocated once, reused every frame
+        self._overlay_surf: pygame.Surface | None = None  # SCREEN_WIDTH x SCREEN_HEIGHT
+        self._fog_surf: pygame.Surface | None = None      # horizontal fog strip
+        self._edge_surf: pygame.Surface | None = None     # abyss edge vignette
+        self._edge_size_cached: int = 0
 
     def set_zone(self, zone_name: str, zone_data: dict):
         self.zone = zone_name
@@ -108,32 +113,32 @@ class AtmosphericSystem:
 
     def draw(self, surface: pygame.Surface, now: int):
         """Draw atmospheric effects on top of the game world."""
-        # Ambient particles
+        # Ambient particles — premultiplied direct draw (no per-particle surface allocation)
         for p in self.particles:
             fade = min(1.0, p["life"] / 1000)
             alpha = int(p["alpha"] * fade)
             if alpha <= 0:
                 continue
-            ps = pygame.Surface((p["size"] * 2, p["size"] * 2), pygame.SRCALPHA)
-            pygame.draw.circle(ps, (*self.particle_color, alpha),
-                             (p["size"], p["size"]), p["size"])
-            surface.blit(ps, (int(p["x"]) - p["size"], int(p["y"]) - p["size"]))
+            r = self.particle_color[0] * alpha // 255
+            g = self.particle_color[1] * alpha // 255
+            b = self.particle_color[2] * alpha // 255
+            if r or g or b:
+                pygame.draw.circle(surface, (r, g, b), (int(p["x"]), int(p["y"])), p["size"])
 
         # Dust storm overlay (wasteland)
         if self._dust_storm_active:
             intensity = 0.3 + self.wave * 0.03
             alpha = int(min(120, 60 * intensity))
-            storm = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
-            storm.fill((140, 120, 80, alpha))
-            surface.blit(storm, (0, 0))
-            # Extra dense particles during storm
+            if self._overlay_surf is None:
+                self._overlay_surf = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+            self._overlay_surf.fill((140, 120, 80, alpha))
+            surface.blit(self._overlay_surf, (0, 0))
+            # Extra dense particles during storm — premultiplied lines (no per-line surface)
             for _ in range(10):
-                sx = random.randint(0, SCREEN_WIDTH)
-                sy = random.randint(0, SCREEN_HEIGHT)
+                sx_p = random.randint(0, SCREEN_WIDTH)
+                sy_p = random.randint(0, SCREEN_HEIGHT)
                 sw = random.randint(10, 40)
-                ps = pygame.Surface((sw, 2), pygame.SRCALPHA)
-                ps.fill((180, 160, 120, 60))
-                surface.blit(ps, (sx, sy))
+                pygame.draw.line(surface, (42, 37, 28), (sx_p, sy_p), (sx_p + sw, sy_p), 2)
 
         # Lightning flash (wasteland)
         if self._lightning_flash and now - self._lightning_flash < 150:
@@ -145,27 +150,28 @@ class AtmosphericSystem:
             else:
                 flash_alpha = max(0, 20 - (elapsed - 80))
             if flash_alpha > 0:
-                flash = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
-                flash.fill((200, 200, 255, flash_alpha))
-                surface.blit(flash, (0, 0))
+                if self._overlay_surf is None:
+                    self._overlay_surf = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+                self._overlay_surf.fill((200, 200, 255, flash_alpha))
+                surface.blit(self._overlay_surf, (0, 0))
 
-        # Fog layer (city)
+        # Fog layer (city) — cached surface, only refilled when alpha changes
         if self.zone == "city":
             fog_alpha = min(50, 15 + self.wave * 3)
-            fog = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT // 3), pygame.SRCALPHA)
-            fog.fill((40, 50, 40, fog_alpha))
-            surface.blit(fog, (0, SCREEN_HEIGHT * 2 // 3))
+            if self._fog_surf is None:
+                self._fog_surf = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT // 3), pygame.SRCALPHA)
+            self._fog_surf.fill((40, 50, 40, fog_alpha))
+            surface.blit(self._fog_surf, (0, SCREEN_HEIGHT * 2 // 3))
 
-        # Flickering neon (city, wave 2+)
+        # Flickering neon (city, wave 2+) — premultiplied rect (no SRCALPHA surface)
         if self.zone == "city" and self.wave >= 2:
             if random.random() < 0.02:
                 colors = [(255, 0, 100), (0, 255, 200), (255, 200, 0), (100, 0, 255)]
                 c = random.choice(colors)
                 x = random.choice([10, SCREEN_WIDTH - 30])
                 y = random.randint(50, 300)
-                ns = pygame.Surface((20, 8), pygame.SRCALPHA)
-                ns.fill((*c, 40))
-                surface.blit(ns, (x, y))
+                pm_c = (c[0] * 40 // 255, c[1] * 40 // 255, c[2] * 40 // 255)
+                pygame.draw.rect(surface, pm_c, (x, y, 20, 8))
 
         # Screen glitch (abyss)
         if self.zone == "abyss" and self._glitch_lines:
@@ -177,23 +183,23 @@ class AtmosphericSystem:
                         strip = surface.subsurface((0, max(0, gy), SCREEN_WIDTH, min(gh, SCREEN_HEIGHT - gy))).copy()
                         surface.blit(strip, (goffset, gy))
 
-        # Edge darkening (abyss) — progressively shrinks visible area
+        # Edge darkening (abyss) — cached surface, rebuilt only when edge_size changes
         if self.zone == "abyss":
             edge_size = min(80, 20 + self.wave * 5)
-            edge = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
-            for i in range(edge_size):
-                alpha = int(120 * (1 - i / edge_size))
-                # Top
-                pygame.draw.line(edge, (10, 5, 20, alpha), (0, i), (SCREEN_WIDTH, i))
-                # Bottom
-                pygame.draw.line(edge, (10, 5, 20, alpha), (0, SCREEN_HEIGHT - 1 - i), (SCREEN_WIDTH, SCREEN_HEIGHT - 1 - i))
-                # Left
-                pygame.draw.line(edge, (10, 5, 20, alpha), (i, 0), (i, SCREEN_HEIGHT))
-                # Right
-                pygame.draw.line(edge, (10, 5, 20, alpha), (SCREEN_WIDTH - 1 - i, 0), (SCREEN_WIDTH - 1 - i, SCREEN_HEIGHT))
-            surface.blit(edge, (0, 0))
+            if self._edge_surf is None or self._edge_size_cached != edge_size:
+                self._edge_surf = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+                self._edge_surf.fill((0, 0, 0, 0))
+                for i in range(edge_size):
+                    alpha = int(120 * (1 - i / edge_size))
+                    col = (10, 5, 20, alpha)
+                    self._edge_surf.fill(col, (0, i, SCREEN_WIDTH, 1))
+                    self._edge_surf.fill(col, (0, SCREEN_HEIGHT - 1 - i, SCREEN_WIDTH, 1))
+                    self._edge_surf.fill(col, (i, 0, 1, SCREEN_HEIGHT))
+                    self._edge_surf.fill(col, (SCREEN_WIDTH - 1 - i, 0, 1, SCREEN_HEIGHT))
+                self._edge_size_cached = edge_size
+            surface.blit(self._edge_surf, (0, 0))
 
-        # Cosmic starfield background (abyss)
+        # Cosmic starfield background (abyss) — premultiplied circles (no per-star surface)
         if self.zone == "abyss":
             random.seed(42)  # deterministic stars
             for _ in range(60):
@@ -202,10 +208,9 @@ class AtmosphericSystem:
                 twinkle = 0.3 + 0.7 * abs(math.sin(now * 0.002 + star_x * 0.1 + star_y * 0.07))
                 star_a = int(40 * twinkle)
                 star_r = 1 if random.random() < 0.7 else 2
-                ss = pygame.Surface((star_r * 2, star_r * 2), pygame.SRCALPHA)
                 star_c = random.choice([(180, 140, 255), (140, 100, 220), (200, 180, 255)])
-                pygame.draw.circle(ss, (*star_c, star_a), (star_r, star_r), star_r)
-                surface.blit(ss, (star_x - star_r, star_y - star_r))
+                pm_c = (star_c[0] * star_a // 255, star_c[1] * star_a // 255, star_c[2] * star_a // 255)
+                pygame.draw.circle(surface, pm_c, (star_x, star_y), star_r)
             random.seed()
 
         # Floating eldritch eyes (abyss, wave 3+)
@@ -219,17 +224,18 @@ class AtmosphericSystem:
                 phase = (now % 5000) / 5000
                 eye_a = int(35 * math.sin(phase * math.pi))
                 if eye_a > 5:
-                    es = pygame.Surface((20, 12), pygame.SRCALPHA)
-                    # Outer eye
-                    pygame.draw.ellipse(es, (120, 60, 180, eye_a), (0, 0, 20, 12))
+                    # Outer oval — premultiplied
+                    pm_outer = (120 * eye_a // 255, 60 * eye_a // 255, 180 * eye_a // 255)
+                    pygame.draw.ellipse(surface, pm_outer, (ex - 10, ey - 6, 20, 12))
                     # Pupil
-                    px = 10 + int(math.sin(now * 0.001) * 3)
-                    pygame.draw.circle(es, (200, 100, 255, min(255, eye_a + 20)), (px, 6), 3)
-                    pygame.draw.circle(es, (0, 0, 0, min(255, eye_a + 10)), (px, 6), 1)
-                    surface.blit(es, (ex - 10, ey - 6))
+                    px_p = ex + int(math.sin(now * 0.001) * 3)
+                    p_a = min(255, eye_a + 20)
+                    pm_pupil = (200 * p_a // 255, 100 * p_a // 255, 255 * p_a // 255)
+                    pygame.draw.circle(surface, pm_pupil, (px_p, ey), 3)
+                    pygame.draw.circle(surface, (0, 0, 0), (px_p, ey), 1)
             random.seed()
 
-        # Reality distortion waves (abyss, wave 5+)
+        # Reality distortion waves (abyss, wave 5+) — premultiplied circles
         if self.zone == "abyss" and self.wave >= 5:
             wave_a = int(20 + 10 * math.sin(now * 0.001))
             for ring_i in range(2):
@@ -237,22 +243,19 @@ class AtmosphericSystem:
                 ring_r = int(ring_t * 400)
                 if ring_r > 10:
                     ring_a = int(wave_a * (1.0 - ring_t))
-                    rs = pygame.Surface((ring_r * 2, ring_r * 2), pygame.SRCALPHA)
-                    pygame.draw.circle(rs, (100, 40, 160, ring_a),
-                                       (ring_r, ring_r), ring_r, 2)
-                    surface.blit(rs, (SCREEN_WIDTH // 2 - ring_r,
-                                      SCREEN_HEIGHT // 2 - ring_r))
+                    pm_c = (100 * ring_a // 255, 40 * ring_a // 255, 160 * ring_a // 255)
+                    pygame.draw.circle(surface, pm_c,
+                                       (SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2), ring_r, 2)
 
-        # Void upward particles (abyss) — glow particles floating up
+        # Void upward particles (abyss) — premultiplied glow circles
         if self.zone == "abyss":
             for p in self.particles:
                 if p["size"] >= 2:
                     glow_r = p["size"] + 2
                     fade = min(1.0, p["life"] / 1000)
                     alpha = int(30 * fade)
-                    gs = pygame.Surface((glow_r * 2, glow_r * 2), pygame.SRCALPHA)
-                    pygame.draw.circle(gs, (140, 80, 220, alpha), (glow_r, glow_r), glow_r)
-                    surface.blit(gs, (int(p["x"]) - glow_r, int(p["y"]) - glow_r))
+                    pm_c = (140 * alpha // 255, 80 * alpha // 255, 220 * alpha // 255)
+                    pygame.draw.circle(surface, pm_c, (int(p["x"]), int(p["y"])), glow_r)
 
     def get_dust_storm_active(self) -> bool:
         return self._dust_storm_active

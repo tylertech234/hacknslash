@@ -221,7 +221,7 @@ class Prop:
         pulse = 0.5 + 0.5 * math.sin(now * 0.002 + self.anim_offset)
         pygame.draw.rect(surface, (35, 20, 55), (sx - 6, sy - 30, 12, 44))
         for ry in range(sy - 26, sy + 8, 8):
-            rune_a = int(80 + 120 * math.sin(now * 0.003 + ry * 0.1 + self.anim_offset))
+            rune_a = max(0, min(255, int(80 + 120 * math.sin(now * 0.003 + ry * 0.1 + self.anim_offset))))
             rs = pygame.Surface((8, 4), pygame.SRCALPHA)
             pygame.draw.rect(rs, (140, 60, 220, rune_a), (0, 0, 8, 4))
             surface.blit(rs, (sx - 4, ry))
@@ -354,8 +354,11 @@ class EnvironmentSystem:
                 continue
             dx = ex - p.x
             dy = ey - p.y
-            dist = math.hypot(dx, dy)
             min_dist = p.collision_r + entity_half
+            # Fast bbox pre-check (avoids sqrt in most cases)
+            if abs(dx) > min_dist or abs(dy) > min_dist:
+                continue
+            dist = math.hypot(dx, dy)
             if dist < min_dist and dist > 0:
                 overlap = min_dist - dist
                 ex += (dx / dist) * overlap

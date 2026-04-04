@@ -24,6 +24,7 @@ class Player:
         self.hp = self.max_hp
         self.damage = PLAYER_ATTACK_DAMAGE + cls["damage_bonus"]
         self.attack_range = PLAYER_ATTACK_RANGE
+        self.knockback_bonus = cls.get("knockback_bonus", 1.0)
 
         # Weapon — from class starting weapon
         self.weapon_name = cls["start_weapon"]
@@ -54,6 +55,8 @@ class Player:
         self.last_dash_time = 0
         self.is_dashing = False
         self.dash_timer = 0
+        self.dash_charges_max = 1
+        self._dash_charges_remaining = 1
         self.dash_dx = 0.0
         self.dash_dy = 0.0
 
@@ -66,6 +69,9 @@ class Player:
         # Run currency
         self.coins = 0
 
+        # Super / Energy system — fills on kills, used for class super skill
+        self.energy: int = 0
+        self.max_energy: int = 100
         # Invincibility frames
         self.invincible = False
         self.invincible_timer = 0
@@ -119,10 +125,13 @@ class Player:
     def try_dash(self, now: int) -> bool:
         if self.is_dashing:
             return False
-        if now - self.last_dash_time >= self.dash_cooldown:
+        if self._dash_charges_remaining > 0:
             self.is_dashing = True
             self.dash_timer = now
-            self.last_dash_time = now
+            self._dash_charges_remaining -= 1
+            # Start the cooldown clock only once all charges are spent
+            if self._dash_charges_remaining == 0:
+                self.last_dash_time = now
             self.dash_dx = self.facing_x
             self.dash_dy = self.facing_y
             self.invincible = True
@@ -162,6 +171,8 @@ class Player:
         # Legacy: permanent damage reduction
         if self.legacy_dr > 0:
             amount = max(1, int(amount * (1.0 - self.legacy_dr)))
+        # Global incoming damage multiplier — hits land harder for more exciting play
+        amount = int(amount * 1.45)
         self.hp = max(0, self.hp - amount)
         self.invincible = True
         self.invincible_timer = now
@@ -223,6 +234,11 @@ class Player:
         # Invincibility timer
         if self.invincible and now - self.invincible_timer > self.invincible_duration:
             self.invincible = False
+
+        # Refill dash charges after cooldown
+        if (self._dash_charges_remaining < self.dash_charges_max
+                and now - self.last_dash_time >= self.dash_cooldown):
+            self._dash_charges_remaining = self.dash_charges_max
 
     # ---- draw ----
 
