@@ -16,6 +16,7 @@ python main.py
 | WASD / Arrow Keys | Move |
 | Space / J / E / Left Click | Attack / Confirm |
 | Shift / K | Dash (i-frames) |
+| Right Mouse (hold → release) | Super Skill (when Energy full) |
 | Mouse | Aim direction |
 | Esc / P | Pause menu |
 | 1–5 | Select upgrades |
@@ -25,8 +26,10 @@ python main.py
 
 - **3 Zones** — Wasteland (The Forest), City (Ruined Metropolis), Abyss — each with unique enemies, hazards, and boss music
 - **21 Enemy Types** — 7 per zone including mini-bosses and a big boss with phase-2 enrage
-- **3 Character Classes** — Knight (heavy melee), Archer (fast ranged), Jester (chaotic fun)
-- **16+ Weapons** — swords, axes, throwing daggers, banana boomerangs, confetti grenades, orbiters, and more
+- **3 Character Classes** — Knight (heavy melee), Ranger (fast ranged), Jester (chaotic fun)
+- **Super Skills** — right-click to unleash a class-unique ability when your Energy bar is full (Knight: Blade Storm Nova, Ranger: EMP Arrow, Jester: Chaos Eruption)
+- **Energy Bar** — fills +10 per kill, +40 per boss kill; resets on super use
+- **18+ Weapons** — swords, axes, throwing daggers, banana boomerangs, confetti grenades, burst crossbow, explosive crossbow, orbiters, and more
 - **Boss Phase 2** — at 40% HP bosses enrage: +40% speed, −45% cooldowns, enhanced spread shots, and unique secondary specials
 - **Unique boss music per zone** — procedurally generated and cached on first play
 - **Wave-based combat** with escalating difficulty (+12% HP, +8% damage, +3% speed per wave)
@@ -35,6 +38,9 @@ python main.py
 - **XP pickup orbs** — XP drops as collectible green orbs with a 12-second lifetime
 - **Zone hazards** — acid puddles, dust storms, toxic gas, void rifts, and more
 - **Passive abilities** — lifesteal, chain lightning, vampiric strike, thorns, shield matrix, second wind, explosive kills, and more
+- **Compendium** — in-game bestiary; enemy entries unlock on first kill, with procedural art and inspect view
+- **Portal menu** — between-zone screen to review stats, browse the Compendium, or continue
+- **Animated custom cursor** — class-themed procedural crosshair that rotates and contracts on click
 - **Roguelite persistence** — Legacy Points and 6 permanent upgrades that carry between runs
 - **Dynamic lighting** — darkness scales enemy stats and XP rewards
 - **Procedural audio** — two-layer 8-bit chiptune with calm/combat crossfade and generated SFX
@@ -67,6 +73,7 @@ hacknslash/
     │   ├── weapons.py         # Weapon definitions and drawing
     │   ├── pickups.py         # Item drops: coins, XP orbs, heals
     │   ├── boss_chest.py      # Boss chest rewards
+    │   ├── compendium.py      # Enemy unlock tracking — first-kill logic, JSON save
     │   ├── game_actions.py    # Death processing & projectile firing helpers
     │   ├── legacy.py          # Roguelite persistence (JSON save)
     │   ├── environment.py     # Trees, rocks, fruit trees
@@ -87,10 +94,14 @@ hacknslash/
         ├── radar.py           # Motion tracker
         ├── levelup.py         # Level-up upgrade selection
         ├── charselect.py      # Character class picker
+        ├── cursor.py          # Animated procedural crosshair — class-themed
         ├── legacy_screen.py   # Post-death permanent upgrade shop
         ├── main_menu.py       # Main menu + settings (resolution, fullscreen, music)
+        ├── portal_screen.py   # Between-zone portal menu (Continue / Summary / Compendium)
         ├── run_summary.py     # Post-run statistics summary screen
+        ├── compendium_screen.py # Compendium browser with procedural monster art
         ├── passive_swap.py    # Passive swap screen when all slots are full
+        ├── toast.py           # Slide-in achievement-style toast notifications
         ├── tooltip.py         # Weapon/passive info tooltips
         ├── weapon_swap.py     # Weapon swap selection screen
         ├── icons.py           # 35 procedural icon drawings

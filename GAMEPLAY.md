@@ -11,6 +11,7 @@ A complete guide to everything in the game — classes, weapons, enemies, mechan
 | Move | W / A / S / D or Arrow Keys |
 | Attack / Confirm | Space, J, E, or Left Mouse Click |
 | Dash | Shift or K |
+| Super Skill | Right Mouse (hold → release, when Energy is full) |
 | Pause | Esc or P |
 | Aim | Move the mouse — your character always faces the cursor |
 | Select chest reward | Number keys 1–5 |
@@ -31,7 +32,7 @@ Heavy armor, devastating melee. Born to fight up close.
   - *Melee Lifesteal* — Recover 5 HP every time you kill an enemy with a melee weapon
   - *Armor Plating* — Take 20% less damage from all sources
 
-### Archer
+### Ranger
 
 Fast and deadly at range. Keep your distance.
 
@@ -63,31 +64,33 @@ Melee weapons swing in an arc in front of you. Wider sweep angles hit more enemi
 |--------|--------|-------|----------|-----------|-------|
 | Sword | 1.0x | 60 | 400ms | 120° | Balanced starter |
 | Battle Axe | 1.6x | 50 | 650ms | 90° | Hard-hitting, narrow |
-| Spear | 1.1x | 90 | 500ms | 40° | Long reach, precise |
+| Spear | 1.3x | 90 | 500ms | 40° | Long reach, precise |
 | War Hammer | 2.2x | 55 | 900ms | 160° | Slow, devastating |
 | Plasma Blade | 1.4x | 65 | 350ms | 130° | Fast and strong |
-| Gravity Maul | 2.8x | 60 | 1000ms | 180° | Highest damage, very slow |
+| Gravity Maul | 3.5x | 60 | 1000ms | 180° | Highest damage, very slow |
 | Rubber Chicken | 0.8x | 55 | 350ms | 140° | Jester starter, fast |
 | Joy Buzzer | 1.3x | 35 | 500ms | 360° | Short range, hits all around you |
 
 Damage shown is a multiplier on your base damage stat.
 
-### Ranged Weapons (Archer)
+### Ranged Weapons (Ranger)
 
 | Weapon | Damage | Cooldown | Projectiles | Speed | Lifetime | Notes |
 |--------|--------|----------|-------------|-------|----------|-------|
 | Throwing Dagger | 1.0x | 350ms | 1 | 8.0 | 900ms | Precision single throw |
 | Cyber Bow | 1.8x | 550ms | 1 | 11.0 | 1500ms | **Pierces through enemies** |
-| Pulse Rifle | 0.7x | 150ms | 1 | 10.0 | 700ms | Rapid fire energy bolts |
-| Scatter Shot | 0.6x | 600ms | 5 | 7.0 | 600ms | Wide 5-bolt spread |
+| Pulse Rifle | 0.7x | 220ms | 1 | 10.0 | 700ms | Rapid fire energy bolts |
+| Scatter Shot | 0.9x | 600ms | 5 | 7.0 | 600ms | Wide 5-bolt spread |
+| Tri-Burst Crossbow | 1.1x | 480ms | 3 | 10.5 | 800ms | 3-bolt burst, tight spread |
+| Explosive Crossbow | 2.2x | 900ms | 1 | 7.0 | 700ms | Explodes on impact, 60px splash |
 
 ### Ranged Weapons (Jester)
 
 | Weapon | Damage | Cooldown | Type | Notes |
 |--------|--------|----------|------|-------|
 | Banana-Rang | 0.9x | 450ms | Orbiter | Launches out, returns, orbits you (max 3) |
-| Pie Launcher | 1.5x | 700ms | Grenade | Explodes on contact |
-| Confetti Grenade | 1.8x | 800ms | Grenade | 60px splash radius, area damage |
+| Pie Launcher | 2.2x | 700ms | Projectile | Thrown cream pie — no AoE |
+| Confetti Grenade | 2.8x | 600ms | Grenade | 60px splash radius, 600ms fuse |
 
 ### Orbiting Weapons (Knight: Blade Barrier / Jester: Banana-Rang)
 
@@ -101,7 +104,7 @@ These unique weapons launch outward, then come back and orbit around you dealing
 
 ### Grenade Mechanics
 
-Grenades (Pie Launcher, Confetti Grenade) explode on enemy contact or after 600ms.
+Grenades (Confetti Grenade, Explosive Crossbow) explode on enemy contact or after their fuse expires.
 
 - **Splash radius:** 60px
 - **Damage falloff:** 100% at center, down to 30% at the edge
@@ -129,6 +132,28 @@ Key details:
 
 ---
 
+## Super Skills
+
+Every class has a powerful Super Skill triggered with **Right Mouse** (hold to charge, release to fire) when your **Energy bar** is full.
+
+### Energy Bar
+- Displayed horizontally in the HUD (gold/amber bar, above the wave counter)
+- Fills **+10 Energy per kill**, **+40 Energy per boss kill**
+- Resets to 0 after firing your super
+- Maximum energy is 100
+
+### Class Super Skills
+
+| Class | Super Skill | Description |
+|-------|-------------|-------------|
+| Knight | **Blade Storm Nova** | Fires 12 Thrown Daggers simultaneously in a full 360° ring |
+| Ranger | **EMP Arrow** | Launches a high-damage grenade (damage ×15) with a 150px splash radius |
+| Jester | **Chaos Eruption** | Launches 6 Confetti Grenades spread evenly in a 360° ring |
+
+**Tip:** Save your super for boss phase 2 (40% HP threshold) — the extra burst can cut through the enrage window.
+
+---
+
 ## Zones
 
 The game progresses through three distinct zones. You reach the next zone by defeating the zone's big boss and stepping through the portal that appears.
@@ -149,21 +174,36 @@ Zone hazards activate at the listed wave and persist for the rest of that zone.
 
 ---
 
+## Portal Menu
+
+After defeating a zone's big boss, a glowing **portal** appears in the arena. Walk into it to open the between-zone Portal Menu:
+
+- **Continue** — step through the portal and travel to the next zone
+- **Run Summary** — review your current run stats (kills, damage dealt, bosses killed, etc.)
+- **Compendium** — browse the enemy bestiary before pressing on
+
+The portal menu uses a frozen screenshot of the game as its background — no performance cost.
+
+---
+
 ## Enemies
 
-Each zone has 5 regular enemy types and 2 bosses (mini-boss and big boss). Bosses enter **Phase 2** when reduced to 40% HP — see the [Boss Phase 2](#boss-phase-2) section below.
+Each zone has regular enemies and 2 bosses (mini-boss and big boss). Regular enemy counts vary by zone: 6 in wasteland, 5 in city, 6 in abyss. Bosses enter **Phase 2** when reduced to 40% HP — see the [Boss Phase 2](#boss-phase-2) section below.
 
 ### Zone 1 — The Forest
 
 | Enemy | Notes |
 |-------|-------|
-| **Dalek** | Ranged — shoots cyan bullets every 1200ms, engages at 320px |
-| **Wraith** | Fast melee — applies **Poison** on hit |
+| **Cyber Rat** | Tiny, fast melee — erratic jitter movement |
+| **Cyber Raccoon** | Medium melee — sidestep-dodges when hit |
+| **Mega Cyber Deer** *(sub-boss, wave 5)* | Large charging sub-boss — antler slam special |
+| **D-Lek** | Ranged — shoots cyan bullets; parallel beam burst attack |
 | **Charger** | Charges in a straight line toward the player |
 | **Shielder** | Has a damage-absorbing shield; break the shield first |
-| **Spitter** | Longer-range acid ranged attacker |
+| **Spitter** | Longer-range acid ranged attacker, kites away from player |
+| **Emperor's Elite Guard** | Elite ranged flanking unit |
 | **Iron Sentinel** *(mini-boss)* | 3-way spread shots, **missile_barrage** special |
-| **Warlord Kron** *(big boss)* | 5-way spread shots, **bleed_storm** special |
+| **Supreme D-Lek** *(big boss)* | 5-way spread shots, **bleed_storm** special; D-Lek Emperor visual |
 
 ### Zone 2 — Ruined Metropolis
 
@@ -174,13 +214,14 @@ Each zone has 5 regular enemy types and 2 bosses (mini-boss and big boss). Bosse
 | **Drone** | Ranged flyer |
 | **Cultist** | Ranged — applies **Fire** on hit |
 | **Shambler** | Slow, large AOE melee swing |
-| **Preacher** *(mini-boss)* | 3-way fire spread shots, **fire_ring** special |
+| **Street Preacher** *(mini-boss)* | 3-way fire spread shots, **fire_ring** special |
 | **Eldritch Horror** *(big boss)* | 7-shot fan spread, **eldritch_pull** special |
 
 ### Zone 3 — The Abyss
 
 | Enemy | Notes |
 |-------|-------|
+| **Specter** | Void-touched wraith melee — applies **Bleed** on hit |
 | **Void Wisp** | Ranged, fast, low HP |
 | **Rift Walker** | Teleports near the player |
 | **Mirror Shade** | Copies your movement direction |
@@ -205,8 +246,8 @@ When any boss reaches **40% HP** it enters an enraged Phase 2:
 | Boss | Phase 2 Special |
 |------|-----------------|
 | Iron Sentinel | missile_barrage — carpet of homing missiles |
-| Warlord Kron | bleed_storm — spreading bleed field |
-| Preacher | fire_ring — expanding ring of fire |
+| Supreme D-Lek | bleed_storm — spreading bleed field |
+| Street Preacher | fire_ring — expanding ring of fire |
 | Eldritch Horror | eldritch_pull — pulls player and enemies together |
 | Architect | void_cage — rings of void bolts |
 | Nexus | reality_collapse — screen-wide reality distortion |
@@ -338,8 +379,6 @@ Killing a boss spawns a glowing chest. Walk into it to open a reward screen with
 ### Weapon Upgrades
 A new weapon appropriate to your class may appear as one of the choices.
 
----
-
 ## Leveling Up
 
 You gain XP from killing enemies. When you level up, you're offered a choice of 3 upgrades filtered to your class. XP requirements increase with each level.
@@ -378,6 +417,22 @@ The heads-up display shows:
 - **Radar** (corner) — shows dots for nearby enemies and the campfire
 - **Status effect icons** — appear on your character when affected
 - **Floating damage numbers** — pop up when you or enemies take hits
+
+---
+
+## Compendium
+
+The **Compendium** is an in-game bestiary that tracks every enemy type you encounter.
+
+- A new entry **unlocks on first kill** — you'll see a toast notification appear
+- Access it from the **Portal Menu** between zones, or from the **Main Menu**
+- Each entry shows:
+  - The enemy's procedurally drawn art
+  - Zone it appears in
+  - Enemy type (melee / ranged / boss)
+  - A brief description
+  - **Inspect view** — larger art and any special abilities
+- There are **21 entries** total, one per enemy type across all three zones
 
 ---
 
