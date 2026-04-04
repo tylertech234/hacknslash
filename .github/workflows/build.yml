@@ -3,8 +3,10 @@ name: Build & Release
 on:
   workflow_dispatch:        # manual trigger from GitHub UI
   push:
+    branches:
+      - main               # runs CI on every merge to main
     tags:
-      - 'v*'               # auto-triggers on any v0.9.1, v1.0.0, etc.
+      - 'v*'               # auto-triggers on any v0.9.2, v1.0.0, etc.
 
 jobs:
   # ── Build on all three platforms in parallel ────────────────────────────────

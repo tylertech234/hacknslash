@@ -8,7 +8,7 @@ NATIVE_HEIGHT = 0  # filled in by main.py
 RESOLUTIONS: dict = {}  # filled in by main.py
 FPS = 60
 TITLE = "Cyber Survivor"
-VERSION = "0.9.1"
+VERSION = "0.9.2"
 
 # -- Colors --
 BLACK = (0, 0, 0)
