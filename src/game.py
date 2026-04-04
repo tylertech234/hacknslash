@@ -1,3 +1,6 @@
+import asyncio
+import datetime
+import os
 import pygame
 import sys
 import math
@@ -221,10 +224,11 @@ class Game:
         self.sounds.set_zone_music(self.current_zone)
         self.sounds.start_music()
 
-    def run(self):
+    async def run(self):
         self.sounds.start_music()
         while self.running:
             dt = self.clock.tick(FPS)
+            await asyncio.sleep(0)  # yield to browser each frame (pygbag)
             now = pygame.time.get_ticks()
 
             # Main menu phase
@@ -467,6 +471,14 @@ class Game:
                     if self._debug_mode:
                         self.debug_overlay.log(
                             f"Auto-attack {'ON' if self.auto_attack else 'OFF'}")
+                # Screenshot — F9
+                if event.key == pygame.K_F9:
+                    _ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+                    _shots_dir = os.path.join(os.path.dirname(__file__), "..", "screenshots")
+                    os.makedirs(_shots_dir, exist_ok=True)
+                    _path = os.path.join(_shots_dir, f"screenshot_{_ts}.png")
+                    pygame.image.save(self.screen, _path)
+                    self.toasts.show("Screenshot saved", os.path.basename(_path), (100, 220, 255))
                 # Attack — Space or Left click proxy via J key
                 if event.key in (pygame.K_SPACE, pygame.K_j):
                     if self.player.try_attack(now):
