@@ -135,7 +135,7 @@ jobs:
           EOF
 
       - name: Build web bundle
-        run: python -m pygbag --build --app_name CyberSurvivor main.py
+        run: python -m pygbag --build --app_name CyberSurvivor --width 1280 --height 720 --disable-sound-format-error main.py
 
       - name: Upload web artifact
         uses: actions/upload-artifact@v4

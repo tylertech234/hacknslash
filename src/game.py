@@ -129,7 +129,7 @@ class Game:
         text = font.render("LOADING...", True, (160, 160, 180))
         self.screen.blit(text, text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2)))
         sub = pygame.font.SysFont("consolas", 14)
-        hint = sub.render("first run generates audio — subsequent loads are instant", True, (80, 80, 100))
+        hint = sub.render("initialising systems...", True, (80, 80, 100))
         self.screen.blit(hint, hint.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 40)))
         pygame.display.flip()
 
