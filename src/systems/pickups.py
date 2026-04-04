@@ -124,14 +124,14 @@ class PickupSystem:
                 if dist > 0:
                     if magnet:
                         # Enhanced magnetic pull: everything in a wide radius
-                        if dist < 480:
-                            pull = min(7.0, 480 / max(dist, 1))
+                        if dist < 680:
+                            pull = min(9.0, 680 / max(dist, 1))
                             p.x += (dx / dist) * pull
                             p.y += (dy / dist) * pull
                     elif effect in ("xp", "coin"):
                         # Baseline attraction: XP and coins always drift toward player
-                        if dist < 80:
-                            pull = min(1.8, 80 / max(dist, 1))
+                        if dist < 240:
+                            pull = min(3.0, 240 / max(dist, 1))
                             p.x += (dx / dist) * pull
                             p.y += (dy / dist) * pull
             if p.alive and p.rect.colliderect(player.rect):

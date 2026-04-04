@@ -16,14 +16,14 @@ from src.font_cache import get_font
 ENEMY_TYPES = {
     # ── Zone 1: The Forest (intro zone) ──
     "cyber_rat": {
-        "hp": 22, "speed": 4.5, "size": 16,
-        "damage": 6, "shoot_range": 0,
+        "hp": 30, "speed": 4.5, "size": 16,
+        "damage": 9, "shoot_range": 0,
         "shoot_cooldown": 9999, "bullet_damage": 0,
         "xp_value": 15, "status_on_hit": None,
     },
     "cyber_raccoon": {
-        "hp": 60, "speed": 2.6, "size": 26,
-        "damage": 12, "shoot_range": 0,
+        "hp": 80, "speed": 2.6, "size": 26,
+        "damage": 15, "shoot_range": 0,
         "shoot_cooldown": 9999, "bullet_damage": 0,
         "xp_value": 28, "status_on_hit": "bleed",
     },
@@ -61,51 +61,51 @@ ENEMY_TYPES = {
         "xp_value": 150, "status_on_hit": "bleed",
     },
     "charger": {
-        "hp": 48, "speed": 2.5, "size": 28,
-        "damage": 18, "shoot_range": 0,
+        "hp": 70, "speed": 2.5, "size": 28,
+        "damage": 24, "shoot_range": 0,
         "shoot_cooldown": 9999, "bullet_damage": 0,
         "xp_value": 30, "status_on_hit": None,
     },
     "shielder": {
-        "hp": 100, "speed": 1.6, "size": 38,
-        "damage": 12, "shoot_range": 0,
+        "hp": 140, "speed": 1.6, "size": 38,
+        "damage": 18, "shoot_range": 0,
         "shoot_cooldown": 9999, "bullet_damage": 0,
         "xp_value": 40, "status_on_hit": "slow",
     },
     "spitter": {
-        "hp": 40, "speed": 2.0, "size": 30,
-        "damage": 8, "shoot_range": 280,
-        "shoot_cooldown": 1200, "bullet_damage": 10,
+        "hp": 60, "speed": 2.0, "size": 30,
+        "damage": 10, "shoot_range": 280,
+        "shoot_cooldown": 1100, "bullet_damage": 13,
         "xp_value": 26, "status_on_hit": "poison",
     },
     # ── Zone 2: Ruined City ──
     "cyber_zombie": {
-        "hp": 55, "speed": 1.8, "size": 30,
-        "damage": 16, "shoot_range": 0,
+        "hp": 80, "speed": 1.8, "size": 30,
+        "damage": 22, "shoot_range": 0,
         "shoot_cooldown": 9999, "bullet_damage": 0,
         "xp_value": 26, "status_on_hit": None,
     },
     "cyber_dog": {
-        "hp": 32, "speed": 4.0, "size": 24,
-        "damage": 12, "shoot_range": 0,
+        "hp": 50, "speed": 4.0, "size": 24,
+        "damage": 16, "shoot_range": 0,
         "shoot_cooldown": 9999, "bullet_damage": 0,
         "xp_value": 26, "status_on_hit": "bleed",
     },
     "drone": {
-        "hp": 28, "speed": 2.8, "size": 22,
-        "damage": 6, "shoot_range": 300,
-        "shoot_cooldown": 800, "bullet_damage": 12,
+        "hp": 45, "speed": 2.8, "size": 22,
+        "damage": 8, "shoot_range": 300,
+        "shoot_cooldown": 800, "bullet_damage": 16,
         "xp_value": 22, "status_on_hit": None,
     },
     "cultist": {
-        "hp": 75, "speed": 2.0, "size": 32,
-        "damage": 10, "shoot_range": 260,
-        "shoot_cooldown": 1400, "bullet_damage": 14,
+        "hp": 100, "speed": 2.0, "size": 32,
+        "damage": 12, "shoot_range": 260,
+        "shoot_cooldown": 1300, "bullet_damage": 18,
         "xp_value": 38, "status_on_hit": "fire",
     },
     "shambler": {
-        "hp": 130, "speed": 1.0, "size": 42,
-        "damage": 22, "shoot_range": 0,
+        "hp": 180, "speed": 1.0, "size": 42,
+        "damage": 28, "shoot_range": 0,
         "shoot_cooldown": 9999, "bullet_damage": 0,
         "xp_value": 48, "status_on_hit": "poison",
     },
@@ -325,6 +325,10 @@ class Enemy:
         # Hit flash
         self.hit_flash = 0
 
+        # Corpse linger — stays visible this many ms after death
+        self._corpse_until = 0
+        self._death_time = 0
+
         # Animation
         self.anim_offset = random.uniform(0, math.tau)
         self.gun_flash_timer = 0
@@ -429,6 +433,8 @@ class Enemy:
         self.hit_flash = now
         if self.hp <= 0:
             self.alive = False
+            self._death_time = now
+            self._corpse_until = now + 1800  # linger 1.8s as corpse
         # Apply knockback (reduced for bosses)
         length = math.hypot(knockback_x, knockback_y)
         if length > 0:
@@ -743,7 +749,31 @@ class Enemy:
         return self.damage
 
     def draw(self, surface: pygame.Surface, camera_x: int, camera_y: int):
+        now = pygame.time.get_ticks()
         if not self.alive:
+            # Corpse crumble: flat fading body on the floor
+            if now < self._corpse_until:
+                sx = int(self.x - camera_x)
+                sy = int(self.y - camera_y)
+                margin = self.size + 32
+                if sx < -margin or sx > SCREEN_WIDTH + margin or sy < -margin or sy > SCREEN_HEIGHT + margin:
+                    return
+                t = (now - self._death_time) / max(1, self._corpse_until - self._death_time)
+                alpha = int(220 * (1.0 - t) ** 1.4)
+                half = self.size // 2
+                cw = max(4, int(self.size * 1.2))
+                ch = max(3, int(self.size * 0.35))
+                csurf = pygame.Surface((cw, ch + 6), pygame.SRCALPHA)
+                # Dark flattened body ellipse
+                pygame.draw.ellipse(csurf, (40, 20, 20, alpha), (0, 0, cw, ch))
+                pygame.draw.ellipse(csurf, (80, 30, 30, alpha // 2), (0, 0, cw, ch), 2)
+                # Small spark bleed-out dots fading in first 600ms
+                if t < 0.33:
+                    spark_a = int(200 * (1.0 - t / 0.33))
+                    for i in range(3):
+                        dot_x = cw // 2 + int((i - 1) * cw * 0.25)
+                        pygame.draw.circle(csurf, (200, 20, 20, spark_a), (dot_x, ch // 2), 2)
+                surface.blit(csurf, (sx - cw // 2, sy - ch // 2 + half // 2))
             return
         sx = int(self.x - camera_x)
         sy = int(self.y - camera_y)

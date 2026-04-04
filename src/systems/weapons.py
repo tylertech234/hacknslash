@@ -340,7 +340,7 @@ CHARACTER_CLASSES = {
         "start_weapon": "dagger",
         "hp_bonus": -10,
         "damage_bonus": 0,
-        "speed_bonus": 1.0,
+        "speed_bonus": 0.5,
         "passives": ["crit_shots", "evasion"],
     },
     "jester": {
@@ -350,7 +350,7 @@ CHARACTER_CLASSES = {
         "start_weapon": "rubber_chicken",
         "hp_bonus": 0,
         "damage_bonus": 0,
-        "speed_bonus": 1.5,
+        "speed_bonus": 0.8,
         "passives": ["lucky_crits", "confetti_burst"],
     },
 }

@@ -1188,6 +1188,12 @@ class Game:
                 enemy.special2_attack_hit = False
 
         self.combat.process_player_attack(self.player, alive, now)
+        # Screen shake + sparks on every successful melee hit
+        if self.combat.damage_log:
+            self.animations.add_screen_shake(3)
+            self.animations.spawn_hit_sparks(
+                self.player.x + self.player.facing_x * 30,
+                self.player.y + self.player.facing_y * 30, count=6)
         # Drain melee hit log into run stats
         for _wkey, _wdmg in self.combat.damage_log:
             self.run_stats.record_hit(_wkey, _wdmg)
@@ -1564,7 +1570,7 @@ class Game:
         for chest in self.boss_chests:
             chest.draw(self.screen, cx, cy)
 
-        for enemy in self.spawner.get_alive_enemies():
+        for enemy in self.spawner.enemies:  # includes dead enemies for corpse rendering
             enemy.draw(self.screen, cx, cy)
 
         # Projectiles
@@ -1860,6 +1866,10 @@ class Game:
                                     SCREEN_HEIGHT // 2 - 70))
         # Label
         font_sm = get_font("consolas", 18, True)
+        zone_data = get_zone(self.current_zone)
+        boss_wave = zone_data.get("boss_wave", 10)
+        if self.spawner.wave >= boss_wave:
+            return  # portal handles progression — no countdown after final wave
         label = f"WAVE {self.spawner.wave + 1} INCOMING"
         label_surf = font_sm.render(label, True, (200, 200, 220))
         self.screen.blit(label_surf, (cx - label_surf.get_width() // 2,

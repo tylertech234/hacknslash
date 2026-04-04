@@ -6,6 +6,7 @@ from src.settings import (
     PLAYER_ATTACK_DAMAGE, PLAYER_ATTACK_RANGE, PLAYER_ATTACK_COOLDOWN,
     PLAYER_DASH_SPEED, PLAYER_DASH_DURATION, PLAYER_DASH_COOLDOWN,
     XP_TO_LEVEL, XP_LEVEL_SCALE,
+    PLAYER_MAX_SPEED, PLAYER_MAX_RANGE,
 )
 from src.systems.weapons import get_weapon, draw_weapon, DEFAULT_WEAPON, CHARACTER_CLASSES
 from src.systems.status_effects import StatusManager
@@ -219,8 +220,8 @@ class Player:
             else:
                 self.is_dashing = False
         else:
-            self.x += dx * self.speed * speed_mult
-            self.y += dy * self.speed * speed_mult
+            self.x += dx * min(self.speed, PLAYER_MAX_SPEED) * speed_mult
+            self.y += dy * min(self.speed, PLAYER_MAX_SPEED) * speed_mult
 
         # Clamp to world bounds
         half = self.size // 2
@@ -461,8 +462,9 @@ class Player:
 
     def get_attack_rect(self) -> pygame.Rect:
         """Return the hitbox of the current attack swing."""
-        cx = self.x + self.facing_x * self.attack_range * 0.6
-        cy = self.y + self.facing_y * self.attack_range * 0.6
+        eff_range = min(self.attack_range, PLAYER_MAX_RANGE)
+        cx = self.x + self.facing_x * eff_range * 0.6
+        cy = self.y + self.facing_y * eff_range * 0.6
         sweep_deg = self.weapon.get("sweep_deg", 120)
         r = int(28 * (sweep_deg / 120))
         r = max(20, min(45, r))

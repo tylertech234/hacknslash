@@ -251,9 +251,9 @@ class WaveSpawner:
                 self._spawn_line(n, x1, y1, x2, y2)
 
         # Stamp spawn time for scale-in animation, and scale stats per wave
-        wave_hp_mult = 1.0 + (self.wave - 1) * 0.12  # +12% HP per wave
-        wave_dmg_mult = 1.0 + (self.wave - 1) * 0.08  # +8% damage per wave
-        wave_speed_mult = 1.0 + (self.wave - 1) * 0.03  # +3% speed per wave
+        wave_hp_mult = 1.0 + (self.wave - 1) * 0.15   # +15% HP per wave
+        wave_dmg_mult = 1.0 + (self.wave - 1) * 0.12  # +12% damage per wave
+        wave_speed_mult = 1.0 + (self.wave - 1) * 0.04  # +4% speed per wave
         for e in self.enemies:
             e.spawn_time = now
             e.max_hp = int(e.max_hp * wave_hp_mult)
