@@ -8,9 +8,11 @@ ZONES = {
     "wasteland": {
         "name": "The Forest",
         "desc": "Ancient woods. Something lurks in the shadows.",
-        "enemy_pool": ["dalek", "wraith", "charger", "shielder", "spitter"],
+        "enemy_pool": ["cyber_rat", "cyber_raccoon", "d_lek", "charger", "shielder", "spitter"],
         "mini_boss": "iron_sentinel",
-        "boss": "warlord_kron",
+        "sub_boss": "mega_cyber_deer",
+        "sub_boss_wave": 5,
+        "boss": "supreme_d_lek",
         "boss_wave": 10,
         "tile_colors": {
             "floor": (34, 60, 28),
@@ -32,7 +34,7 @@ ZONES = {
         "name": "Ruined Metropolis",
         "desc": "Shattered skyscrapers. Something stirs below.",
         "enemy_pool": ["cyber_zombie", "cyber_dog", "drone", "cultist", "shambler"],
-        "mini_boss": "preacher",
+        "mini_boss": "street_preacher",
         "boss": "eldritch_horror",
         "boss_wave": 10,
         "tile_colors": {
@@ -53,7 +55,7 @@ ZONES = {
     "abyss": {
         "name": "The Abyss",
         "desc": "Reality fractures. The source of corruption.",
-        "enemy_pool": ["void_wisp", "rift_walker", "mirror_shade", "gravity_warden", "null_serpent"],
+        "enemy_pool": ["specter", "void_wisp", "rift_walker", "mirror_shade", "gravity_warden", "null_serpent"],
         "mini_boss": "architect",
         "boss": "nexus",
         "boss_wave": 10,

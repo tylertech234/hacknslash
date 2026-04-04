@@ -14,17 +14,31 @@ from src.font_cache import get_font
 
 # ── Enemy type presets ──
 ENEMY_TYPES = {
-    "dalek": {
-        "hp": 25, "speed": ENEMY_SPEED, "size": ENEMY_SIZE,
+    # ── Zone 1: The Forest (intro zone) ──
+    "cyber_rat": {
+        "hp": 22, "speed": 4.5, "size": 16,
+        "damage": 6, "shoot_range": 0,
+        "shoot_cooldown": 9999, "bullet_damage": 0,
+        "xp_value": 15, "status_on_hit": None,
+    },
+    "cyber_raccoon": {
+        "hp": 60, "speed": 2.6, "size": 26,
+        "damage": 12, "shoot_range": 0,
+        "shoot_cooldown": 9999, "bullet_damage": 0,
+        "xp_value": 28, "status_on_hit": "bleed",
+    },
+    "mega_cyber_deer": {
+        "hp": 600, "speed": 1.9, "size": 56,
+        "damage": 26, "shoot_range": 0,
+        "shoot_cooldown": 9999, "bullet_damage": 0,
+        "xp_value": 180, "status_on_hit": None,
+        "special": "buck_charge",
+    },
+    "d_lek": {
+        "hp": 65, "speed": ENEMY_SPEED, "size": ENEMY_SIZE,
         "damage": ENEMY_DAMAGE, "shoot_range": ENEMY_SHOOT_RANGE,
         "shoot_cooldown": ENEMY_SHOOT_COOLDOWN, "bullet_damage": ENEMY_BULLET_DAMAGE,
-        "xp_value": 8, "status_on_hit": None,
-    },
-    "wraith": {
-        "hp": 15, "speed": 3.2, "size": 32,
-        "damage": 14, "shoot_range": 0,  # melee only
-        "shoot_cooldown": 9999, "bullet_damage": 0,
-        "xp_value": 10, "status_on_hit": "poison",
+        "xp_value": 22, "status_on_hit": None,
     },
     "iron_sentinel": {
         "hp": 800, "speed": 1.5, "size": 56,
@@ -33,63 +47,69 @@ ENEMY_TYPES = {
         "xp_value": 200, "status_on_hit": "fire",
         "special": "ground_slam",
     },
-    "warlord_kron": {
+    "supreme_d_lek": {
         "hp": 2500, "speed": 1.2, "size": 72,
         "damage": 40, "shoot_range": 400,
         "shoot_cooldown": 600, "bullet_damage": 25,
         "xp_value": 800, "status_on_hit": "bleed",
         "special": "war_cry",
     },
+    "emperors_elite_guard": {
+        "hp": 450, "speed": 2.0, "size": 38,
+        "damage": 22, "shoot_range": 380,
+        "shoot_cooldown": 850, "bullet_damage": 18,
+        "xp_value": 150, "status_on_hit": "bleed",
+    },
     "charger": {
-        "hp": 18, "speed": 2.5, "size": 28,
+        "hp": 48, "speed": 2.5, "size": 28,
         "damage": 18, "shoot_range": 0,
         "shoot_cooldown": 9999, "bullet_damage": 0,
-        "xp_value": 12, "status_on_hit": None,
+        "xp_value": 30, "status_on_hit": None,
     },
     "shielder": {
-        "hp": 40, "speed": 1.6, "size": 38,
+        "hp": 100, "speed": 1.6, "size": 38,
         "damage": 12, "shoot_range": 0,
         "shoot_cooldown": 9999, "bullet_damage": 0,
-        "xp_value": 16, "status_on_hit": "slow",
+        "xp_value": 40, "status_on_hit": "slow",
     },
     "spitter": {
-        "hp": 14, "speed": 2.0, "size": 30,
+        "hp": 40, "speed": 2.0, "size": 30,
         "damage": 8, "shoot_range": 280,
         "shoot_cooldown": 1200, "bullet_damage": 10,
-        "xp_value": 10, "status_on_hit": "poison",
+        "xp_value": 26, "status_on_hit": "poison",
     },
     # ── Zone 2: Ruined City ──
     "cyber_zombie": {
-        "hp": 20, "speed": 1.8, "size": 30,
+        "hp": 55, "speed": 1.8, "size": 30,
         "damage": 16, "shoot_range": 0,
         "shoot_cooldown": 9999, "bullet_damage": 0,
-        "xp_value": 10, "status_on_hit": None,
+        "xp_value": 26, "status_on_hit": None,
     },
     "cyber_dog": {
-        "hp": 12, "speed": 4.0, "size": 24,
+        "hp": 32, "speed": 4.0, "size": 24,
         "damage": 12, "shoot_range": 0,
         "shoot_cooldown": 9999, "bullet_damage": 0,
-        "xp_value": 10, "status_on_hit": "bleed",
+        "xp_value": 26, "status_on_hit": "bleed",
     },
     "drone": {
-        "hp": 8, "speed": 2.8, "size": 22,
+        "hp": 28, "speed": 2.8, "size": 22,
         "damage": 6, "shoot_range": 300,
         "shoot_cooldown": 800, "bullet_damage": 12,
-        "xp_value": 8, "status_on_hit": None,
+        "xp_value": 22, "status_on_hit": None,
     },
     "cultist": {
-        "hp": 28, "speed": 2.0, "size": 32,
+        "hp": 75, "speed": 2.0, "size": 32,
         "damage": 10, "shoot_range": 260,
         "shoot_cooldown": 1400, "bullet_damage": 14,
-        "xp_value": 14, "status_on_hit": "fire",
+        "xp_value": 38, "status_on_hit": "fire",
     },
     "shambler": {
-        "hp": 50, "speed": 1.0, "size": 42,
+        "hp": 130, "speed": 1.0, "size": 42,
         "damage": 22, "shoot_range": 0,
         "shoot_cooldown": 9999, "bullet_damage": 0,
-        "xp_value": 18, "status_on_hit": "poison",
+        "xp_value": 48, "status_on_hit": "poison",
     },
-    "preacher": {
+    "street_preacher": {
         "hp": 1200, "speed": 1.4, "size": 52,
         "damage": 20, "shoot_range": 320,
         "shoot_cooldown": 1000, "bullet_damage": 16,
@@ -104,35 +124,41 @@ ENEMY_TYPES = {
         "special": "tentacle_sweep",
     },
     # ── Zone 3: The Abyss ──
+    "specter": {
+        "hp": 80, "speed": 3.8, "size": 34,
+        "damage": 22, "shoot_range": 0,  # melee only
+        "shoot_cooldown": 9999, "bullet_damage": 0,
+        "xp_value": 38, "status_on_hit": "bleed",
+    },
     "void_wisp": {
-        "hp": 10, "speed": 3.5, "size": 20,
+        "hp": 30, "speed": 3.5, "size": 20,
         "damage": 10, "shoot_range": 0,
         "shoot_cooldown": 9999, "bullet_damage": 0,
-        "xp_value": 8, "status_on_hit": None,
+        "xp_value": 22, "status_on_hit": None,
     },
     "rift_walker": {
-        "hp": 24, "speed": 2.2, "size": 34,
+        "hp": 65, "speed": 2.2, "size": 34,
         "damage": 18, "shoot_range": 0,
         "shoot_cooldown": 9999, "bullet_damage": 0,
-        "xp_value": 12, "status_on_hit": "slow",
+        "xp_value": 32, "status_on_hit": "slow",
     },
     "mirror_shade": {
-        "hp": 16, "speed": 2.5, "size": 28,
+        "hp": 48, "speed": 2.5, "size": 28,
         "damage": 14, "shoot_range": 0,
         "shoot_cooldown": 9999, "bullet_damage": 0,
-        "xp_value": 12, "status_on_hit": None,
+        "xp_value": 32, "status_on_hit": None,
     },
     "gravity_warden": {
-        "hp": 34, "speed": 1.5, "size": 40,
+        "hp": 90, "speed": 1.5, "size": 40,
         "damage": 12, "shoot_range": 250,
         "shoot_cooldown": 1200, "bullet_damage": 15,
-        "xp_value": 16, "status_on_hit": "slow",
+        "xp_value": 42, "status_on_hit": "slow",
     },
     "null_serpent": {
-        "hp": 26, "speed": 2.8, "size": 36,
+        "hp": 70, "speed": 2.8, "size": 36,
         "damage": 16, "shoot_range": 0,
         "shoot_cooldown": 9999, "bullet_damage": 0,
-        "xp_value": 14, "status_on_hit": "poison",
+        "xp_value": 38, "status_on_hit": "poison",
     },
     "architect": {
         "hp": 1500, "speed": 1.2, "size": 56,
@@ -152,7 +178,11 @@ ENEMY_TYPES = {
 
 
 class Enemy:
-    def __init__(self, x: float, y: float, enemy_type: str = "dalek"):
+    # Shared surface cache across all instances — reduces memory and GC stutter.
+    # Safe because each surface is fully blitted before the next _get_surf call.
+    _surf_cache: dict = {}
+
+    def __init__(self, x: float, y: float, enemy_type: str = "d_lek"):
         self.x = x
         self.y = y
         self.enemy_type = enemy_type
@@ -213,11 +243,13 @@ class Enemy:
         _special_params = {
             "ground_slam":      {"cooldown": 4000, "duration": 800,  "range": 300, "aoe_mult": 3.5},
             "war_cry":          {"cooldown": 7000, "duration": 1000, "range": 450, "aoe_mult": 5.0},
+            "buck_charge":      {"cooldown": 3500, "duration": 600,  "range": 400, "aoe_mult": 2.5},
             "flame_pillar":     {"cooldown": 3000, "duration": 1200, "range": 400, "aoe_mult": 2.5},
             "tentacle_sweep":   {"cooldown": 4500, "duration": 900,  "range": 350, "aoe_mult": 4.0},
             "void_rift":        {"cooldown": 5000, "duration": 1000, "range": 400, "aoe_mult": 2.0},
             "null_burst":       {"cooldown": 3500, "duration": 700,  "range": 400, "aoe_mult": 4.0},
             # Phase 2 / secondary specials
+            "antler_slam":      {"cooldown": 5000, "duration": 700,  "range": 350, "aoe_mult": 3.0},
             "missile_barrage":  {"cooldown": 3500, "duration": 600,  "range": 500, "aoe_mult": 1.5},
             "bleed_storm":      {"cooldown": 5000, "duration": 800,  "range": 600, "aoe_mult": 1.0},
             "fire_ring":        {"cooldown": 5000, "duration": 1400, "range": 450, "aoe_mult": 2.0},
@@ -232,9 +264,10 @@ class Enemy:
         self._special_aoe_mult = sp.get("aoe_mult", 3.0)
         # Secondary (phase 2) special
         _special2_map = {
+            "mega_cyber_deer":  "antler_slam",
             "iron_sentinel":   "missile_barrage",
-            "warlord_kron":    "bleed_storm",
-            "preacher":        "fire_ring",
+            "supreme_d_lek":   "bleed_storm",
+            "street_preacher": "fire_ring",
             "eldritch_horror": "eldritch_pull",
             "architect":       "void_cage",
             "nexus":           "reality_collapse",
@@ -264,8 +297,8 @@ class Enemy:
         # Spread shot defaults for bosses
         _boss_spread = {
             "iron_sentinel":   (3, 0.35),   # 3 shots, 20° spread
-            "warlord_kron":    (5, 0.45),   # 5 shots, 26°
-            "preacher":        (3, 0.50),   # 3 fire shots
+            "supreme_d_lek":   (5, 0.45),   # 5 shots, 26°
+            "street_preacher": (3, 0.50),   # 3 fire shots
             "eldritch_horror": (7, 0.70),   # 7-shot tentacle fan
             "architect":       (3, 0.40),   # 3 void bolts
             "nexus":           (9, 0.80),   # 9-shot spiral ring
@@ -295,6 +328,8 @@ class Enemy:
         # Animation
         self.anim_offset = random.uniform(0, math.tau)
         self.gun_flash_timer = 0
+        # _surf_cache is class-level (shared across all instances) to cut memory
+        # and GC pressure. Safe because surfaces are always blitted before reuse.
 
         # Void wisp: 30% chance to phase through damage
         self._phase_chance = 0.30 if enemy_type == "void_wisp" else 0.0
@@ -317,9 +352,35 @@ class Enemy:
         self.spawn_time = 0  # set by game when spawned
         self.spawn_duration = 400  # ms to scale in
 
-    _BOSS_TYPES = frozenset(("iron_sentinel", "warlord_kron", "preacher",
-                             "eldritch_horror", "architect", "nexus"))
-    _BIG_BOSS_TYPES = frozenset(("warlord_kron", "eldritch_horror", "nexus"))
+        # ── Per-type tactical AI state ──
+        # Void wisp: erratic burst dashes
+        self._wisp_burst_dx = 0.0
+        self._wisp_burst_dy = 0.0
+        self._wisp_burst_timer = -1000
+        # Null serpent: sinusoidal weave
+        self._serpent_weave_phase = random.uniform(0, math.tau)
+        # Drone: consistent circular orbit direction
+        self._drone_orbit_dir = 1 if random.random() > 0.5 else -1
+        # Cultist: channel-and-burst mechanic
+        self._cultist_channeling = False
+        self._cultist_channel_start = 0
+        self._cultist_last_channel = -3000
+        self._cultist_channel_cooldown = 3000 + random.randint(0, 1000)
+        # Cyber zombie: occasional lunge
+        self._zombie_lunging = False
+        self._zombie_lunge_start = 0
+        self._zombie_lunge_timer = -2000
+        # Cyber rat: erratic direction jitter
+        self._rat_jitter_dx = 0.0
+        self._rat_jitter_dy = 0.0
+        self._rat_jitter_timer = 0
+        # Cyber raccoon: dodge dash on being hit
+        self._raccoon_dodge_timer = -2000
+
+    _BOSS_TYPES = frozenset(("iron_sentinel", "supreme_d_lek", "street_preacher",
+                             "eldritch_horror", "architect", "nexus",
+                             "mega_cyber_deer", "emperors_elite_guard"))
+    _BIG_BOSS_TYPES = frozenset(("supreme_d_lek", "eldritch_horror", "nexus"))
 
     @property
     def rect(self) -> pygame.Rect:
@@ -338,7 +399,18 @@ class Enemy:
     def is_big_boss(self) -> bool:
         return self.enemy_type in self._BIG_BOSS_TYPES
 
-    def take_damage(self, amount: int, knockback_x: float, knockback_y: float, now: int):
+    def _get_surf(self, w: int, h: int) -> pygame.Surface:
+        """Return a cached, cleared SRCALPHA surface of the given size."""
+        key = (w, h)
+        s = self._surf_cache.get(key)
+        if s is None:
+            s = pygame.Surface((w, h), pygame.SRCALPHA)
+            self._surf_cache[key] = s
+        s.fill((0, 0, 0, 0))
+        return s
+
+    def take_damage(self, amount: int, knockback_x: float, knockback_y: float, now: int,
+                     kb_mult: float = 1.0):
         # Void wisp: phase through attacks
         if self._phase_chance > 0 and random.random() < self._phase_chance:
             return
@@ -365,7 +437,7 @@ class Enemy:
                     and self.hp > 0 and self.hp <= self.max_hp * 0.5):
                 self.wants_to_split = True
                 self._has_split = True
-            kb_str = 8 if not self.is_boss else 3
+            kb_str = (8 if not self.is_boss else 3) * kb_mult
             self.kb_dx = (knockback_x / length) * kb_str
             self.kb_dy = (knockback_y / length) * kb_str
             self.kb_timer = now
@@ -418,6 +490,91 @@ class Enemy:
                 self.x += (dx / dist) * effective_speed
                 self.y += (dy / dist) * effective_speed
 
+        # ── Per-type tactical movement ──
+
+        # Spitter: kite — retreat when player gets too close for comfort
+        if self.enemy_type == "spitter" and dist < 120 and dist > 10:
+            self.x -= (dx / dist) * effective_speed * 2.0
+            self.y -= (dy / dist) * effective_speed * 2.0
+
+        # Void wisp: random lateral burst-dashes every ~700ms
+        if self.enemy_type == "void_wisp":
+            burst_interval = 700 + int(self.anim_offset * 200) % 300
+            if now - self._wisp_burst_timer > burst_interval:
+                self._wisp_burst_timer = now
+                angle = random.uniform(0, math.tau)
+                self._wisp_burst_dx = math.cos(angle)
+                self._wisp_burst_dy = math.sin(angle)
+            burst_str = max(0.0, 1.0 - (now - self._wisp_burst_timer) / 180.0)
+            self.x += self._wisp_burst_dx * effective_speed * 2.8 * burst_str
+            self.y += self._wisp_burst_dy * effective_speed * 2.8 * burst_str
+
+        # Cyber rat: erratic lateral jitter every 250ms — makes it hard to hit
+        if self.enemy_type == "cyber_rat":
+            if now - self._rat_jitter_timer > 250:
+                self._rat_jitter_timer = now
+                jitter_angle = random.uniform(0, math.tau)
+                self._rat_jitter_dx = math.cos(jitter_angle)
+                self._rat_jitter_dy = math.sin(jitter_angle)
+            jitter_str = math.sin(max(0.0, (now - self._rat_jitter_timer) / 250.0) * math.pi) * effective_speed * 1.8
+            self.x += self._rat_jitter_dx * jitter_str
+            self.y += self._rat_jitter_dy * jitter_str
+
+        # Cyber raccoon: sidestep dodge when struck (checks hit_flash)
+        if self.enemy_type == "cyber_raccoon":
+            if now - self.hit_flash < 80 and now - self._raccoon_dodge_timer > 800:
+                self._raccoon_dodge_timer = now
+                side = 1 if random.random() > 0.5 else -1
+                self.x += -self.face_y * side * effective_speed * 5.0
+                self.y += self.face_x * side * effective_speed * 5.0
+
+        # Null serpent: weave perpendicular to approach direction
+        if self.enemy_type == "null_serpent" and dist > 50:
+            self._serpent_weave_phase += dt * 0.006
+            weave = math.sin(self._serpent_weave_phase) * effective_speed * 1.5
+            self.x += -self.face_y * weave
+            self.y += self.face_x * weave
+
+        # Drone: wider circular orbit — strafes more aggressively
+        if self.enemy_type == "drone" and dist < self.shoot_range + 50 and dist > 0:
+            orb = math.sin(now * 0.0035 + self.anim_offset) * effective_speed * 0.9
+            self.x += -self.face_y * orb * self._drone_orbit_dir
+            self.y += self.face_x * orb * self._drone_orbit_dir
+
+        # Cultist: channel mechanic — back away and charge up, then force-fire
+        if self.enemy_type == "cultist":
+            if not self._cultist_channeling:
+                if (dist < self.shoot_range
+                        and now - self._cultist_last_channel > self._cultist_channel_cooldown):
+                    self._cultist_channeling = True
+                    self._cultist_channel_start = now
+            if self._cultist_channeling:
+                elapsed_ch = now - self._cultist_channel_start
+                if elapsed_ch < 900 and dist > 0:
+                    # Slow backward creep while winding up
+                    self.x -= (dx / dist) * effective_speed * 0.4
+                    self.y -= (dy / dist) * effective_speed * 0.4
+                elif elapsed_ch >= 900:
+                    # Unleash: force-fire immediately
+                    self._cultist_channeling = False
+                    self._cultist_last_channel = now
+                    self.wants_to_shoot = True
+                    self.last_shoot_time = now
+
+        # Cyber zombie: occasional slow lunge when close
+        if self.enemy_type == "cyber_zombie":
+            if not self._zombie_lunging:
+                if dist < 150 and now - self._zombie_lunge_timer > 3500:
+                    self._zombie_lunging = True
+                    self._zombie_lunge_start = now
+            if self._zombie_lunging:
+                if now - self._zombie_lunge_start < 250 and dist > 0:
+                    self.x += (dx / dist) * effective_speed * 4.5
+                    self.y += (dy / dist) * effective_speed * 4.5
+                elif now - self._zombie_lunge_start >= 250:
+                    self._zombie_lunging = False
+                    self._zombie_lunge_timer = now
+
         # Rift walker: short-range teleport
         if self.enemy_type == "rift_walker" and dist < 250:
             if now - self._last_teleport > self._teleport_cooldown:
@@ -436,6 +593,21 @@ class Enemy:
                     self.x += self._charge_dx * 6.0 * speed_mult
                     self.y += self._charge_dy * 6.0 * speed_mult
             elif dist < 200 and now - self._last_charge > self._charge_cooldown:
+                self._charging = True
+                self._last_charge = now
+                if dist > 0:
+                    self._charge_dx = dx / dist
+                    self._charge_dy = dy / dist
+
+        # Mega Cyber Deer: powerful charge at player, covers ground fast
+        if self.enemy_type == "mega_cyber_deer":
+            if self._charging:
+                if now - self._last_charge > 650:
+                    self._charging = False
+                else:
+                    self.x += self._charge_dx * 8.0 * speed_mult
+                    self.y += self._charge_dy * 8.0 * speed_mult
+            elif dist < 350 and now - self._last_charge > 3000:
                 self._charging = True
                 self._last_charge = now
                 if dist > 0:
@@ -575,43 +747,53 @@ class Enemy:
             return
         sx = int(self.x - camera_x)
         sy = int(self.y - camera_y)
+        # Skip drawing entirely when off-screen (big perf win with many enemies)
+        margin = self.size + 32
+        if sx < -margin or sx > SCREEN_WIDTH + margin or sy < -margin or sy > SCREEN_HEIGHT + margin:
+            return
         now = pygame.time.get_ticks()
 
-        # Spawn-in scale animation
-        spawn_t = 1.0
+        # Spawn-in animation
         if self.spawn_time > 0:
             elapsed = now - self.spawn_time
             if elapsed < self.spawn_duration:
-                spawn_t = elapsed / self.spawn_duration
-                # Ease-out bounce
-                spawn_t = 1.0 - (1.0 - spawn_t) ** 2
+                spawn_t = 1.0 - (1.0 - elapsed / self.spawn_duration) ** 2
+                if self.is_boss:
+                    # Bosses: scale-in with temp surface (expensive, but rare)
+                    margin = 20
+                    w = self.size + margin * 2
+                    h = self.size + margin * 2 + 30
+                    if not hasattr(self, '_spawn_surf') or self._spawn_surf.get_size() != (w, h):
+                        self._spawn_surf = pygame.Surface((w, h), pygame.SRCALPHA)
+                    self._spawn_surf.fill((0, 0, 0, 0))
+                    self._draw_dispatch(self._spawn_surf, w // 2, h // 2, now)
+                    sw = max(1, int(w * spawn_t))
+                    sh = max(1, int(h * spawn_t))
+                    scaled = pygame.transform.scale(self._spawn_surf, (sw, sh))
+                    surface.blit(scaled, (sx - sw // 2, sy - sh // 2))
+                else:
+                    # Regular enemies: cheap blink-in (every other frame visible)
+                    if (now // 60) % 2 == 0 or spawn_t > 0.5:
+                        self._draw_dispatch(surface, sx, sy, now)
+                return
 
-        if spawn_t < 1.0:
-            # Draw scaled version using a temp surface
-            margin = 20
-            w = self.size + margin * 2
-            h = self.size + margin * 2 + 30  # extra for labels/bars
-            temp = pygame.Surface((w, h), pygame.SRCALPHA)
-            local_sx = w // 2
-            local_sy = h // 2
-            self._draw_dispatch(temp, local_sx, local_sy, now)
-            # Scale
-            sw = max(1, int(w * spawn_t))
-            sh = max(1, int(h * spawn_t))
-            scaled = pygame.transform.scale(temp, (sw, sh))
-            surface.blit(scaled, (sx - sw // 2, sy - sh // 2))
-        else:
-            self._draw_dispatch(surface, sx, sy, now)
+        self._draw_dispatch(surface, sx, sy, now)
 
     def _draw_dispatch(self, surface: pygame.Surface, sx: int, sy: int, now: int):
-        if self.enemy_type == "dalek":
-            self._draw_dalek(surface, sx, sy, now)
-        elif self.enemy_type == "wraith":
-            self._draw_wraith(surface, sx, sy, now)
+        if self.enemy_type == "cyber_rat":
+            self._draw_cyber_rat(surface, sx, sy, now)
+        elif self.enemy_type == "cyber_raccoon":
+            self._draw_cyber_raccoon(surface, sx, sy, now)
+        elif self.enemy_type == "mega_cyber_deer":
+            self._draw_mega_cyber_deer(surface, sx, sy, now)
+        elif self.enemy_type == "d_lek":
+            self._draw_d_lek(surface, sx, sy, now)
         elif self.enemy_type == "iron_sentinel":
             self._draw_mini_boss(surface, sx, sy, now)
-        elif self.enemy_type == "warlord_kron":
+        elif self.enemy_type == "supreme_d_lek":
             self._draw_big_boss(surface, sx, sy, now)
+        elif self.enemy_type == "emperors_elite_guard":
+            self._draw_emperors_elite_guard(surface, sx, sy, now)
         elif self.enemy_type == "charger":
             self._draw_charger(surface, sx, sy, now)
         elif self.enemy_type == "shielder":
@@ -629,11 +811,13 @@ class Enemy:
             self._draw_cultist(surface, sx, sy, now)
         elif self.enemy_type == "shambler":
             self._draw_shambler(surface, sx, sy, now)
-        elif self.enemy_type == "preacher":
+        elif self.enemy_type == "street_preacher":
             self._draw_preacher(surface, sx, sy, now)
         elif self.enemy_type == "eldritch_horror":
             self._draw_eldritch_horror(surface, sx, sy, now)
         # Zone 3
+        elif self.enemy_type == "specter":
+            self._draw_specter(surface, sx, sy, now)
         elif self.enemy_type == "void_wisp":
             self._draw_void_wisp(surface, sx, sy, now)
         elif self.enemy_type == "rift_walker":
@@ -679,13 +863,14 @@ class Enemy:
                 ring_r = int(max_ring * progress)
                 alpha = int(150 * (1.0 - progress))
                 if ring_r > 0 and alpha > 0:
-                    ring_surf = pygame.Surface((ring_r * 2 + 4, ring_r * 2 + 4), pygame.SRCALPHA)
-                    pygame.draw.circle(ring_surf, (255, 200, 50, alpha), (ring_r + 2, ring_r + 2), ring_r, 4)
+                    _mr2 = max_ring + 2
+                    ring_surf = self._get_surf(_mr2 * 2, _mr2 * 2)
+                    pygame.draw.circle(ring_surf, (255, 200, 50, alpha), (_mr2, _mr2), ring_r, 4)
                     # Inner warning fill during windup
                     if progress < 0.5:
                         fill_a = int(40 * (1.0 - progress * 2))
-                        pygame.draw.circle(ring_surf, (255, 200, 50, fill_a), (ring_r + 2, ring_r + 2), ring_r)
-                    surface.blit(ring_surf, (sx - ring_r - 2, sy - ring_r - 2))
+                        pygame.draw.circle(ring_surf, (255, 200, 50, fill_a), (_mr2, _mr2), ring_r)
+                    surface.blit(ring_surf, (sx - _mr2, sy - _mr2))
 
             elif self._special == "war_cry":
                 # Pulsing red expanding ring — buff aura
@@ -693,10 +878,11 @@ class Enemy:
                 pulse = 0.5 + 0.5 * math.sin(now * 0.015)
                 alpha = int(100 * pulse * (1.0 - progress))
                 if ring_r > 0 and alpha > 0:
-                    ring_surf = pygame.Surface((ring_r * 2 + 4, ring_r * 2 + 4), pygame.SRCALPHA)
-                    pygame.draw.circle(ring_surf, (255, 40, 40, alpha), (ring_r + 2, ring_r + 2), ring_r, 6)
-                    pygame.draw.circle(ring_surf, (255, 100, 60, alpha // 2), (ring_r + 2, ring_r + 2), ring_r)
-                    surface.blit(ring_surf, (sx - ring_r - 2, sy - ring_r - 2))
+                    _mr2 = max_ring + 2
+                    ring_surf = self._get_surf(_mr2 * 2, _mr2 * 2)
+                    pygame.draw.circle(ring_surf, (255, 40, 40, alpha), (_mr2, _mr2), ring_r, 6)
+                    pygame.draw.circle(ring_surf, (255, 100, 60, alpha // 2), (_mr2, _mr2), ring_r)
+                    surface.blit(ring_surf, (sx - _mr2, sy - _mr2))
 
             elif self._special == "flame_pillar":
                 # Targeting reticle at marked position, then fire eruption
@@ -705,7 +891,7 @@ class Enemy:
                     # Targeting phase: pulsing circle on ground
                     pulse = 0.5 + 0.5 * math.sin(now * 0.02)
                     a = int(80 * pulse * progress * 2)
-                    w_surf = pygame.Surface((warn_r * 2 + 4, warn_r * 2 + 4), pygame.SRCALPHA)
+                    w_surf = self._get_surf(warn_r * 2 + 4, warn_r * 2 + 4)
                     pygame.draw.circle(w_surf, (255, 100, 0, a), (warn_r + 2, warn_r + 2), warn_r, 2)
                     # Draw at target position relative to boss screen pos
                     # (target stored in world coords; convert to screen-relative offset)
@@ -716,7 +902,7 @@ class Enemy:
                     # Fire eruption
                     fire_p = (progress - 0.5) / 0.5
                     a = int(180 * (1.0 - fire_p))
-                    f_surf = pygame.Surface((warn_r * 2 + 4, warn_r * 2 + 4), pygame.SRCALPHA)
+                    f_surf = self._get_surf(warn_r * 2 + 4, warn_r * 2 + 4)
                     pygame.draw.circle(f_surf, (255, 80, 0, a), (warn_r + 2, warn_r + 2), warn_r)
                     pygame.draw.circle(f_surf, (255, 200, 50, a // 2), (warn_r + 2, warn_r + 2), warn_r // 2)
                     off_x = int(self._special_target_x - self.x)
@@ -728,8 +914,9 @@ class Enemy:
                 sweep_range = int(max_ring * progress)
                 alpha = int(130 * (1.0 - progress))
                 if sweep_range > 4 and alpha > 0:
-                    sweep_surf = pygame.Surface((sweep_range * 2 + 4, sweep_range * 2 + 4), pygame.SRCALPHA)
-                    cx_s, cy_s = sweep_range + 2, sweep_range + 2
+                    _mr2 = max_ring + 2
+                    sweep_surf = self._get_surf(_mr2 * 2, _mr2 * 2)
+                    cx_s, cy_s = _mr2, _mr2
                     # Draw 60-degree cone in sweep direction
                     spread = math.radians(30)
                     pts = [(cx_s, cy_s)]
@@ -740,7 +927,7 @@ class Enemy:
                     if len(pts) > 2:
                         pygame.draw.polygon(sweep_surf, (80, 200, 80, alpha), pts)
                         pygame.draw.polygon(sweep_surf, (120, 255, 120, alpha), pts, 2)
-                    surface.blit(sweep_surf, (sx - sweep_range - 2, sy - sweep_range - 2))
+                    surface.blit(sweep_surf, (sx - _mr2, sy - _mr2))
 
             elif self._special == "void_rift":
                 # Dark portal expanding at target position
@@ -749,7 +936,7 @@ class Enemy:
                 a = int((100 + 40 * pulse) * (1.0 - progress * 0.3))
                 off_x = int(self._special_target_x - self.x)
                 off_y = int(self._special_target_y - self.y)
-                v_surf = pygame.Surface((rift_r * 2 + 4, rift_r * 2 + 4), pygame.SRCALPHA)
+                v_surf = self._get_surf(rift_r * 2 + 4, rift_r * 2 + 4)
                 # Outer ring
                 pygame.draw.circle(v_surf, (120, 30, 255, a), (rift_r + 2, rift_r + 2), rift_r, 3)
                 # Inner dark fill
@@ -767,12 +954,219 @@ class Enemy:
                         ring_r = int(max_ring * burst_progress)
                         a = int(100 * (1.0 - burst_progress))
                         if ring_r > 0 and a > 0:
-                            r_surf = pygame.Surface((ring_r * 2 + 4, ring_r * 2 + 4), pygame.SRCALPHA)
-                            pygame.draw.circle(r_surf, (0, 180, 255, a), (ring_r + 2, ring_r + 2), ring_r, 3)
-                            surface.blit(r_surf, (sx - ring_r - 2, sy - ring_r - 2))
+                            _mr2 = max_ring + 2
+                            r_surf = self._get_surf(_mr2 * 2, _mr2 * 2)
+                            pygame.draw.circle(r_surf, (0, 180, 255, a), (_mr2, _mr2), ring_r, 3)
+                            surface.blit(r_surf, (sx - _mr2, sy - _mr2))
 
     # ═══════════════════════════════════════════ DALEK drawing
-    def _draw_dalek(self, surface, sx, sy, now):
+    # ═══════════════════════════════════════════ CYBER RAT drawing
+    def _draw_cyber_rat(self, surface, sx, sy, now):
+        is_hit = now - self.hit_flash < 100
+        half = self.size // 2
+        scurry = math.sin(now * 0.02 + self.anim_offset) * 1
+
+        # Small rounded body
+        body_color = (100, 90, 80) if not is_hit else (255, 255, 255)
+        pygame.draw.ellipse(surface, body_color,
+                            (sx - half, sy - half + scurry, self.size, int(self.size * 0.8)))
+        # Cyber plating on back
+        plate_color = (60, 140, 180) if not is_hit else (200, 240, 255)
+        pygame.draw.ellipse(surface, plate_color,
+                            (sx - half + 3, sy - half + scurry, self.size - 6, int(self.size * 0.4)))
+        # Red cybernetic LED eyes
+        eye_color = (255, 40, 40) if not is_hit else (255, 200, 200)
+        ex = sx + int(self.face_x * (half - 2))
+        ey = int(sy - 2 + scurry + self.face_y * 2)
+        pygame.draw.circle(surface, eye_color, (ex - 2, ey), 2)
+        pygame.draw.circle(surface, eye_color, (ex + 2, ey), 2)
+        # Metal teeth/snout
+        snout_x = sx + int(self.face_x * half)
+        snout_y = int(sy + scurry + self.face_y * half * 0.7)
+        pygame.draw.polygon(surface, (180, 180, 190) if not is_hit else (255, 255, 255), [
+            (snout_x - 2, snout_y), (snout_x + 2, snout_y),
+            (snout_x, snout_y + 3),
+        ])
+        # Wiry tail
+        tail_x = sx - int(self.face_x * half)
+        tail_y = int(sy + scurry - self.face_y * half * 0.3)
+        tail_end_x = tail_x - int(self.face_x * 8) + int(math.sin(now * 0.01) * 4)
+        tail_end_y = tail_y - int(self.face_y * 4) + int(math.cos(now * 0.01) * 3)
+        pygame.draw.line(surface, (80, 70, 60) if not is_hit else (200, 200, 200),
+                         (tail_x, tail_y), (tail_end_x, tail_end_y), 1)
+
+    # ═══════════════════════════════════════════ CYBER RACCOON drawing
+    def _draw_cyber_raccoon(self, surface, sx, sy, now):
+        is_hit = now - self.hit_flash < 100
+        half = self.size // 2
+        pad = math.sin(now * 0.006 + self.anim_offset) * 2
+
+        # Stocky body
+        body_color = (110, 105, 100) if not is_hit else (255, 255, 255)
+        pygame.draw.ellipse(surface, body_color,
+                            (sx - half, sy - half + pad, self.size, self.size))
+        # Cyber armor straps on back
+        plate_color = (50, 160, 200) if not is_hit else (200, 240, 255)
+        for offset in (-4, 4):
+            pygame.draw.line(surface, plate_color,
+                             (sx + offset, int(sy - half + 3 + pad)),
+                             (sx + offset, int(sy + pad)), 2)
+        # Dark eye mask (raccoon marking)
+        mask_color = (40, 35, 35) if not is_hit else (200, 200, 200)
+        pygame.draw.ellipse(surface, mask_color,
+                            (sx - half + 3, int(sy - 8 + pad), self.size - 6, 10))
+        # Glowing eyes through mask
+        eye_color = (255, 160, 40) if not is_hit else (255, 220, 180)
+        pygame.draw.circle(surface, eye_color, (sx - 4, int(sy - 4 + pad)), 3)
+        pygame.draw.circle(surface, eye_color, (sx + 4, int(sy - 4 + pad)), 3)
+        pygame.draw.circle(surface, (0, 0, 0), (sx - 4, int(sy - 4 + pad)), 1)
+        pygame.draw.circle(surface, (0, 0, 0), (sx + 4, int(sy - 4 + pad)), 1)
+        # Ringed tail
+        tail_x = sx - int(self.face_x * half)
+        tail_y = int(sy + pad)
+        for ring in range(3):
+            ring_r = 3 - ring
+            ring_off = ring * 5
+            tx = tail_x - int(self.face_x * ring_off)
+            ty = tail_y - int(self.face_y * ring_off)
+            ring_color = (160, 150, 140) if ring % 2 == 0 else (60, 55, 50)
+            if is_hit:
+                ring_color = (255, 255, 255)
+            pygame.draw.circle(surface, ring_color, (tx, ty), ring_r)
+
+    # ═══════════════════════════════════════════ MEGA CYBER DEER drawing
+    def _draw_mega_cyber_deer(self, surface, sx, sy, now):
+        is_hit = now - self.hit_flash < 100
+        half = self.size // 2
+        bob = math.sin(now * 0.003 + self.anim_offset) * 3
+
+        # Charge glow effect when charging
+        if self._charging:
+            charge_t = min(1.0, (now - self._last_charge) / 200.0)
+            glow_r = int(half * 1.2 + 10 * charge_t)
+            glow_s = self._get_surf(glow_r * 2 + 4, glow_r * 2 + 4)
+            alpha = int(80 * charge_t)
+            pygame.draw.circle(glow_s, (255, 140, 20, alpha),
+                               (glow_r + 2, glow_r + 2), glow_r)
+            surface.blit(glow_s, (sx - glow_r - 2, sy - glow_r - 2))
+
+        # Large body — powerful haunched silhouette
+        body_color = (70, 60, 50) if not is_hit else (255, 255, 255)
+        pygame.draw.ellipse(surface, body_color,
+                            (sx - half, sy - half // 2 + bob, self.size, int(self.size * 0.75)))
+        # Neck and head
+        neck_color = (80, 70, 58) if not is_hit else (255, 255, 255)
+        head_x = sx + int(self.face_x * (half - 4))
+        head_y = int(sy - half // 3 + bob + self.face_y * (half // 2))
+        pygame.draw.circle(surface, neck_color, (head_x, head_y), half // 3 + 2)
+        # Cyber implant on forehead
+        impl_color = (60, 180, 220) if not is_hit else (200, 240, 255)
+        pygame.draw.rect(surface, impl_color,
+                         (head_x - 5, head_y - 4, 10, 5))
+        # Pulsing eye
+        eye_color = (255, 80, 20) if not is_hit else (255, 200, 180)
+        pulse = int(200 + 55 * math.sin(now * 0.007))
+        if not is_hit:
+            eye_color = (255, pulse // 3, 20)
+        pygame.draw.circle(surface, eye_color, (head_x, head_y - 2), 4)
+        pygame.draw.circle(surface, (0, 0, 0), (head_x, head_y - 2), 2)
+
+        # Antlers (procedural branching)
+        antler_color = (120, 100, 70) if not is_hit else (255, 255, 255)
+        cyber_color = (60, 200, 240) if not is_hit else (200, 255, 255)
+        for side in (-1, 1):
+            ax = head_x + side * (half // 4)
+            ay = head_y - 4
+            # Main antler stalk
+            top_x = ax + side * 8
+            top_y = ay - int(half * 0.6)
+            pygame.draw.line(surface, antler_color, (ax, ay), (top_x, top_y), 3)
+            # Branch 1
+            br1x = top_x + side * 6
+            br1y = top_y + 6
+            pygame.draw.line(surface, antler_color, (top_x, top_y), (br1x, br1y), 2)
+            # Branch 2 (cyber-glow tip)
+            br2x = top_x - side * 4
+            br2y = top_y - 5
+            pygame.draw.line(surface, antler_color, (top_x, top_y), (br2x, br2y), 2)
+            # Cyber glow tips
+            pygame.draw.circle(surface, cyber_color, (br1x, br1y), 2)
+            pygame.draw.circle(surface, cyber_color, (br2x, br2y), 2)
+
+        # Mechanical legs
+        leg_color = (90, 85, 78) if not is_hit else (220, 220, 220)
+        joint_color = (60, 180, 220)
+        for lx_off in (-half // 2, 0, half // 2):
+            leg_base_y = int(sy + half // 2 + bob)
+            stomp = abs(math.sin(now * 0.008 + lx_off * 0.1 + self.anim_offset)) * 4
+            foot_y = leg_base_y + 8 + int(stomp)
+            pygame.draw.line(surface, leg_color,
+                             (sx + lx_off, leg_base_y), (sx + lx_off, foot_y), 3)
+            pygame.draw.circle(surface, joint_color, (sx + lx_off, leg_base_y + 4), 3)
+            pygame.draw.circle(surface, (60, 50, 40), (sx + lx_off, foot_y), 3)
+
+        # ELITE label
+        label = get_font("consolas", 10, True).render("SUB-BOSS", True, (255, 140, 20))
+        surface.blit(label, (sx - label.get_width() // 2, sy - half - 22))
+
+    # ═══════════════════════════════════════════ EMPEROR'S ELITE GUARD drawing
+    def _draw_emperors_elite_guard(self, surface, sx, sy, now):
+        """Black-armored elite D-Lek guard — obsidian hull with red eye."""
+        bob = math.sin(now * 0.004 + self.anim_offset) * 2
+        is_hit = now - self.hit_flash < 100
+        half = self.size // 2
+
+        skirt_color = (255, 255, 255) if is_hit else (18, 14, 18)
+        skirt_pts = [
+            (sx - half - 4, sy + half + bob),
+            (sx + half + 4, sy + half + bob),
+            (sx + half - 2, sy + 4 + bob),
+            (sx - half + 2, sy + 4 + bob),
+        ]
+        pygame.draw.polygon(surface, skirt_color, skirt_pts)
+        pygame.draw.polygon(surface, (80, 20, 20), skirt_pts, 1)
+        # Bump nodes — dark red
+        for i in range(-1, 2):
+            bx = sx + i * 10
+            by = int(sy + half * 0.6 + bob)
+            pygame.draw.circle(surface, (100, 20, 20) if not is_hit else (255, 255, 255), (bx, by), 4)
+            pygame.draw.circle(surface, (180, 40, 40), (bx, by), 4, 1)
+
+        body_color = (255, 255, 255) if is_hit else (22, 18, 22)
+        pygame.draw.rect(surface, body_color,
+                         pygame.Rect(sx - half + 2, sy - 6 + bob, self.size - 4, 14))
+        pygame.draw.rect(surface, (80, 20, 20),
+                         pygame.Rect(sx - half + 2, sy - 6 + bob, self.size - 4, 14), 1)
+
+        # Gun barrel — red tipped
+        gun_len = 18
+        gun_ex = sx + int(self.face_x * gun_len)
+        gun_ey = int(sy - 2 + bob + self.face_y * gun_len)
+        gun_color = (255, 80, 80) if now - self.gun_flash_timer < 150 else (80, 30, 30)
+        pygame.draw.line(surface, gun_color, (sx, int(sy - 2 + bob)), (gun_ex, gun_ey), 3)
+        if now - self.gun_flash_timer < 150:
+            pygame.draw.circle(surface, (255, 60, 60), (gun_ex, gun_ey), 5)
+
+        dome_color = (255, 255, 255) if is_hit else (30, 22, 30)
+        pygame.draw.ellipse(surface, dome_color,
+                            (sx - half + 6, sy - half + 2 + bob, self.size - 12, 14))
+        pygame.draw.ellipse(surface, (80, 20, 20),
+                            (sx - half + 6, sy - half + 2 + bob, self.size - 12, 14), 1)
+
+        # Eye — menacing red
+        eye_len = 12
+        eye_ex = sx + int(self.face_x * eye_len)
+        eye_ey = int(sy - half + 8 + bob + self.face_y * eye_len * 0.3)
+        pygame.draw.line(surface, (50, 10, 10),
+                         (sx, int(sy - half + 8 + bob)), (eye_ex, eye_ey), 2)
+        glow_r = 4 if now - self.gun_flash_timer < 150 else 3
+        eye_glow = self._get_surf(glow_r * 2 + 2, glow_r * 2 + 2)
+        pygame.draw.circle(eye_glow, (255, 20, 20, 160), (glow_r + 1, glow_r + 1), glow_r)
+        surface.blit(eye_glow, (eye_ex - glow_r - 1, eye_ey - glow_r - 1))
+        pygame.draw.circle(surface, (255, 60, 60), (eye_ex, eye_ey), 2)
+
+    # ═══════════════════════════════════════════ D-LEK drawing
+    def _draw_d_lek(self, surface, sx, sy, now):
         bob = math.sin(now * 0.004 + self.anim_offset) * 2
         is_hit = now - self.hit_flash < 100
         half = self.size // 2
@@ -813,54 +1207,56 @@ class Enemy:
                          (sx, int(sy - half + 8 + bob)), (eye_ex, eye_ey), 2)
         pygame.draw.circle(surface, ENEMY_EYE_COLOR, (eye_ex, eye_ey), 3)
 
-    # ═══════════════════════════════════════════ WRAITH drawing
-    def _draw_wraith(self, surface, sx, sy, now):
+    # ═══════════════════════════════════════════ SPECTER drawing (Zone 3)
+    def _draw_specter(self, surface, sx, sy, now):
         is_hit = now - self.hit_flash < 100
         half = self.size // 2
-        # Wraith — ghostly floating entity with wispy cloak
-        hover = math.sin(now * 0.005 + self.anim_offset) * 4
+        # Specter — void-touched phantom, eerier than a wraith
+        hover = math.sin(now * 0.005 + self.anim_offset) * 5
 
-        # Wispy cloak bottom
-        cloak_color = (60, 20, 80) if not is_hit else (255, 255, 255)
-        for i in range(3):
-            wave = math.sin(now * 0.004 + i * 1.5 + self.anim_offset) * 4
+        # Wispy cloak bottom — void tendrils
+        cloak_color = (20, 10, 50) if not is_hit else (255, 255, 255)
+        for i in range(4):
+            wave = math.sin(now * 0.005 + i * 1.2 + self.anim_offset) * 5
             pts = [
-                (sx - half + i * 5 + wave, sy + half + hover),
-                (sx - half + i * 5 + 8 + wave, sy + half + 6 + hover),
-                (sx - half + i * 5 + 4 + wave, sy + half + 10 + hover),
+                (sx - half + i * 4 + wave, sy + half + hover),
+                (sx - half + i * 4 + 7 + wave, sy + half + 8 + hover),
+                (sx - half + i * 4 + 3 + wave, sy + half + 13 + hover),
             ]
             pygame.draw.polygon(surface, cloak_color, pts)
 
-        # Main body — elongated dark shape
-        body_color = (80, 30, 120) if not is_hit else (255, 255, 255)
+        # Main body — deep void shade
+        body_color = (40, 20, 80) if not is_hit else (255, 255, 255)
         pygame.draw.ellipse(surface, body_color,
-                            (sx - half, sy - half + hover, self.size, self.size + 6))
-        # Inner glow
-        glow_surf = pygame.Surface((self.size - 8, self.size - 4), pygame.SRCALPHA)
-        pygame.draw.ellipse(glow_surf, (120, 50, 180, 80),
-                            (0, 0, self.size - 8, self.size - 4))
-        surface.blit(glow_surf, (sx - half + 4, sy - half + 2 + hover))
+                            (sx - half, sy - half + hover, self.size, self.size + 8))
+        # Inner void glow
+        glow_surf = self._get_surf(self.size - 6, self.size - 4)
+        pygame.draw.ellipse(glow_surf, (80, 40, 160, 100),
+                            (0, 0, self.size - 6, self.size - 4))
+        surface.blit(glow_surf, (sx - half + 3, sy - half + 2 + hover))
 
-        # Eyes — two glowing orbs
-        eye_color = (180, 255, 100) if not is_hit else (255, 255, 200)
-        pygame.draw.circle(surface, eye_color,
-                           (sx - 5, int(sy - 4 + hover)), 4)
-        pygame.draw.circle(surface, eye_color,
-                           (sx + 5, int(sy - 4 + hover)), 4)
+        # Eyes — icy teal orbs
+        eye_color = (120, 220, 255) if not is_hit else (200, 240, 255)
+        pygame.draw.circle(surface, eye_color, (sx - 6, int(sy - 5 + hover)), 5)
+        pygame.draw.circle(surface, eye_color, (sx + 6, int(sy - 5 + hover)), 5)
         # Pupils
         pygame.draw.circle(surface, (0, 0, 0),
-                           (sx - 5 + int(self.face_x * 2), int(sy - 4 + hover + self.face_y * 2)), 2)
+                           (sx - 6 + int(self.face_x * 2), int(sy - 5 + hover + self.face_y * 2)), 2)
         pygame.draw.circle(surface, (0, 0, 0),
-                           (sx + 5 + int(self.face_x * 2), int(sy - 4 + hover + self.face_y * 2)), 2)
+                           (sx + 6 + int(self.face_x * 2), int(sy - 5 + hover + self.face_y * 2)), 2)
+        # Void energy sigil (small cross on chest)
+        sig_y = int(sy + 4 + hover)
+        pygame.draw.line(surface, (140, 80, 220), (sx - 5, sig_y), (sx + 5, sig_y), 2)
+        pygame.draw.line(surface, (140, 80, 220), (sx, sig_y - 5), (sx, sig_y + 5), 2)
 
-        # Poison trail particles
+        # Void trail particles
         for i in range(2):
-            trail_x = sx - int(self.face_x * (15 + i * 10))
-            trail_y = sy - int(self.face_y * (15 + i * 10)) + int(hover)
+            trail_x = sx - int(self.face_x * (18 + i * 12))
+            trail_y = sy - int(self.face_y * (18 + i * 12)) + int(hover)
             alpha = 100 - i * 40
-            s = pygame.Surface((6, 6), pygame.SRCALPHA)
-            pygame.draw.circle(s, (80, 200, 60, max(0, alpha)), (3, 3), 3)
-            surface.blit(s, (trail_x - 3, trail_y - 3))
+            s = self._get_surf(8, 8)
+            pygame.draw.circle(s, (80, 120, 220, max(0, alpha)), (4, 4), 4)
+            surface.blit(s, (trail_x - 4, trail_y - 4))
 
     # ═══════════════════════════════════════════ MINI BOSS drawing
     def _draw_mini_boss(self, surface, sx, sy, now):
@@ -927,73 +1323,176 @@ class Enemy:
 
     # ═══════════════════════════════════════════ BIG BOSS drawing
     def _draw_big_boss(self, surface, sx, sy, now):
+        """D-Lek Emperor — gold/bronze imperial Dalek design with glowing core."""
         is_hit = now - self.hit_flash < 100
         half = self.size // 2
-        bob = math.sin(now * 0.002 + self.anim_offset) * 4
+        bob = int(math.sin(now * 0.002 + self.anim_offset) * 4)
         pulse = 0.7 + 0.3 * math.sin(now * 0.004)
+        pulse2 = 0.5 + 0.5 * math.sin(now * 0.007 + 1.2)
 
-        # Massive armored body — dark red with pulsing energy
-        # Base
-        base_color = (120, 20, 20) if not is_hit else (255, 255, 255)
-        skirt_pts = [
-            (sx - half - 8, sy + half + bob),
-            (sx + half + 8, sy + half + bob),
-            (sx + half, sy + bob),
-            (sx - half, sy + bob),
-        ]
-        pygame.draw.polygon(surface, base_color, skirt_pts)
+        gold  = (255, 255, 255) if is_hit else (180, 140, 40)
+        gold2 = (255, 255, 255) if is_hit else (220, 180, 60)
+        dark  = (255, 255, 255) if is_hit else (80, 58, 14)
 
-        # Core body
-        body_color = (160, 30, 30) if not is_hit else (255, 255, 255)
-        pygame.draw.rect(surface, body_color,
-                         (sx - half + 4, sy - 16 + bob, self.size - 8, 28))
-        # Energy veins
-        vein_alpha = int(100 + 80 * pulse)
-        vein_surf = pygame.Surface((self.size - 8, 28), pygame.SRCALPHA)
-        for i in range(3):
-            vy = 4 + i * 9
-            pygame.draw.line(vein_surf, (255, 60, 20, vein_alpha),
-                             (2, vy), (self.size - 10, vy), 2)
-        surface.blit(vein_surf, (sx - half + 4, sy - 16 + bob))
+        # ── Pulsing outer aura ────────────────────────────────────────────────
+        aura_r = int(half + 20 + 8 * pulse)
+        _max_ar = half + 30
+        aura_surf = self._get_surf(_max_ar * 2, _max_ar * 2)
+        pygame.draw.circle(aura_surf, (80, 200, 255, int(20 * pulse2)),
+                           (_max_ar, _max_ar), aura_r)
+        surface.blit(aura_surf, (sx - _max_ar, sy + bob - _max_ar))
 
-        # Shoulder cannons
+        # ── Wide lower skirt ──────────────────────────────────────────────────
+        skirt_top = sy + 10 + bob
+        skirt_bot = sy + half + 14 + bob
+        skirt_left  = sx - half - 18
+        skirt_right = sx + half + 18
+        pygame.draw.polygon(surface, dark, [
+            (skirt_left,  skirt_bot),
+            (skirt_right, skirt_bot),
+            (sx + half + 4, skirt_top),
+            (sx - half - 4, skirt_top),
+        ])
+        pygame.draw.polygon(surface, gold, [
+            (skirt_left,  skirt_bot),
+            (skirt_right, skirt_bot),
+            (sx + half + 4, skirt_top),
+            (sx - half - 4, skirt_top),
+        ], 2)
+
+        # Bumps on skirt — 2 rows
+        bump_r = 5
+        for row, row_y in enumerate((skirt_top + 10, skirt_top + 22)):
+            count = 7 - row
+            for i in range(count):
+                bx = int(skirt_left + 14 + (row * 6) + i * (skirt_right - skirt_left - 28 - row * 12) / (count - 1))
+                by = int(row_y + bob)
+                pygame.draw.circle(surface, gold2, (bx, by), bump_r)
+                pygame.draw.circle(surface, dark, (bx, by), bump_r, 1)
+                pygame.draw.circle(surface, (255, 230, 120), (bx - 1, by - 1), 2)
+
+        # ── Mid body ─────────────────────────────────────────────────────────
+        mid_top = sy - 14 + bob
+        mid_bot = skirt_top
+        pygame.draw.rect(surface, dark,
+                         (sx - half + 2, mid_top, self.size - 4, mid_bot - mid_top))
+        pygame.draw.rect(surface, gold,
+                         (sx - half + 2, mid_top, self.size - 4, mid_bot - mid_top), 2)
+
+        # Horizontal band details
+        for band in range(3):
+            by = mid_top + 4 + band * ((mid_bot - mid_top - 8) // 3)
+            pygame.draw.line(surface, gold, (sx - half + 4, by), (sx + half - 4, by), 1)
+
+        # ── Transparent core viewport (cylindrical chamber) ──────────────────
+        vp_w, vp_h = 26, int(mid_bot - mid_top - 4)
+        if vp_h > 0:
+            vp_surf = pygame.Surface((vp_w, vp_h), pygame.SRCALPHA)
+            vp_surf.fill((0, 0, 0, 0))
+            # Dark chamber background
+            pygame.draw.rect(vp_surf, (10, 20, 40, 180), (0, 0, vp_w, vp_h), border_radius=4)
+            # Glowing blue energy column
+            col_alpha = int(140 + 80 * pulse2)
+            for cx_off in range(vp_w // 2 - 4, vp_w // 2 + 5, 4):
+                pygame.draw.line(vp_surf, (40, 160, 255, col_alpha),
+                                 (cx_off, 2), (cx_off, vp_h - 2), 2)
+            # Pulsing core orb
+            orb_r = int(6 + 3 * pulse)
+            orb_y = vp_h // 2
+            pygame.draw.circle(vp_surf, (100, 200, 255, 200), (vp_w // 2, orb_y), orb_r)
+            pygame.draw.circle(vp_surf, (200, 240, 255, 255), (vp_w // 2, orb_y), max(1, orb_r - 3))
+            # Mechanical claw grip lines
+            for ci in range(3):
+                cly = 4 + ci * (vp_h // 4)
+                pygame.draw.line(vp_surf, (60, 100, 200, 180),
+                                 (0, cly), (vp_w, cly), 1)
+            # Rim
+            pygame.draw.rect(vp_surf, (120, 180, 255, 200), (0, 0, vp_w, vp_h), 1, border_radius=4)
+            surface.blit(vp_surf, (sx - vp_w // 2, mid_top + 2))
+
+        # ── Large mechanical arms / claws ─────────────────────────────────────
         for side in (-1, 1):
-            cannon_x = sx + side * (half + 4)
-            cannon_y = int(sy - 10 + bob)
-            pygame.draw.rect(surface, (100, 15, 15),
-                             (cannon_x - 5, cannon_y - 4, 10, 16))
-            pygame.draw.rect(surface, (200, 50, 50),
-                             (cannon_x - 5, cannon_y - 4, 10, 16), 1)
-            # Barrel
-            gun_ex = cannon_x + int(self.face_x * 20)
-            gun_ey = int(cannon_y + self.face_y * 20)
-            pygame.draw.line(surface, (200, 80, 40),
-                             (cannon_x, cannon_y), (gun_ex, gun_ey), 4)
-            if now - self.gun_flash_timer < 200:
-                pygame.draw.circle(surface, (255, 100, 20), (gun_ex, gun_ey), 8)
+            arm_root_x = sx + side * (half + 2)
+            arm_root_y = sy - 4 + bob
+            # Upper arm — angled outward and up
+            arm_elbow_x = arm_root_x + side * 22
+            arm_elbow_y = arm_root_y - 10
+            pygame.draw.line(surface, gold, (arm_root_x, arm_root_y),
+                             (arm_elbow_x, arm_elbow_y), 7)
+            pygame.draw.line(surface, dark, (arm_root_x, arm_root_y),
+                             (arm_elbow_x, arm_elbow_y), 2)
+            # Lower arm — angled forward (toward facing direction)
+            claw_x = arm_elbow_x + side * 14 + int(self.face_x * 14)
+            claw_y = arm_elbow_y + 12 + int(self.face_y * 10)
+            pygame.draw.line(surface, gold, (arm_elbow_x, arm_elbow_y),
+                             (claw_x, claw_y), 5)
+            # Elbow joint
+            pygame.draw.circle(surface, gold2, (arm_elbow_x, arm_elbow_y), 5)
+            pygame.draw.circle(surface, dark, (arm_elbow_x, arm_elbow_y), 5, 1)
+            # Three-fingered claw
+            for fi, fa in enumerate((-0.35, 0.0, 0.35)):
+                fangle = math.atan2(claw_y - arm_elbow_y, claw_x - arm_elbow_x) + fa
+                fx = claw_x + int(math.cos(fangle) * 10)
+                fy = claw_y + int(math.sin(fangle) * 10)
+                pygame.draw.line(surface, gold2, (claw_x, claw_y), (fx, fy), 3)
+            # Gun flash on claw tip when firing
+            if now - self.gun_flash_timer < 180:
+                glow_surf = self._get_surf(20, 20)
+                pygame.draw.circle(glow_surf, (255, 220, 80, 200), (10, 10), 8)
+                surface.blit(glow_surf, (claw_x - 10, claw_y - 10))
 
-        # Dome / Head
-        dome_color = (180, 40, 40) if not is_hit else (255, 255, 255)
-        pygame.draw.ellipse(surface, dome_color,
-                            (sx - 20, sy - half + 4 + bob, 40, 22))
-        # Crown
-        for i in range(-2, 3):
-            pygame.draw.line(surface, (255, 50, 20),
-                             (sx + i * 8, int(sy - half + 4 + bob)),
-                             (sx + i * 8, int(sy - half - 10 + bob)), 3)
+        # ── Upper body collar ─────────────────────────────────────────────────
+        collar_y = mid_top
+        pygame.draw.ellipse(surface, gold,
+                            (sx - half + 2, collar_y - 4, self.size - 4, 14))
+        pygame.draw.ellipse(surface, gold2,
+                            (sx - half + 2, collar_y - 4, self.size - 4, 14), 2)
+        # Collar studs
+        for i in range(5):
+            cx2 = sx - half + 10 + i * ((self.size - 20) // 4)
+            pygame.draw.circle(surface, dark, (cx2, collar_y + 2), 3)
+            pygame.draw.circle(surface, gold2, (cx2, collar_y + 2), 3, 1)
 
-        # Eye — large, menacing
-        eye_ex = sx + int(self.face_x * 18)
-        eye_ey = int(sy - half + 14 + bob + self.face_y * 4)
-        pygame.draw.circle(surface, (255, 0, 0), (eye_ex, eye_ey), 7)
-        pygame.draw.circle(surface, (255, 200, 100), (eye_ex, eye_ey), 4)
+        # ── Grand dome head ───────────────────────────────────────────────────
+        head_cy = sy - half + 2 + bob
+        dome_r = 20
+        pygame.draw.ellipse(surface, gold,
+                            (sx - dome_r, head_cy - dome_r + 4, dome_r * 2, dome_r + 10))
+        pygame.draw.ellipse(surface, gold2,
+                            (sx - dome_r, head_cy - dome_r + 4, dome_r * 2, dome_r + 10), 2)
 
-        # Pulsing aura
-        aura_r = int(half + 10 + 6 * math.sin(now * 0.005))
-        aura_surf = pygame.Surface((aura_r * 2, aura_r * 2), pygame.SRCALPHA)
-        pygame.draw.circle(aura_surf, (255, 30, 0, int(30 * pulse)),
-                           (aura_r, aura_r), aura_r)
-        surface.blit(aura_surf, (sx - aura_r, int(sy + bob) - aura_r))
+        # Crown spines — imperial ring of rods
+        for i in range(8):
+            angle = (i / 8) * math.tau
+            spine_base_x = sx + int(math.cos(angle) * (dome_r - 4))
+            spine_base_y = head_cy + int(math.sin(angle) * 6)
+            spine_tip_x  = sx + int(math.cos(angle) * (dome_r + 8))
+            spine_tip_y  = head_cy - 10 + int(math.sin(angle) * 4)
+            pygame.draw.line(surface, gold2,
+                             (spine_base_x, spine_base_y),
+                             (spine_tip_x,  spine_tip_y), 2)
+            pygame.draw.circle(surface, (255, 220, 60), (spine_tip_x, spine_tip_y), 2)
+
+        # Blue glowing dome eye — tracked toward player
+        eye_dist = dome_r - 6
+        eye_x = sx + int(self.face_x * eye_dist)
+        eye_y = head_cy + int(self.face_y * (eye_dist // 2))
+        eye_glow_r = int(8 + 4 * pulse)
+        eye_asurf = self._get_surf(eye_glow_r * 2 + 2, eye_glow_r * 2 + 2)
+        pygame.draw.circle(eye_asurf, (40, 160, 255, int(80 * pulse2)),
+                           (eye_glow_r + 1, eye_glow_r + 1), eye_glow_r)
+        surface.blit(eye_asurf, (eye_x - eye_glow_r - 1, eye_y - eye_glow_r - 1))
+        pygame.draw.circle(surface, (100, 200, 255), (eye_x, eye_y), 6)
+        pygame.draw.circle(surface, (200, 240, 255), (eye_x, eye_y), 3)
+        pygame.draw.circle(surface, (255, 255, 255), (eye_x, eye_y), 1)
+
+        # Eye stalk
+        eye_stalk_base_x = sx
+        eye_stalk_base_y = head_cy + 4
+        pygame.draw.line(surface, dark,
+                         (eye_stalk_base_x, eye_stalk_base_y), (eye_x, eye_y), 3)
+        pygame.draw.line(surface, gold,
+                         (eye_stalk_base_x, eye_stalk_base_y), (eye_x, eye_y), 1)
 
         # "BOSS" label
         label = get_font("consolas", 12, True).render("BOSS", True, (255, 60, 60))
@@ -1021,16 +1520,14 @@ class Enemy:
         # Charge trail
         if self._charging:
             body_color = (255, 100, 50) if not is_hit else (255, 255, 255)
-            # Motion blur trail
+            # Motion blur trail — premultiplied direct draw (no SRCALPHA allocation)
             for i in range(3):
                 t = (i + 1) * 6
                 trail_pts = [(px - int(self._charge_dx * t), py - int(self._charge_dy * t))
                              for px, py in pts]
-                ts = pygame.Surface((self.size * 3, self.size * 3), pygame.SRCALPHA)
-                offset = self.size * 3 // 2
-                shifted = [(px - sx + offset, py - sy + offset) for px, py in trail_pts]
-                pygame.draw.polygon(ts, (255, 100, 50, 60 - i * 20), shifted)
-                surface.blit(ts, (sx - offset, sy - offset))
+                alpha = 60 - i * 20
+                pm_col = (255 * alpha // 255, 100 * alpha // 255, 50 * alpha // 255)
+                pygame.draw.polygon(surface, pm_col, trail_pts)
         else:
             body_color = (220, 60, 30) if not is_hit else (255, 255, 255)
 
@@ -1078,9 +1575,9 @@ class Enemy:
                 shield_cy + int(math.sin(a) * (half + 3))
             ))
         if len(arc_points) >= 2:
-            shield_s = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
-            pygame.draw.lines(shield_s, (100, 180, 255, shield_pulse), False, arc_points, 4)
-            surface.blit(shield_s, (0, 0))
+            sf = shield_pulse / 255
+            sc = (int(100 * sf), int(180 * sf), min(255, shield_pulse))
+            pygame.draw.lines(surface, sc, False, arc_points, 4)
 
         # Eyes
         eye_color = (100, 200, 255) if not is_hit else (255, 255, 200)
@@ -1221,7 +1718,7 @@ class Enemy:
         eye_color = (255, 20, 20) if not is_hit else (255, 255, 200)
         eye_glow_a = int(180 + 75 * math.sin(now * 0.008))
         # Eye glow
-        glow_s = pygame.Surface((12, 8), pygame.SRCALPHA)
+        glow_s = self._get_surf(12, 8)
         pygame.draw.circle(glow_s, (*eye_color[:2], 0, eye_glow_a), (4, 4), 4)
         pygame.draw.circle(glow_s, (*eye_color[:2], 0, eye_glow_a), (8, 4), 4)
         surface.blit(glow_s, (ex - 6, ey - 4))
@@ -1263,7 +1760,7 @@ class Enemy:
         hover = math.sin(now * 0.006 + self.anim_offset) * 5
 
         # Shadow on ground
-        shadow_surf = pygame.Surface((self.size + 4, 8), pygame.SRCALPHA)
+        shadow_surf = self._get_surf(self.size + 4, 8)
         pygame.draw.ellipse(shadow_surf, (0, 0, 0, 60), (0, 0, self.size + 4, 8))
         surface.blit(shadow_surf, (sx - half - 2, sy + 10))
         # Main disc body (hovering)
@@ -1319,7 +1816,7 @@ class Enemy:
         for side in (-1, 1):
             hx = sx + side * (half - 2)
             hy = int(sy + 6 + bob)
-            glow_s = pygame.Surface((10, 10), pygame.SRCALPHA)
+            glow_s = self._get_surf(10, 10)
             pygame.draw.circle(glow_s, (180, 80, 255, 120), (5, 5), 5)
             surface.blit(glow_s, (hx - 5, hy - 5))
         # Gun flash
@@ -1387,7 +1884,7 @@ class Enemy:
         pygame.draw.circle(surface, hood_color, (sx, int(sy - 14 + bob)), half // 2 + 4)
         # Glowing halo
         halo_pulse = int(140 + 60 * math.sin(now * 0.005))
-        halo_s = pygame.Surface((half * 2, half), pygame.SRCALPHA)
+        halo_s = self._get_surf(half * 2, half)
         pygame.draw.ellipse(halo_s, (220, 180, 50, halo_pulse),
                             (0, 0, half * 2, half // 2))
         surface.blit(halo_s, (sx - half, int(sy - half - 6 + bob)))
@@ -1427,7 +1924,7 @@ class Enemy:
                 pygame.draw.line(surface, tent_color, (prev_x, prev_y), (tx, ty), width)
                 prev_x, prev_y = tx, ty
             # Tip glow
-            gs = pygame.Surface((8, 8), pygame.SRCALPHA)
+            gs = self._get_surf(8, 8)
             pygame.draw.circle(gs, (140, 80, 200, 120), (4, 4), 4)
             surface.blit(gs, (prev_x - 4, prev_y - 4))
 
@@ -1437,9 +1934,10 @@ class Enemy:
                             (sx - half + 8, sy - half + 8, self.size - 16, self.size - 16))
         # Inner pulsing glow
         glow_r = int((half - 12) * pulse)
-        glow_s = pygame.Surface((glow_r * 2, glow_r * 2), pygame.SRCALPHA)
-        pygame.draw.circle(glow_s, (100, 40, 140, int(80 * pulse)), (glow_r, glow_r), glow_r)
-        surface.blit(glow_s, (sx - glow_r, sy - glow_r))
+        _gmax = half - 12
+        glow_s = self._get_surf(_gmax * 2, _gmax * 2)
+        pygame.draw.circle(glow_s, (100, 40, 140, int(80 * pulse)), (_gmax, _gmax), glow_r)
+        surface.blit(glow_s, (sx - _gmax, sy - _gmax))
 
         # Multiple eyes (8 scattered on body)
         for i in range(8):
@@ -1471,10 +1969,11 @@ class Enemy:
 
         # Outer glow
         glow_r = int(half + 6 * pulse)
-        gs = pygame.Surface((glow_r * 2 + 4, glow_r * 2 + 4), pygame.SRCALPHA)
+        _gmax = half + 7
+        gs = self._get_surf(_gmax * 2 + 4, _gmax * 2 + 4)
         pygame.draw.circle(gs, (140, 80, 220, int(60 * pulse)),
-                           (glow_r + 2, glow_r + 2), glow_r)
-        surface.blit(gs, (sx - glow_r - 2, int(sy + hover) - glow_r - 2))
+                           (_gmax + 2, _gmax + 2), glow_r)
+        surface.blit(gs, (sx - _gmax - 2, int(sy + hover) - _gmax - 2))
         # Core orb
         core_color = (200, 160, 255) if not is_hit else (255, 255, 255)
         pygame.draw.circle(surface, core_color, (sx, int(sy + hover)), int(half * pulse))
@@ -1485,7 +1984,7 @@ class Enemy:
             tx = sx - int(self.face_x * (12 + i * 8))
             ty = int(sy + hover) - int(self.face_y * (12 + i * 8))
             alpha = max(0, 80 - i * 30)
-            ts = pygame.Surface((8, 8), pygame.SRCALPHA)
+            ts = self._get_surf(8, 8)
             pygame.draw.circle(ts, (160, 100, 240, alpha), (4, 4), 4 - i)
             surface.blit(ts, (tx - 4, ty - 4))
 
@@ -1496,7 +1995,7 @@ class Enemy:
 
         # Afterimage (slightly offset)
         ai_off = int(math.sin(now * 0.006) * 4)
-        ai_s = pygame.Surface((self.size + 8, self.size + 16), pygame.SRCALPHA)
+        ai_s = self._get_surf(self.size + 8, self.size + 16)
         ai_cx, ai_cy = (self.size + 8) // 2, (self.size + 16) // 2
         pygame.draw.ellipse(ai_s, (100, 50, 160, 60),
                             (ai_cx - half + ai_off, ai_cy - half, self.size, self.size + 6))
@@ -1507,7 +2006,7 @@ class Enemy:
         pygame.draw.ellipse(surface, body_color,
                             (sx - half + 4, sy - half, self.size - 8, self.size + 6))
         # Purple edge glow
-        edge_s = pygame.Surface((self.size, self.size + 8), pygame.SRCALPHA)
+        edge_s = self._get_surf(self.size, self.size + 8)
         pygame.draw.ellipse(edge_s, (140, 60, 220, 100),
                             (0, 0, self.size - 8, self.size + 6), 2)
         surface.blit(edge_s, (sx - half + 4, sy - half))
@@ -1540,7 +2039,7 @@ class Enemy:
         r = int(128 + 127 * math.sin(edge_hue * 0.017))
         g = int(128 + 127 * math.sin(edge_hue * 0.017 + 2.09))
         b = int(128 + 127 * math.sin(edge_hue * 0.017 + 4.19))
-        edge_s = pygame.Surface((self.size, self.size), pygame.SRCALPHA)
+        edge_s = self._get_surf(self.size, self.size)
         pygame.draw.ellipse(edge_s, (r, g, b, 100),
                             (0, 0, self.size - 4, self.size - 4), 2)
         surface.blit(edge_s, (sx - half + 2, sy - half + 2))
@@ -1551,7 +2050,7 @@ class Enemy:
         pygame.draw.circle(surface, (0, 0, 0), (sx + 4, sy - 2), 2)
         # Shadow blur effect around edges
         for i in range(2):
-            blur_s = pygame.Surface((self.size + 8 + i * 4, self.size + 8 + i * 4), pygame.SRCALPHA)
+            blur_s = self._get_surf(self.size + 8 + i * 4, self.size + 8 + i * 4)
             pygame.draw.ellipse(blur_s, (20, 20, 30, 30 - i * 15),
                                 (0, 0, self.size + 8 + i * 4, self.size + 8 + i * 4))
             surface.blit(blur_s, (sx - half - 4 - i * 2, sy - half - 4 - i * 2))
@@ -1571,7 +2070,7 @@ class Enemy:
         body_color = (30, 40, 60) if not is_hit else (255, 255, 255)
         pygame.draw.polygon(surface, body_color, pts)
         # Cyan glow outline
-        edge_s = pygame.Surface((self.size + 10, self.size + 10), pygame.SRCALPHA)
+        edge_s = self._get_surf(self.size + 10, self.size + 10)
         offset = (self.size + 10) // 2
         edge_pts = [(px - sx + offset, py - sy + offset) for px, py in pts]
         pygame.draw.polygon(edge_s, (60, 200, 220, 140), edge_pts, 3)
@@ -1647,7 +2146,7 @@ class Enemy:
         r = int(60 + 140 * color_shift)
         g = int(180 - 80 * color_shift)
         b = int(220 + 35 * color_shift)
-        edge_s = pygame.Surface((self.size + 8, self.size + 8), pygame.SRCALPHA)
+        edge_s = self._get_surf(self.size + 8, self.size + 8)
         offset = (self.size + 8) // 2
         edge_pts = [(px - sx + offset, py - sy + offset) for px, py in pts]
         pygame.draw.polygon(edge_s, (r, g, b, 160), edge_pts, 3)
@@ -1703,19 +2202,19 @@ class Enemy:
             frag_color = (80, 40, 120) if not is_hit else (200, 200, 200)
             pygame.draw.circle(surface, frag_color, (ox, oy), frag_size)
             # Trail
-            ts = pygame.Surface((frag_size * 2, frag_size * 2), pygame.SRCALPHA)
+            ts = self._get_surf(frag_size * 2, frag_size * 2)
             pygame.draw.circle(ts, (120, 60, 180, 60), (frag_size, frag_size), frag_size)
             surface.blit(ts, (ox - frag_size, oy - frag_size))
 
         # Outer ring
-        ring_s = pygame.Surface((self.size + 20, self.size + 20), pygame.SRCALPHA)
+        ring_s = self._get_surf(self.size + 20, self.size + 20)
         rc = (self.size + 20) // 2
         ring_color_a = int(80 + 60 * pulse)
         pygame.draw.circle(ring_s, (100, 50, 180, ring_color_a), (rc, rc), half + 4, 4)
         surface.blit(ring_s, (sx - rc, sy - rc))
 
         # Inner ring
-        ring_s2 = pygame.Surface((self.size, self.size), pygame.SRCALPHA)
+        ring_s2 = self._get_surf(self.size, self.size)
         rc2 = self.size // 2
         pygame.draw.circle(ring_s2, (140, 80, 220, int(100 * pulse)), (rc2, rc2), half - 10, 3)
         surface.blit(ring_s2, (sx - rc2, sy - rc2))
@@ -1726,9 +2225,10 @@ class Enemy:
         # Pulsing inner glow
         glow_r = int((half - 18) * pulse)
         if glow_r > 0:
-            gs = pygame.Surface((glow_r * 2, glow_r * 2), pygame.SRCALPHA)
-            pygame.draw.circle(gs, (160, 100, 255, int(120 * pulse)), (glow_r, glow_r), glow_r)
-            surface.blit(gs, (sx - glow_r, sy - glow_r))
+            _gmax = half - 18
+            gs = self._get_surf(_gmax * 2, _gmax * 2)
+            pygame.draw.circle(gs, (160, 100, 255, int(120 * pulse)), (_gmax, _gmax), glow_r)
+            surface.blit(gs, (sx - _gmax, sy - _gmax))
 
         # Central eye
         eye_r = 10 + int(4 * pulse)
@@ -1736,17 +2236,15 @@ class Enemy:
         pygame.draw.circle(surface, (255, 200, 255), (sx, sy), max(2, eye_r - 4))
         pygame.draw.circle(surface, (0, 0, 0), (sx, sy), max(1, eye_r - 7))
 
-        # Reality distortion lines
+        # Reality distortion lines (premultiplied — no SRCALPHA allocation)
+        _pm_line = (33, 18, 52)  # (140*60//255, 80*60//255, 220*60//255)
         for i in range(4):
             la = now * 0.001 + i * math.pi / 2
             lx = sx + int(math.cos(la) * half * 1.2)
             ly = sy + int(math.sin(la) * half * 1.2)
-            ds = pygame.Surface((abs(lx - sx) * 2 + 4, abs(ly - sy) * 2 + 4), pygame.SRCALPHA)
-            pygame.draw.line(ds, (140, 80, 220, 60),
-                             (abs(lx - sx) + 2, abs(ly - sy) + 2),
-                             (abs(lx - sx) + 2 + int(math.cos(la) * 20),
-                              abs(ly - sy) + 2 + int(math.sin(la) * 20)), 2)
-            surface.blit(ds, (min(sx, lx) - 2, min(sy, ly) - 2))
+            ex = lx + int(math.cos(la) * 20)
+            ey = ly + int(math.sin(la) * 20)
+            pygame.draw.line(surface, _pm_line, (lx, ly), (ex, ey), 2)
 
         # Gun flash
         if now - self.gun_flash_timer < 200:
