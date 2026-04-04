@@ -14,6 +14,7 @@ class CombatSystem:
         self.damage_numbers: list[dict] = []  # floating damage text
         self.pending_drops: list[tuple] = []  # (x, y) of enemies that just died
         self.darkness_level = 0.0  # set each frame by game.py
+        self.damage_log: list[tuple[str, int]] = []  # (weapon_key, damage) drained by game.py
 
     def process_player_attack(self, player, enemies: list, now: int):
         """Check if the player's attack hits any enemies."""
@@ -34,7 +35,9 @@ class CombatSystem:
                 kb_x = enemy.x - player.x
                 kb_y = enemy.y - player.y
                 total_dmg = int(player.damage * weapon_mult * dmg_mult)
-                enemy.take_damage(total_dmg, kb_x, kb_y, now)
+                kb_mult = getattr(player, 'knockback_bonus', 1.0)
+                enemy.take_damage(total_dmg, kb_x, kb_y, now, kb_mult)
+                self.damage_log.append((player.weapon_name, total_dmg))
                 self._add_damage_number(enemy.x, enemy.y - enemy.size, total_dmg, (255, 255, 100))
                 # Passive: vampiric_strike — heal 3 per hit
                 if "vampiric_strike" in getattr(player, 'passives', []):
@@ -76,10 +79,10 @@ class CombatSystem:
                 status_key = getattr(enemy, "status_on_hit", None)
                 if status_key and hasattr(player, "statuses"):
                     player.statuses.apply(status_key, now)
-                # Passive: thorns — reflect 30% of actual damage taken
+                # Passive: thorns — reflect 75% of actual damage taken back at attacker
                 if player.hp < prev_hp and "thorns" in getattr(player, 'passives', []):
                     actual = prev_hp - player.hp
-                    reflected = max(1, int(actual * 0.3))
+                    reflected = max(1, int(actual * 0.75))
                     enemy.take_damage(reflected, enemy.x - player.x, enemy.y - player.y, now)
                     self._add_damage_number(enemy.x, enemy.y - enemy.size, reflected, (255, 150, 50))
                     if not enemy.alive:

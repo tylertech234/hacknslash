@@ -1,5 +1,8 @@
 """Run statistics tracking — accumulates combat data for death/victory screens."""
 
+import json
+import os
+import time
 import pygame
 
 
@@ -26,13 +29,16 @@ class RunStats:
         # Passive performance: {key: {procs, damage, healed, kills}}
         self.passive_stats: dict[str, dict] = {}
 
+        # Upgrades taken (ordered list)
+        self.upgrades_taken: list[str] = []
+
         # Zone tracking
         self.zones_completed: list[str] = []
         self.current_zone: str = "wasteland"
         self.zone_times: dict[str, int] = {}
         self._zone_start_time: int = pygame.time.get_ticks()
 
-    def set_weapon(self, weapon_key: str, weapon_name: str):
+    def set_weapon(self, weapon_key: str, weapon_name: str, cooldown_ms: int = 500):
         """Track weapon equip/switch."""
         now = pygame.time.get_ticks()
         # Close out previous weapon time
@@ -42,7 +48,8 @@ class RunStats:
         # Init new weapon entry
         if weapon_key not in self.weapon_stats:
             self.weapon_stats[weapon_key] = {
-                "name": weapon_name, "hits": 0, "damage": 0, "time_equipped": 0
+                "name": weapon_name, "hits": 0, "damage": 0, "time_equipped": 0,
+                "cooldown_ms": cooldown_ms,
             }
         self._current_weapon = weapon_key
         self._weapon_equip_time = now
@@ -51,7 +58,8 @@ class RunStats:
         """Record a weapon hit."""
         if weapon_key not in self.weapon_stats:
             self.weapon_stats[weapon_key] = {
-                "name": weapon_key, "hits": 0, "damage": 0, "time_equipped": 0
+                "name": weapon_key, "hits": 0, "damage": 0, "time_equipped": 0,
+                "cooldown_ms": 500,
             }
         self.weapon_stats[weapon_key]["hits"] += 1
         self.weapon_stats[weapon_key]["damage"] += damage
@@ -75,6 +83,10 @@ class RunStats:
     def record_heal(self, amount: int):
         """Record HP healed."""
         self.total_healed += amount
+
+    def record_upgrade(self, name: str):
+        """Record an upgrade or passive chosen at level up / chest."""
+        self.upgrades_taken.append(name)
 
     def record_kill(self, is_boss: bool = False):
         self.total_kills += 1
@@ -110,3 +122,49 @@ class RunStats:
         now = pygame.time.get_ticks()
         if self._current_weapon and self._current_weapon in self.weapon_stats:
             self.weapon_stats[self._current_weapon]["time_equipped"] += now - self._weapon_equip_time
+
+    def save_to_log(self, wave: int, zone: str, player_level: int,
+                    char_class: str, victory: bool):
+        """Append a summary of this run to logs/runs.jsonl for balance analysis."""
+        # Build weapon DPS summary
+        weapon_summary = {}
+        for wkey, ws in self.weapon_stats.items():
+            hits = ws["hits"]
+            dmg = ws["damage"]
+            cooldown_s = ws.get("cooldown_ms", 500) / 1000
+            avg = dmg / hits if hits > 0 else 0
+            theoretical_dps = avg / cooldown_s if avg > 0 else 0
+            weapon_summary[wkey] = {
+                "name": ws["name"],
+                "hits": hits,
+                "total_damage": dmg,
+                "avg_per_hit": round(avg, 1),
+                "theoretical_dps": round(theoretical_dps, 1),
+                "time_equipped_s": round(ws.get("time_equipped", 0) / 1000, 1),
+            }
+
+        entry = {
+            "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+            "char_class": char_class,
+            "zone": zone,
+            "wave": wave,
+            "level": player_level,
+            "victory": victory,
+            "run_time_s": round(self.get_run_time() / 1000, 1),
+            "kills": self.total_kills,
+            "boss_kills": self.boss_kills,
+            "damage_dealt": self.total_damage_dealt,
+            "damage_taken": self.total_damage_taken,
+            "highest_hit": self.highest_hit,
+            "total_healed": self.total_healed,
+            "zones_completed": self.zones_completed,
+            "upgrades": self.upgrades_taken,
+            "weapons": weapon_summary,
+            "passives": {k: v["procs"] for k, v in self.passive_stats.items()},
+        }
+
+        log_dir = os.path.join(os.path.dirname(__file__), "..", "..", "logs")
+        os.makedirs(log_dir, exist_ok=True)
+        log_path = os.path.join(log_dir, "runs.jsonl")
+        with open(log_path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(entry) + "\n")
