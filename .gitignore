@@ -14,6 +14,7 @@ CyberSurvivor-Windows-*.zip
 .cache/
 logs/
 game.log
+game_new.log
 legacy_save.json
 settings_save.json
 compendium_save.json
