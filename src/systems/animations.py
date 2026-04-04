@@ -40,8 +40,11 @@ class DeathAnimation:
     # Duration (ms) and base size by type
     _TYPE_PARAMS = {
         # (duration_ms, base_size, style)
-        "dalek":         (380, 28,  "burst_ring"),
-        "wraith":        (500, 30,  "dissolve"),
+        "cyber_rat":      (220, 14,  "burst_ring"),
+        "cyber_raccoon":  (300, 24,  "shatter"),
+        "mega_cyber_deer":(800, 54,  "boss_explosion"),
+        "d_lek":          (380, 28,  "burst_ring"),
+        "specter":        (500, 32,  "dissolve"),
         "iron_sentinel": (700, 52,  "boss_explosion"),
         "warlord_kron":  (1100, 72, "big_boss_explosion"),
         "charger":       (300, 26,  "shatter"),
@@ -52,7 +55,7 @@ class DeathAnimation:
         "drone":         (280, 20,  "burst_ring"),
         "cultist":       (400, 30,  "dissolve"),
         "shambler":      (500, 40,  "splat"),
-        "preacher":      (750, 50,  "boss_explosion"),
+        "street_preacher": (750, 50,  "boss_explosion"),
         "eldritch_horror":(1200,78, "big_boss_explosion"),
         "void_wisp":     (250, 18,  "dissolve"),
         "rift_walker":   (350, 32,  "dissolve"),
