@@ -99,6 +99,8 @@ class SoundManager:
 
     def play_radar_beep(self, dist_ratio: float):
         """Play radar beep — higher pitch for closer enemies."""
+        if self._is_web:
+            return
         if dist_ratio < 0.33:
             self.sounds["radar_beep_close"].play()
         elif dist_ratio < 0.66:
