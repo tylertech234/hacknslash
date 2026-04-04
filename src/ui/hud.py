@@ -1,14 +1,11 @@
 import pygame
 import math
-import sys
 from src.settings import (
     SCREEN_WIDTH, SCREEN_HEIGHT, RED, GREEN, WHITE, YELLOW, BLACK, LIGHT_GRAY,
     XP_DARKNESS_BONUS, MAX_PASSIVES, PASSIVE_INFO,
 )
 from src.ui.icons import get_passive_icon, get_weapon_icon
 from src.systems.compendium import DISPLAY_NAMES as _ENEMY_DISPLAY_NAMES
-
-_IS_WEB = sys.platform == "emscripten"
 
 
 class HUD:
@@ -269,11 +266,6 @@ class HUD:
         intensity = 1.0 - (ratio / 0.2)
         alpha = int(60 + 100 * intensity)
         vignette = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
-        if _IS_WEB:
-            # Simplified: single red tint instead of per-pixel edge gradient
-            vignette.fill((180, 0, 0, min(alpha, 50)))
-            surface.blit(vignette, (0, 0))
-            return
         # Draw red gradient borders
         edge = int(60 + 40 * intensity)
         for i in range(edge):

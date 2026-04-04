@@ -116,15 +116,10 @@ class TelemetryClient:
 
     def _post_async(self, url: str, payload: dict,
                     extra_headers: dict | None = None) -> None:
-        """Fire-and-forget POST.  Uses a daemon thread on desktop.
-        Skipped on web — blocking urllib hangs in WASM (no blocking I/O)."""
-        if sys.platform == "emscripten":
-            # WASM has no blocking network I/O — skip silently
-            return
-        else:
-            t = threading.Thread(
-                target=self._post,
-                args=(url, payload, extra_headers),
-                daemon=True,
-            )
-            t.start()
+        """Fire-and-forget POST.  Uses a daemon thread."""
+        t = threading.Thread(
+            target=self._post,
+            args=(url, payload, extra_headers),
+            daemon=True,
+        )
+        t.start()

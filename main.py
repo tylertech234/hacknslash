@@ -2,22 +2,15 @@ import asyncio
 import pygame
 import json
 import os
-import sys
-
-# Web context: use a fixed 1280×720 canvas; skip native desktop detection
-_is_web = sys.platform == "emscripten"
 
 # ── Detect native desktop resolution before any game module imports ──
 pygame.display.init()
-if _is_web:
-    _native_w, _native_h = 1280, 720
-else:
-    try:
-        _info = pygame.display.Info()
-        _native_w = _info.current_w
-        _native_h = _info.current_h
-    except Exception:
-        _native_w, _native_h = 1920, 1080
+try:
+    _info = pygame.display.Info()
+    _native_w = _info.current_w
+    _native_h = _info.current_h
+except Exception:
+    _native_w, _native_h = 1920, 1080
 
 import src.settings as _settings
 _settings.NATIVE_WIDTH = _native_w
@@ -33,18 +26,17 @@ _RESOLUTIONS = {
 }
 _settings.RESOLUTIONS = _RESOLUTIONS
 
-# Load saved resolution preference (skipped on web — fixed canvas)
-_settings_file = os.path.join(os.path.dirname(__file__), "settings_save.json")  
+# Load saved resolution preference
+_settings_file = os.path.join(os.path.dirname(__file__), "settings_save.json")
 _res_key = "native"
-if not _is_web:
-    try:
-        with open(_settings_file) as _f:
-            _saved = json.load(_f)
-        _k = _saved.get("resolution", "native")
-        if _k in _RESOLUTIONS:
-            _res_key = _k
-    except Exception:
-        pass
+try:
+    with open(_settings_file) as _f:
+        _saved = json.load(_f)
+    _k = _saved.get("resolution", "native")
+    if _k in _RESOLUTIONS:
+        _res_key = _k
+except Exception:
+    pass
 
 _w, _h = _RESOLUTIONS[_res_key]
 _settings.SCREEN_WIDTH = _w
@@ -55,17 +47,9 @@ from src.systems.profile import create_profile  # noqa: E402
 
 
 async def main():
-    try:
-        profile = create_profile()
-        game = Game(profile)
-        await game.run()
-    except Exception:
-        import traceback
-        traceback.print_exc()
-        # Keep the browser tab alive so the user can read the error
-        import asyncio as _aio
-        while True:
-            await _aio.sleep(1)
+    profile = create_profile()
+    game = Game(profile)
+    await game.run()
 
 
 if __name__ == "__main__":

@@ -3,10 +3,7 @@
 import pygame
 import math
 import random
-import sys
 from src.settings import SCREEN_WIDTH, SCREEN_HEIGHT
-
-_IS_WEB = sys.platform == "emscripten"
 
 
 class AtmosphericSystem:
@@ -127,10 +124,6 @@ class AtmosphericSystem:
             b = self.particle_color[2] * alpha // 255
             if r or g or b:
                 pygame.draw.circle(surface, (r, g, b), (int(p["x"]), int(p["y"])), p["size"])
-
-        # Skip heavy overlay effects on web for performance
-        if _IS_WEB:
-            return
 
         # Dust storm overlay (wasteland)
         if self._dust_storm_active:

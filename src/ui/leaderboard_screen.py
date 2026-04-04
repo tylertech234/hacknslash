@@ -67,12 +67,6 @@ class LeaderboardScreen:
     # ── Data fetch ─────────────────────────────────────────────────────────────
 
     def _fetch_async(self) -> None:
-        import sys
-        if sys.platform == "emscripten":
-            # WASM has no blocking network I/O — show unavailable notice
-            self._loading = False
-            self._error = "Leaderboard unavailable in browser."
-            return
         t = threading.Thread(target=self._do_fetch, daemon=True)
         t.start()
 

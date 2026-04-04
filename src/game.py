@@ -14,8 +14,6 @@ logging.basicConfig(
 )
 log = logging.getLogger("game")
 
-_IS_WEB = sys.platform == "emscripten"
-
 from src.settings import (
     SCREEN_WIDTH, SCREEN_HEIGHT, FPS, TITLE, BLACK,
     TILE_SIZE, MAP_WIDTH, MAP_HEIGHT,
@@ -116,7 +114,7 @@ class Game:
         self.compendium_screen = CompendiumScreen(self.compendium)
 
         # Show name entry screen on first launch (runs synchronously before main loop)
-        if self.profile.needs_name() and sys.platform != "emscripten":
+        if self.profile.needs_name():
             self._run_name_entry_sync()
 
         # Analytics / leaderboard
@@ -306,11 +304,6 @@ class Game:
         self.sounds.start_music()
 
     async def run(self):
-        # On web, the canvas isn't properly sized until after the first async yield.
-        # Re-call set_mode so pygame/pygbag syncs to the actual canvas dimensions.
-        if sys.platform == "emscripten":
-            await asyncio.sleep(0)
-            self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), 0)
         self.sounds.start_music()
         while self.running:
             dt = self.clock.tick(FPS)
@@ -1734,29 +1727,23 @@ class Game:
             dmg_pct = self._last_damage_pct
             peak_alpha = int((18 + dmg_pct * 145) * vfade)
             if peak_alpha > 1:
-                if _IS_WEB:
-                    # Lightweight red tint instead of 40-step gradient
-                    vig = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
-                    vig.fill((215, 10, 10, min(peak_alpha, 60)))
-                    self.screen.blit(vig, (0, 0))
-                else:
-                    vig = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
-                    steps = 40
-                    half = min(SCREEN_WIDTH, SCREEN_HEIGHT) // 2
-                    for i in range(steps):
-                        frac = (1.0 - i / steps) ** 1.8  # steep rolloff toward center
-                        a = int(peak_alpha * frac)
-                        if a < 1:
-                            continue
-                        inset = i * half // steps
-                        rect = pygame.Rect(inset, inset,
-                                           SCREEN_WIDTH - 2 * inset,
-                                           SCREEN_HEIGHT - 2 * inset)
-                        if rect.width < 4 or rect.height < 4:
-                            break
-                        pygame.draw.rect(vig, (215, 10, 10, a), rect, 2,
-                                         border_radius=max(1, 28 - i // 2))
-                    self.screen.blit(vig, (0, 0))
+                vig = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+                steps = 40
+                half = min(SCREEN_WIDTH, SCREEN_HEIGHT) // 2
+                for i in range(steps):
+                    frac = (1.0 - i / steps) ** 1.8  # steep rolloff toward center
+                    a = int(peak_alpha * frac)
+                    if a < 1:
+                        continue
+                    inset = i * half // steps
+                    rect = pygame.Rect(inset, inset,
+                                       SCREEN_WIDTH - 2 * inset,
+                                       SCREEN_HEIGHT - 2 * inset)
+                    if rect.width < 4 or rect.height < 4:
+                        break
+                    pygame.draw.rect(vig, (215, 10, 10, a), rect, 2,
+                                     border_radius=max(1, 28 - i // 2))
+                self.screen.blit(vig, (0, 0))
 
         # ---- Kill streak combo text ----
         streak_age = now_draw - self._kill_streak_time
@@ -1797,14 +1784,6 @@ class Game:
         remaining = self.player.vision_debuff_until - now
         intensity = min(1.0, remaining / 5000)
         t = now * 0.001
-
-        if _IS_WEB:
-            # Simplified: single purple tint overlay
-            alpha = int(50 * intensity)
-            overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
-            overlay.fill((100, 20, 150, alpha))
-            self.screen.blit(overlay, (0, 0))
-            return
 
         overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
 

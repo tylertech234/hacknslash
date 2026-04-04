@@ -1,16 +1,12 @@
 import pygame
 import math
 import array
-import sys
-
-_IS_WEB = sys.platform == "emscripten"  # pygbag / itch.io HTML5 build
 
 
 class SoundManager:
     """Procedurally generated sound effects and zone-specific music."""
 
     def __init__(self):
-        self._is_web = _IS_WEB
         self.sounds: dict[str, pygame.mixer.Sound] = {}
         self._music_playing = False
         self._combat_intensity = 0.0
@@ -20,18 +16,6 @@ class SoundManager:
         self._current_music_zone = None
         self._boss_music: dict[str, pygame.mixer.Sound] = {}
         self.boss_music_playing = False
-
-        if self._is_web:
-            # On web, init the mixer (pygbag routes to Web Audio API) but
-            # skip the expensive procedural generation — use tiny placeholder
-            # tones so play() calls still work without 30 s of blocking.
-            try:
-                pygame.mixer.init(frequency=22050, size=-16, channels=2, buffer=512)
-                pygame.mixer.set_num_channels(8)
-                self._generate_web_placeholders()
-            except Exception:
-                pass  # mixer may fail in some browser sandboxes
-            return
 
         pygame.mixer.init(frequency=22050, size=-16, channels=2, buffer=512)
         pygame.mixer.set_num_channels(8)
@@ -50,8 +34,6 @@ class SoundManager:
 
     def set_zone_music(self, zone_name: str):
         """Switch to the music pair for the given zone."""
-        if self._is_web:
-            return
         if zone_name == self._current_music_zone:
             return
         was_playing = self._music_playing
@@ -65,8 +47,6 @@ class SoundManager:
             self.start_music()
 
     def start_music(self):
-        if self._is_web:
-            return
         if not self._music_playing and self._bgm_base:
             self._base_channel = pygame.mixer.Channel(1)
             self._combat_channel = pygame.mixer.Channel(2)
@@ -77,8 +57,6 @@ class SoundManager:
             self._music_playing = True
 
     def stop_music(self):
-        if self._is_web:
-            return
         if hasattr(self, '_base_channel'):
             self._base_channel.stop()
             self._combat_channel.stop()
@@ -86,8 +64,6 @@ class SoundManager:
 
     def set_music_intensity(self, level: float):
         """Crossfade between calm and combat music layers. 0.0=calm, 1.0=intense."""
-        if self._is_web:
-            return
         target = max(0.0, min(1.0, level))
         # Fast ramp up, slow decay back to calm
         if target > self._combat_intensity:
@@ -115,8 +91,6 @@ class SoundManager:
 
     def start_boss_music(self, zone: str):
         """Play intense boss music; mute regular BGM to background level."""
-        if self._is_web:
-            return
         track = self._boss_music.get(zone)
         if not track:
             return
@@ -130,8 +104,6 @@ class SoundManager:
 
     def stop_boss_music(self):
         """Stop boss music and restore zone music."""
-        if self._is_web:
-            return
         self._boss_channel.stop()
         self.boss_music_playing = False
         # Restore zone BGM
@@ -172,50 +144,6 @@ class SoundManager:
         self.sounds["big_boss_death"] = self._make_big_boss_death()
         self.sounds["player_death"] = self._make_player_death()
         self.sounds["player_hit"] = self._make_player_hit()
-
-    def _generate_web_placeholders(self):
-        """Create minimal placeholder tones for all SFX on web.
-
-        Each sound is a simple sine-wave beep taking <1 ms to generate,
-        avoiding the 30+ second blocking of the full procedural pipeline.
-        """
-        _t = self._tone
-        # Combat
-        self.sounds["swing"] = _t(300, 60, 0.12, wave="noise")
-        self.sounds["hit"] = _t(200, 40, 0.15, wave="noise")
-        self.sounds["enemy_shoot"] = _t(900, 50, 0.10, wave="sin")
-        self.sounds["enemy_death"] = _t(150, 80, 0.12, wave="saw")
-        self.sounds["player_hit"] = _t(250, 60, 0.15, wave="saw")
-        self.sounds["player_death"] = _t(120, 200, 0.15, wave="saw")
-        # Movement
-        self.sounds["step"] = _t(100, 30, 0.05, wave="noise")
-        self.sounds["dash"] = _t(500, 80, 0.10, wave="noise")
-        # Pickups & events
-        self.sounds["pickup"] = _t(800, 50, 0.12, wave="sin")
-        self.sounds["levelup"] = _t(1000, 120, 0.15, wave="sin")
-        self.sounds["chest_open"] = _t(600, 100, 0.12, wave="sin")
-        # Bosses
-        self.sounds["boss_roar"] = _t(80, 150, 0.15, wave="saw")
-        self.sounds["boss_death"] = _t(100, 200, 0.15, wave="saw")
-        self.sounds["big_boss_death"] = _t(60, 250, 0.15, wave="saw")
-        # Weapons
-        self.sounds["throw"] = _t(400, 60, 0.10, wave="sin")
-        self.sounds["confetti_boom"] = _t(200, 100, 0.12, wave="noise")
-        self.sounds["parry"] = _t(700, 50, 0.12, wave="sin")
-        self.sounds["shield_block"] = _t(500, 60, 0.12, wave="sin")
-        self.sounds["charge_whoosh"] = _t(350, 80, 0.10, wave="noise")
-        # UI
-        self.sounds["pause"] = _t(600, 80, 0.12, wave="sin")
-        self.sounds["unpause"] = _t(800, 80, 0.12, wave="sin")
-        self.sounds["wheel_tick"] = _t(1200, 30, 0.08, wave="sin")
-        self.sounds["wheel_stop"] = _t(900, 60, 0.10, wave="sin")
-        # Misc
-        self.sounds["chicken"] = _t(1600, 40, 0.08, wave="sin")
-        self.sounds["dog_bark"] = _t(600, 50, 0.10, wave="saw")
-        self.sounds["dog_growl"] = _t(200, 80, 0.08, wave="saw")
-        self.sounds["radar_beep_far"] = _t(800, 30, 0.06, wave="sin")
-        self.sounds["radar_beep_mid"] = _t(1200, 30, 0.08, wave="sin")
-        self.sounds["radar_beep_close"] = _t(1800, 30, 0.10, wave="sin")
 
     # ---- individual sound generators ----
 
