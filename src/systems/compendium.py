@@ -3,11 +3,14 @@
 Entries are unlocked on the first kill of each enemy type.
 Data is persisted to compendium_save.json in the project root.
 """
-import json
 import os
 import logging
 
+from src.systems.profile import StorageBackend, FileStorage
+
 log = logging.getLogger("compendium")
+
+_DEFAULT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # ── Enemy metadata ────────────────────────────────────────────────────────────
 
@@ -116,9 +119,10 @@ COMPENDIUM_ORDER: list[str] = [
 # ── Compendium data class ─────────────────────────────────────────────────────
 
 class Compendium:
-    SAVE_FILE = "compendium_save.json"
+    SAVE_FILENAME = "compendium_save.json"
 
-    def __init__(self):
+    def __init__(self, storage: StorageBackend | None = None):
+        self._storage = storage or FileStorage(_DEFAULT_DIR)
         # enemy_type -> {"kills": int, "first_seen_wave": int}
         self.entries: dict[str, dict] = {}
         self.load()
@@ -152,19 +156,15 @@ class Compendium:
 
     def save(self):
         try:
-            with open(self.SAVE_FILE, "w") as f:
-                json.dump(self.entries, f, indent=2)
-        except OSError as e:
+            self._storage.write(self.SAVE_FILENAME, self.entries)
+        except Exception as e:
             log.warning("Could not save compendium: %s", e)
 
     def load(self):
-        if not os.path.exists(self.SAVE_FILE):
-            return
         try:
-            with open(self.SAVE_FILE, "r") as f:
-                data = json.load(f)
+            data = self._storage.read(self.SAVE_FILENAME)
             if isinstance(data, dict):
                 self.entries = data
-        except (OSError, json.JSONDecodeError) as e:
+        except Exception as e:
             log.warning("Could not load compendium: %s", e)
             self.entries = {}

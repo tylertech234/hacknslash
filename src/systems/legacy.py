@@ -3,7 +3,9 @@
 import json
 import os
 
-# Save file lives next to main.py (project root)
+from src.systems.profile import StorageBackend, FileStorage
+
+# Default save location: project root (used when no profile storage is provided)
 _SAVE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 SAVE_FILE = os.path.join(_SAVE_DIR, "legacy_save.json")
 
@@ -68,7 +70,8 @@ LEGACY_UPGRADES = [
 class LegacyData:
     """Persistent roguelite progression that carries over between runs."""
 
-    def __init__(self):
+    def __init__(self, storage: StorageBackend | None = None):
+        self._storage = storage or FileStorage(_SAVE_DIR)
         self.total_runs = 0
         self.best_wave = 0
         self.total_kills = 0
@@ -77,27 +80,21 @@ class LegacyData:
         self.load()
 
     def load(self):
-        try:
-            with open(SAVE_FILE, "r") as f:
-                data = json.load(f)
-            self.total_runs = data.get("total_runs", 0)
-            self.best_wave = data.get("best_wave", 0)
-            self.total_kills = data.get("total_kills", 0)
-            self.legacy_points = data.get("legacy_points", 0)
-            self.upgrades = data.get("upgrades", {})
-        except (FileNotFoundError, json.JSONDecodeError):
-            pass  # Use defaults
+        data = self._storage.read("legacy_save.json") or {}
+        self.total_runs = data.get("total_runs", 0)
+        self.best_wave = data.get("best_wave", 0)
+        self.total_kills = data.get("total_kills", 0)
+        self.legacy_points = data.get("legacy_points", 0)
+        self.upgrades = data.get("upgrades", {})
 
     def save(self):
-        data = {
+        self._storage.write("legacy_save.json", {
             "total_runs": self.total_runs,
             "best_wave": self.best_wave,
             "total_kills": self.total_kills,
             "legacy_points": self.legacy_points,
             "upgrades": self.upgrades,
-        }
-        with open(SAVE_FILE, "w") as f:
-            json.dump(data, f, indent=2)
+        })
 
     def finish_run(self, wave: int, kills: int, boss_kills: int) -> int:
         """Record a completed run and return legacy points earned."""

@@ -8,7 +8,7 @@ NATIVE_HEIGHT = 0  # filled in by main.py
 RESOLUTIONS: dict = {}  # filled in by main.py
 FPS = 60
 TITLE = "Cyber Survivor"
-VERSION = "0.9.1"
+VERSION = "0.9.2"
 
 # -- Colors --
 BLACK = (0, 0, 0)
@@ -103,6 +103,15 @@ LIGHT_SHRINK_RATE = 0.015           # px lost per frame away from campfire
 LIGHT_RESTORE_RATE = 0.6            # px gained per frame near campfire
 DARKNESS_GROW_RATE = 0.0004         # darkness per frame away from campfire (0→1)
 DARKNESS_DECAY_RATE = 0.003         # darkness lost per frame near campfire
+
+# -- Backend (Supabase) --
+# Values are loaded from src/secrets.py (gitignored).
+# That file is never committed — fill it in locally.
+try:
+    from src.secrets import SUPABASE_URL, SUPABASE_ANON_KEY  # type: ignore
+except ImportError:
+    SUPABASE_URL = ""
+    SUPABASE_ANON_KEY = ""
 DARKNESS_MAX = 0.85                 # max darkness alpha (0..1)
 XP_DARKNESS_BONUS = 2.0             # max XP multiplier at full darkness
 ENEMY_DARKNESS_HP_BONUS = 0.6       # extra HP fraction at full darkness

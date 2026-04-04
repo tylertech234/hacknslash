@@ -1,3 +1,6 @@
+import asyncio
+import datetime
+import os
 import pygame
 import sys
 import math
@@ -16,6 +19,7 @@ from src.settings import (
     TILE_SIZE, MAP_WIDTH, MAP_HEIGHT,
     ENEMY_DARKNESS_HP_BONUS, XP_PER_KILL, XP_DARKNESS_BONUS,
     DROP_CHANCE, MAX_PASSIVES,
+    SUPABASE_URL, SUPABASE_ANON_KEY,
 )
 from src.entities.player import Player
 from src.systems.combat import CombatSystem
@@ -56,12 +60,14 @@ from src.ui.cursor import draw_cursor as _draw_cursor_fn
 from src.systems.compendium import Compendium, DISPLAY_NAMES as _CDISP, ENEMY_ZONES as _CZONES
 from src.ui.toast import ToastManager
 from src.ui.compendium_screen import CompendiumScreen
+from src.systems.profile import PlayerProfile, create_profile
+from src.ui.name_entry_screen import NameEntryScreen
 
 
 class Game:
     """Main game class — owns the loop, state, and all subsystems."""
 
-    def __init__(self):
+    def __init__(self, profile: PlayerProfile | None = None):
         pygame.init()
         self.game_settings = load_settings()
         flags = pygame.FULLSCREEN if self.game_settings.get("fullscreen") else 0
@@ -70,6 +76,8 @@ class Game:
         self.clock = pygame.time.Clock()
         self.running = True
         self.game_over = False
+        # Profile — always present; create a local one if none was passed
+        self.profile: PlayerProfile = profile or create_profile()
         self.main_menu = MainMenuScreen()
         self.char_select = CharacterSelectScreen()
         self.char_class = None  # set after selection
@@ -77,7 +85,7 @@ class Game:
         self.portal_menu = PortalMenuScreen()
         self._portal_next_zone: str = ""
         self._portal_summary_mode: bool = False
-        self.legacy = LegacyData()
+        self.legacy = LegacyData(storage=self.profile.storage)
         self.legacy_screen = LegacyScreen(self.legacy)
         self._legacy_points_earned = 0
 
@@ -97,9 +105,18 @@ class Game:
         self._debug_mode = False
 
         # Compendium + notifications (persist across runs)
-        self.compendium = Compendium()
+        self.compendium = Compendium(storage=self.profile.storage)
         self.toasts = ToastManager()
         self.compendium_screen = CompendiumScreen(self.compendium)
+
+        # Show name entry screen on first launch (runs synchronously before main loop)
+        if self.profile.needs_name():
+            self._run_name_entry_sync()
+
+        # Analytics / leaderboard
+        self.telemetry = TelemetryClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+        self.consent_screen = ConsentScreen()
+        self.leaderboard_screen = LeaderboardScreen(self.telemetry)
 
     def _show_loading_screen(self):
         """Draw a loading frame so the window doesn't appear frozen."""
@@ -111,6 +128,66 @@ class Game:
         hint = sub.render("first run generates audio — subsequent loads are instant", True, (80, 80, 100))
         self.screen.blit(hint, hint.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 40)))
         pygame.display.flip()
+
+    def _run_name_entry_sync(self):
+        """Block until the player has typed and confirmed a display name.
+        Called from __init__ on first launch before the main async loop."""
+        name_entry = NameEntryScreen()
+        name_entry.activate()
+        clock = pygame.time.Clock()
+        while name_entry.active:
+            dt = clock.tick(60)
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    pygame.quit()
+                    sys.exit()
+                name_entry.handle_event(event)
+            name_entry.update(dt)
+            name_entry.draw(self.screen)
+            pygame.display.flip()
+        self.profile.display_name = name_entry.result
+        self.profile.save()
+
+    def _submit_run_telemetry(self, wave: int, zone: str,
+                              char_class: str, victory: bool) -> None:
+        """Submit run analytics and leaderboard update if player consented."""
+        if not self.profile.analytics_consent:
+            return
+        import time as _time
+        rs = self.run_stats
+        run_entry = {
+            "timestamp": _time.strftime("%Y-%m-%d %H:%M:%S"),
+            "char_class": char_class,
+            "zone": zone,
+            "wave": wave,
+            "level": self.player.level,
+            "victory": victory,
+            "run_time_s": round(rs.get_run_time() / 1000, 1),
+            "kills": rs.total_kills,
+            "boss_kills": rs.boss_kills,
+            "damage_dealt": rs.total_damage_dealt,
+            "damage_taken": rs.total_damage_taken,
+            "highest_hit": rs.highest_hit,
+            "total_healed": rs.total_healed,
+            "zones_completed": rs.zones_completed,
+            "upgrades": rs.upgrades_taken,
+            "weapons": {k: v for k, v in rs.weapon_stats.items()},
+            "passives": {k: v["procs"] for k, v in rs.passive_stats.items()},
+        }
+        self.telemetry.submit_run(
+            self.profile.player_id,
+            self.profile.display_name,
+            self.profile.platform,
+            run_entry,
+        )
+        self.telemetry.submit_leaderboard(
+            self.profile.player_id,
+            self.profile.display_name,
+            self.profile.platform,
+            char_class,
+            wave,
+            _time.strftime("%Y-%m-%d"),
+        )
 
     def _init_world(self):
         self.game_map = GameMap()
@@ -221,10 +298,11 @@ class Game:
         self.sounds.set_zone_music(self.current_zone)
         self.sounds.start_music()
 
-    def run(self):
+    async def run(self):
         self.sounds.start_music()
         while self.running:
             dt = self.clock.tick(FPS)
+            await asyncio.sleep(0)  # yield to browser each frame (pygbag)
             now = pygame.time.get_ticks()
 
             # Main menu phase
@@ -240,12 +318,28 @@ class Game:
                     if self.compendium_screen.active:
                         self.compendium_screen.handle_event(event)
                         continue
+                    if self.leaderboard_screen.active:
+                        self.leaderboard_screen.handle_event(event)
+                        continue
+                    if self.consent_screen.active:
+                        self.consent_screen.handle_event(event)
+                        if not self.consent_screen.active:
+                            # Decision made — save and proceed to char select
+                            self.profile.analytics_consent = self.consent_screen.result
+                            self.profile.save()
+                            self.char_select.active = True
+                        continue
                     result = self.main_menu.handle_event(event)
                     if result == "new_run":
                         self._debug_mode = self.main_menu.settings.get("dev_options", False)
-                        self.char_select.active = True
+                        if self.profile.needs_consent():
+                            self.consent_screen.activate()
+                        else:
+                            self.char_select.active = True
                     elif result == "compendium":
                         self.compendium_screen.activate()
+                    elif result == "leaderboard":
+                        self.leaderboard_screen.activate(self.profile.player_id)
                     elif result == "debug_menu":
                         self.debug_menu.active = True
                     elif result == "quit":
@@ -255,8 +349,12 @@ class Game:
                     self.debug_menu.draw(self.screen)
                 elif self.compendium_screen.active:
                     self.compendium_screen.draw(self.screen)
+                elif self.leaderboard_screen.active:
+                    self.leaderboard_screen.draw(self.screen)
                 else:
                     self.main_menu.draw(self.screen)
+                if self.consent_screen.active:
+                    self.consent_screen.draw(self.screen)
                 _mx, _my = pygame.mouse.get_pos()
                 _draw_cursor_fn(self.screen, _mx, _my, "default", pygame.time.get_ticks())
                 pygame.display.flip()
@@ -467,6 +565,14 @@ class Game:
                     if self._debug_mode:
                         self.debug_overlay.log(
                             f"Auto-attack {'ON' if self.auto_attack else 'OFF'}")
+                # Screenshot — F9
+                if event.key == pygame.K_F9:
+                    _ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+                    _shots_dir = os.path.join(os.path.dirname(__file__), "..", "screenshots")
+                    os.makedirs(_shots_dir, exist_ok=True)
+                    _path = os.path.join(_shots_dir, f"screenshot_{_ts}.png")
+                    pygame.image.save(self.screen, _path)
+                    self.toasts.show("Screenshot saved", os.path.basename(_path), (100, 220, 255))
                 # Attack — Space or Left click proxy via J key
                 if event.key in (pygame.K_SPACE, pygame.K_j):
                     if self.player.try_attack(now):
@@ -1294,6 +1400,9 @@ class Game:
                 self.run_stats.save_to_log(
                     self.spawner.wave, self.current_zone,
                     self.player.level, self.player.char_class, victory=True)
+                self._submit_run_telemetry(
+                    self.spawner.wave, self.current_zone,
+                    self.player.char_class, victory=True)
                 self.run_summary.activate(
                     self.run_stats, self.spawner.wave,
                     self.current_zone, self._legacy_points_earned,
@@ -1351,6 +1460,9 @@ class Game:
                 self.run_stats.save_to_log(
                     self.spawner.wave, self.current_zone,
                     self.player.level, self.player.char_class, victory=False)
+                self._submit_run_telemetry(
+                    self.spawner.wave, self.current_zone,
+                    self.player.char_class, victory=False)
                 self.game_over = True
 
         # Detect any damage taken this frame for vignette

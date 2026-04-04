@@ -19,3 +19,13 @@ legacy_save.json
 settings_save.json
 compendium_save.json
 _patch_features.py
+
+# Per-player saves (namespaced by UUID at runtime)
+profiles/
+profile.json
+
+# Screenshots taken in-game (F9)
+screenshots/
+
+# Local secrets — NEVER commit this file
+src/secrets.py
