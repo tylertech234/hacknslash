@@ -101,6 +101,12 @@ class Player:
         # Vision debuff (from Nexus boss)
         self.vision_debuff_until = 0
 
+        # Insanity (from Nexus null_burst) — stores end time; control is randomised
+        self.insanity_until = 0
+        self._insane_dir_change = 0   # timestamp of last forced direction change
+        self._insane_dx = 0.0
+        self._insane_dy = 1.0
+
     def _apply_weapon_stats(self):
         """Reset weapon stats from the equipped weapon, then restore accumulated bonuses."""
         self.attack_cooldown = max(80, self.weapon["cooldown"] - self._cooldown_bonus)
@@ -202,28 +208,42 @@ class Player:
         if "adrenaline" in self.passives and now < self._adrenaline_until:
             speed_mult *= 1.3
 
-        # Movement input
-        dx, dy = 0.0, 0.0
-        if keys[pygame.K_w] or keys[pygame.K_UP]:
-            dy -= 1
-        if keys[pygame.K_s] or keys[pygame.K_DOWN]:
-            dy += 1
-        if keys[pygame.K_a] or keys[pygame.K_LEFT]:
-            dx -= 1
-        if keys[pygame.K_d] or keys[pygame.K_RIGHT]:
-            dx += 1
-
-        # Normalize
-        length = math.hypot(dx, dy)
-        self.moving = length > 0
-        if length > 0:
-            dx /= length
-            dy /= length
-            self.move_dx = dx   # remember last movement direction for dash
+        # ── Insanity: override player input with random lurching movement ──
+        if now < self.insanity_until:
+            # Change forced direction every 300-450 ms for erratic feel
+            if now - self._insane_dir_change > 350:
+                angle = random.uniform(0, math.tau)
+                self._insane_dx = math.cos(angle)
+                self._insane_dy = math.sin(angle)
+                self._insane_dir_change = now
+            dx, dy = self._insane_dx, self._insane_dy
+            self.moving = True
+            self.move_dx = dx
             self.move_dy = dy
             self.walk_cycle += dt * 0.012
         else:
-            self.walk_cycle = 0.0
+            # Normal movement input
+            dx, dy = 0.0, 0.0
+            if keys[pygame.K_w] or keys[pygame.K_UP]:
+                dy -= 1
+            if keys[pygame.K_s] or keys[pygame.K_DOWN]:
+                dy += 1
+            if keys[pygame.K_a] or keys[pygame.K_LEFT]:
+                dx -= 1
+            if keys[pygame.K_d] or keys[pygame.K_RIGHT]:
+                dx += 1
+
+            # Normalize
+            length = math.hypot(dx, dy)
+            self.moving = length > 0
+            if length > 0:
+                dx /= length
+                dy /= length
+                self.move_dx = dx   # remember last movement direction for dash
+                self.move_dy = dy
+                self.walk_cycle += dt * 0.012
+            else:
+                self.walk_cycle = 0.0
 
         # Dash movement overrides normal movement
         if self.is_dashing:

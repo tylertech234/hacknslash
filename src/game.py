@@ -20,6 +20,7 @@ from src.settings import (
     ENEMY_DARKNESS_HP_BONUS, XP_PER_KILL, XP_DARKNESS_BONUS,
     DROP_CHANCE, MAX_PASSIVES,
     SUPABASE_URL, SUPABASE_ANON_KEY, DATA_DIR,
+    CAMERA_ZOOM,
 )
 from src.entities.player import Player
 from src.systems.combat import CombatSystem
@@ -78,6 +79,10 @@ class Game:
         self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), flags)
         pygame.display.set_caption(TITLE)
         self.clock = pygame.time.Clock()
+        # ── Zoom viewport: world is rendered here then scaled to full screen ──
+        self._vp_w = int(SCREEN_WIDTH / CAMERA_ZOOM)
+        self._vp_h = int(SCREEN_HEIGHT / CAMERA_ZOOM)
+        self._world_surf = pygame.Surface((self._vp_w, self._vp_h))
         self.running = True
         self.game_over = False
         self._game_over_start_time = 0
@@ -1001,7 +1006,8 @@ class Game:
         # Sync wave to atmosphere and hazards
         self.atmosphere.set_wave(self.spawner.wave)
         self.hazard_system.set_wave(self.spawner.wave)
-        self.atmosphere.update(dt, now, int(self.camera.x), int(self.camera.y))
+        self.atmosphere.update(dt, now, int(self.camera.x), int(self.camera.y),
+                               world_w, world_h)
 
         # Environmental hazards
         hazard_events = self.hazard_system.update(
@@ -1190,6 +1196,19 @@ class Game:
                         spec_dmg = enemy.damage // 2  # less per burst since multiple hits
                         self.player.vision_debuff_until = now + 5000
                         self.player.statuses.apply("slow", now)
+                        # ── Insanity: lose control for up to 2 s ──
+                        self.player.insanity_until = now + _rng.randint(1000, 2000)
+                        self.player.statuses.apply("insanity", now)
+                elif spec == "buck_charge":
+                    # Mega Cyber Deer charges — knockback in the charge direction + heavy dmg
+                    if pdist < aoe_range and not self.player.invincible:
+                        hit_player = True
+                        charge_dx = getattr(enemy, "_charge_dx", 0.0)
+                        charge_dy = getattr(enemy, "_charge_dy", 0.0)
+                        kb = 22.0
+                        self.player.x += charge_dx * kb
+                        self.player.y += charge_dy * kb
+                        self.animations.add_screen_shake(10)
                 else:
                     # Fallback generic AoE
                     if pdist < aoe_range and not self.player.invincible:
@@ -1285,14 +1304,29 @@ class Game:
                         tx = enemy.x + math.cos(ang) * 500
                         ty = enemy.y + math.sin(ang) * 500
                         self.projectiles.spawn(enemy.x, enemy.y, tx, ty, dmg)
-                    # Plus direct vision/slow damage at close range
+                    # Plus direct vision/slow + insanity at close range
                     if pdist2 < aoe_range2 and not self.player.invincible:
                         hit_player2 = True
                         spec2_dmg = enemy.damage // 2
                         self.player.vision_debuff_until = now + 4000
                         self.player.statuses.apply("slow", now)
+                        self.player.insanity_until = now + _rng.randint(800, 1500)
+                        self.player.statuses.apply("insanity", now)
                     self.animations.spawn_death_burst(enemy.x, enemy.y, (80, 60, 220), count=24)
                     self.sounds.play("enemy_shoot")
+
+                elif spec2 == "antler_slam":
+                    # Mega Cyber Deer phase-2: massive ground slam, freezes player
+                    if pdist2 < aoe_range2 and not self.player.invincible:
+                        hit_player2 = True
+                        spec2_dmg = int(enemy.damage * 1.4)
+                        # Radial knockback away from deer
+                        angle_away = math.atan2(self.player.y - enemy.y, self.player.x - enemy.x)
+                        self.player.x += math.cos(angle_away) * 18
+                        self.player.y += math.sin(angle_away) * 18
+                        self.player.statuses.apply("freeze", now)
+                    self.animations.spawn_death_burst(enemy.x, enemy.y, (140, 210, 255), count=18)
+                    self.animations.add_screen_shake(12)
 
                 else:
                     # Generic fallback
@@ -1425,6 +1459,14 @@ class Game:
             self.sounds.play("confetti_boom")
 
         for enemy, dmg in thrown_hits:
+            # ── Mirror Shade: reflect the hit back as an enemy projectile ──
+            if enemy.enemy_type == "mirror_shade":
+                ref_dmg = max(1, dmg // 2)
+                self.projectiles.spawn(enemy.x, enemy.y, self.player.x, self.player.y, ref_dmg)
+                self.animations.spawn_hit_sparks(enemy.x, enemy.y, count=14)
+                self.sounds.play("hit")
+                # mirror_shade still takes the damage — just continue to normal processing
+
             # Record projectile hit in run stats (before crit display modifier)
             self.run_stats.record_hit(self.player.weapon_name, dmg)
             # Energy from projectile damage (same rate as melee: 1 per 8 dmg)
@@ -1558,7 +1600,8 @@ class Game:
         self.boss_chests = [c for c in self.boss_chests if c.alive]
 
         self.animations.update(dt)
-        self.camera.update(self.player.x, self.player.y, world_w, world_h)
+        self.camera.update(self.player.x, self.player.y, world_w, world_h,
+                           self._vp_w, self._vp_h)
 
         # Spawn portal after clearing the boss wave (wave == boss_wave of zone)
         zone_data = get_zone(self.current_zone)
@@ -1675,10 +1718,15 @@ class Game:
         if want_fs != is_fs:
             flags = pygame.FULLSCREEN if want_fs else 0
             self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), flags)
+            self._vp_w = int(SCREEN_WIDTH / CAMERA_ZOOM)
+            self._vp_h = int(SCREEN_HEIGHT / CAMERA_ZOOM)
+            self._world_surf = pygame.Surface((self._vp_w, self._vp_h))
 
     # ------------------------------------------------------------------ draw
     def _draw(self):
-        self.screen.fill(BLACK)
+        # ── World rendering → smaller viewport surface, then scaled to screen ──
+        ws = self._world_surf
+        ws.fill(BLACK)
         cx, cy = int(self.camera.x), int(self.camera.y)
 
         # Apply screen shake offset
@@ -1686,53 +1734,64 @@ class Game:
         cx += shake_x
         cy += shake_y
 
-        self.game_map.draw(self.screen, cx, cy, SCREEN_WIDTH, SCREEN_HEIGHT)
+        self.game_map.draw(ws, cx, cy, self._vp_w, self._vp_h)
 
         # Environment props (behind characters)
-        self.environment.draw(self.screen, cx, cy, SCREEN_WIDTH, SCREEN_HEIGHT)
+        self.environment.draw(ws, cx, cy, self._vp_w, self._vp_h)
 
         # Campfire
-        self.campfire.draw(self.screen, cx, cy)
+        self.campfire.draw(ws, cx, cy)
 
         # Pickups (draw under characters)
-        self.pickups.draw(self.screen, cx, cy)
+        self.pickups.draw(ws, cx, cy)
 
         # Boss chests
         for chest in self.boss_chests:
-            chest.draw(self.screen, cx, cy)
+            chest.draw(ws, cx, cy)
 
         for enemy in self.spawner.enemies:  # includes dead enemies for corpse rendering
-            enemy.draw(self.screen, cx, cy)
+            enemy.draw(ws, cx, cy)
 
         # Projectiles
-        self.projectiles.draw(self.screen, cx, cy)
-        self.player_projectiles.draw(self.screen, cx, cy)
+        self.projectiles.draw(ws, cx, cy)
+        self.player_projectiles.draw(ws, cx, cy)
 
-        self.player.draw(self.screen, cx, cy)
+        # Don't draw the standing player during dying — squash handles visuals
+        if not self._player_dying:
+            self.player.draw(ws, cx, cy)
         if self._player_dying:
-            self._draw_player_dying_squash(cx, cy, pygame.time.get_ticks())
-        self.combat.draw(self.screen, cx, cy, self.combat_font)
+            self._draw_player_dying_squash(cx, cy, pygame.time.get_ticks(), ws)
+        self.combat.draw(ws, cx, cy, self.combat_font)
 
         # Particle animations (death bursts, hit sparks)
-        self.animations.draw(self.screen, cx, cy)
+        self.animations.draw(ws, cx, cy)
 
-        # Atmospheric particles
-        self.atmosphere.draw(self.screen, pygame.time.get_ticks())
+        # Atmospheric particles & zone effects
+        self.atmosphere.draw(ws, pygame.time.get_ticks(), self._vp_w, self._vp_h)
 
         # Environmental hazards
-        self.hazard_system.draw(self.screen, cx, cy, pygame.time.get_ticks())
+        self.hazard_system.draw(ws, cx, cy, pygame.time.get_ticks(),
+                                self._vp_w, self._vp_h)
 
         # Portal
         if self.portal:
-            self.portal.draw(self.screen, cx, cy)
+            self.portal.draw(ws, cx, cy)
 
         # ---- Darkness overlay (after world, before UI) ----
-        self.lighting.draw(self.screen, cx, cy, self.player.x, self.player.y)
+        self.lighting.draw(ws, cx, cy, self.player.x, self.player.y,
+                           self._vp_w, self._vp_h)
 
         # ---- Vision debuff overlay (Nexus null_burst) ----
         now_draw = pygame.time.get_ticks()
         if now_draw < self.player.vision_debuff_until:
-            self._draw_vision_debuff(now_draw)
+            self._draw_vision_debuff(now_draw, ws)
+
+        # ---- Insanity overlay (Nexus null_burst / reality_collapse) ----
+        if now_draw < self.player.insanity_until:
+            self._draw_insanity_overlay(now_draw, ws)
+
+        # ── Scale world surface to full screen ──────────────────────────────
+        pygame.transform.scale(ws, (SCREEN_WIDTH, SCREEN_HEIGHT), self.screen)
 
         alive_count = len(self.spawner.get_alive_enemies())
         boss_enemies = [e for e in self.spawner.get_alive_enemies()
@@ -1887,92 +1946,157 @@ class Game:
 
         pygame.display.flip()
 
-    def _draw_vision_debuff(self, now: int):
+    def _draw_vision_debuff(self, now: int, surface: pygame.Surface = None):
         """Render eldritch vision distortion when hit by Nexus null_burst."""
+        surf = surface if surface is not None else self.screen
+        sw, sh = surf.get_size()
         remaining = self.player.vision_debuff_until - now
         intensity = min(1.0, remaining / 5000)
         t = now * 0.001
 
-        overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+        overlay = pygame.Surface((sw, sh), pygame.SRCALPHA)
 
         # Purple-green color shift bands
-        for i in range(0, SCREEN_HEIGHT, 40):
+        for i in range(0, sh, 40):
             wave = math.sin(t * 3.0 + i * 0.05) * 0.5 + 0.5
             alpha = int(45 * intensity * wave)
             color = (120, 30, 180, alpha) if i % 80 < 40 else (30, 160, 80, alpha)
-            pygame.draw.rect(overlay, color, (0, i, SCREEN_WIDTH, 40))
+            pygame.draw.rect(overlay, color, (0, i, sw, 40))
 
         # Wobbly scan lines
-        for y in range(0, SCREEN_HEIGHT, 3):
+        for y in range(0, sh, 3):
             offset = int(math.sin(t * 8.0 + y * 0.1) * 4 * intensity)
             if offset != 0:
                 pygame.draw.line(overlay, (100, 40, 160, int(30 * intensity)),
-                                 (offset, y), (SCREEN_WIDTH + offset, y), 1)
+                                 (offset, y), (sw + offset, y), 1)
 
         # Pulsing vignette
         pulse = 0.5 + 0.5 * math.sin(t * 5.0)
         vig_alpha = int(80 * intensity * pulse)
-        vig = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+        vig = pygame.Surface((sw, sh), pygame.SRCALPHA)
         vig.fill((80, 0, 120, vig_alpha))
-        # Clear center (radial fade)
-        cx, cy = SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2
+        cx, cy = sw // 2, sh // 2
         for r in range(min(cx, cy), 0, -20):
             fade = int(vig_alpha * (r / min(cx, cy)))
             pygame.draw.circle(vig, (80, 0, 120, fade), (cx, cy), r)
-        self.screen.blit(vig, (0, 0))
+        surf.blit(vig, (0, 0))
+        surf.blit(overlay, (0, 0))
 
-        self.screen.blit(overlay, (0, 0))
+    def _draw_insanity_overlay(self, now: int, surface: pygame.Surface = None):
+        """Crimson-static overlay during Nexus insanity — conveys lost control."""
+        surf = surface if surface is not None else self.screen
+        sw, sh = surf.get_size()
+        remaining = self.player.insanity_until - now
+        intensity = min(1.0, remaining / 2000)
+        t = now * 0.001
 
-    def _draw_player_dying_squash(self, cx: int, cy: int, now: int):
-        """380ms squash-and-spark overlay drawn over the player sprite on death."""
+        overlay = pygame.Surface((sw, sh), pygame.SRCALPHA)
+
+        # Rapid noise bars in crimson/magenta
+        for i in range(0, sh, 20):
+            noise_off = int(math.sin(t * 18.0 + i * 0.12) * 12 * intensity)
+            bar_alpha = int(50 * intensity * (0.4 + 0.6 * abs(math.sin(t * 7 + i * 0.07))))
+            color = (220, 20, 100, bar_alpha) if (i // 20) % 2 == 0 else (160, 0, 200, bar_alpha)
+            pygame.draw.rect(overlay, color, (noise_off, i, sw, 20))
+
+        cx, cy = sw // 2, sh // 2
+        for k in range(6):
+            crack_angle = t * 4.5 + k * math.tau / 6
+            length = int((100 + 60 * math.sin(t * 9 + k)) * intensity)
+            ex2 = cx + int(math.cos(crack_angle) * length)
+            ey2 = cy + int(math.sin(crack_angle) * length)
+            c_alpha = int(180 * intensity)
+            pygame.draw.line(overlay, (255, 20, 80, c_alpha), (cx, cy), (ex2, ey2), 2)
+        surf.blit(overlay, (0, 0))
+
+        # Pulsing red vignette border
+        pulse = 0.5 + 0.5 * math.sin(t * 12.0)
+        vig_alpha = int(100 * intensity * pulse)
+        vig = pygame.Surface((sw, sh), pygame.SRCALPHA)
+        for r in range(min(cx, cy), max(0, min(cx, cy) - 120), -8):
+            fade = int(vig_alpha * (1.0 - r / min(cx, cy)))
+            pygame.draw.circle(vig, (200, 0, 60, fade), (cx, cy), r)
+        surf.blit(vig, (0, 0))
+
+        if int(now * 0.006) % 3 != 0:
+            warn = get_font("consolas", 22, True).render(
+                "LOSING CONTROL", True, (255, 60, 100))
+            warn.set_alpha(int(200 * intensity))
+            surf.blit(warn, (cx - warn.get_width() // 2, cy - warn.get_height() // 2))
+
+    def _draw_player_dying_squash(self, cx: int, cy: int, now: int,
+                                   surface: pygame.Surface = None):
+        """Full 2200ms death animation: squash/fall (0-450ms) then flat corpse (450ms+)."""
         elapsed = now - self._player_death_time
-        if elapsed >= 380:
+        total = self._player_death_duration  # 2200ms
+        if elapsed >= total:
             return
-        t = elapsed / 380.0  # 0..1
         sx = int(self.player.x - cx)
         sy = int(self.player.y - cy)
         half = max(1, self.player.size // 2)
+        surf = surface if surface is not None else self.screen
 
         cc = self.player.char_class
         col = (0, 180, 255) if cc == "knight" else \
               (0, 255, 150) if cc == "archer" else \
               (200, 50, 200)
 
-        ew = max(4, int(self.player.size * (1.0 + t * 0.70)))
-        eh = max(2, int(self.player.size * (1.0 - t * 0.90)))
-        tilt_deg = t * 80
+        FALL_DUR = 450  # ms for squash/fall phase
 
-        tsz = self.player.size * 4
-        tc = tsz // 2
-        tmp = pygame.Surface((tsz, tsz), pygame.SRCALPHA)
+        if elapsed < FALL_DUR:
+            # ── Phase 1: squash, rotate 90°, spark burst ──
+            t = elapsed / FALL_DUR  # 0..1
 
-        # Squashed body silhouette
-        pygame.draw.ellipse(tmp, (*col, 200), (tc - ew // 2, tc - eh // 2, ew, eh))
+            ew = max(4, int(self.player.size * (1.0 + t * 0.80)))
+            eh = max(2, int(self.player.size * (1.0 - t * 0.92)))
+            tilt_deg = t * 90
 
-        # White impact flash
-        if t < 0.35:
-            fa = int(250 * (1.0 - t / 0.35) ** 1.8)
-            pygame.draw.ellipse(tmp, (255, 255, 255, fa),
-                                (tc - ew // 2, tc - eh // 2, ew, eh))
+            tsz = self.player.size * 5
+            tc = tsz // 2
+            tmp = pygame.Surface((tsz, tsz), pygame.SRCALPHA)
 
-        # Sparks (5 around the body, fade out by 75%)
-        if t < 0.75:
-            spark_alpha = int(255 * (1.0 - t / 0.75) ** 0.7)
-            ao = (now * 0.007) % (math.tau)
-            for i in range(5):
-                angle = i * math.tau / 5 + ao
-                slen = max(2, int(half * 1.4 * (1.0 - t / 0.75)))
-                ex1 = tc + int(math.cos(angle) * (half * 0.6))
-                ey1 = tc + int(math.sin(angle) * (half * 0.6))
-                ex2 = ex1 + int(math.cos(angle) * slen)
-                ey2 = ey1 + int(math.sin(angle) * slen)
-                sc = [(255, 240, 60), (255, 120, 30), (160, 255, 100)][i % 3]
-                pygame.draw.line(tmp, (*sc, spark_alpha), (ex1, ey1), (ex2, ey2), 2)
+            # Body squash
+            pygame.draw.ellipse(tmp, (*col, 220), (tc - ew // 2, tc - eh // 2, ew, eh))
 
-        rotated = pygame.transform.rotate(tmp, tilt_deg)
-        rw, rh = rotated.get_size()
-        y_drop = int(half * t * 0.4)
-        self.screen.blit(rotated, (sx - rw // 2, sy - rh // 2 + y_drop))
+            # White impact flash
+            if t < 0.30:
+                fa = int(255 * (1.0 - t / 0.30) ** 2.0)
+                pygame.draw.ellipse(tmp, (255, 255, 255, fa),
+                                    (tc - ew // 2, tc - eh // 2, ew, eh))
+
+            # Sparks fly out
+            if t < 0.80:
+                sa = int(255 * (1.0 - t / 0.80) ** 0.7)
+                ao = (now * 0.008) % math.tau
+                for i in range(6):
+                    angle = i * math.tau / 6 + ao
+                    slen = max(2, int(half * 1.8 * (1.0 - t / 0.80)))
+                    ex1 = tc + int(math.cos(angle) * (half * 0.6))
+                    ey1 = tc + int(math.sin(angle) * (half * 0.6))
+                    ex2 = ex1 + int(math.cos(angle) * slen)
+                    ey2 = ey1 + int(math.sin(angle) * slen)
+                    sc = [(255, 240, 60), (255, 120, 30), (160, 255, 100)][i % 3]
+                    pygame.draw.line(tmp, (*sc, sa), (ex1, ey1), (ex2, ey2), 2)
+
+            rotated = pygame.transform.rotate(tmp, tilt_deg)
+            rw, rh = rotated.get_size()
+            y_drop = int(half * 0.5 * t)
+            surf.blit(rotated, (sx - rw // 2, sy - rh // 2 + y_drop))
+
+        else:
+            # ── Phase 2: flat corpse on ground, fades slowly ──
+            t2 = (elapsed - FALL_DUR) / max(1, total - FALL_DUR)  # 0..1
+            alpha = int(200 * (1.0 - t2) ** 1.5)
+            if alpha <= 1:
+                return
+            cw = max(6, int(self.player.size * 1.4))
+            ch = max(3, int(self.player.size * 0.28))
+            # Dark tinted corpse ellipse
+            dc = (max(0, col[0] // 4), max(0, col[1] // 4), max(0, col[2] // 4))
+            csurf = pygame.Surface((cw + 4, ch + 4), pygame.SRCALPHA)
+            pygame.draw.ellipse(csurf, (*dc, alpha), (2, 2, cw, ch))
+            pygame.draw.ellipse(csurf, (60, 20, 20, alpha // 2), (2, 2, cw, ch), 1)
+            surf.blit(csurf, (sx - cw // 2, sy + half // 2 - ch // 2))
 
     def _draw_player_death_overlay(self):
         """Zoom-in + fade-to-black death transition before game over screen."""

@@ -56,9 +56,16 @@ class LightingSystem:
     # ------------------------------------------------------------------
 
     def draw(self, surface: pygame.Surface, camera_x: int, camera_y: int,
-             player_x: float, player_y: float):
+             player_x: float, player_y: float,
+             vp_w: int = 0, vp_h: int = 0):
         if self.darkness < 0.01:
             return  # nothing to draw
+
+        sw = vp_w if vp_w > 0 else SCREEN_WIDTH
+        sh = vp_h if vp_h > 0 else SCREEN_HEIGHT
+        # Rebuild overlay when viewport size changes (e.g. first frame or resize)
+        if self._overlay.get_size() != (sw, sh):
+            self._overlay = pygame.Surface((sw, sh), pygame.SRCALPHA)
 
         alpha = int(self.darkness * 255)
         self._overlay.fill((0, 0, 0, alpha))

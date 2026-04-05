@@ -170,10 +170,10 @@ ENEMY_TYPES = {
         "special": "void_rift",
     },
     "nexus": {
-        "hp": 9375, "speed": 0.8, "size": 90,
-        "damage": 45, "shoot_range": 420,
-        "shoot_cooldown": 500, "bullet_damage": 28,
-        "xp_value": 1500, "status_on_hit": "bleed",
+        "hp": 14000, "speed": 0.9, "size": 120,
+        "damage": 55, "shoot_range": 480,
+        "shoot_cooldown": 420, "bullet_damage": 34,
+        "xp_value": 1500, "status_on_hit": "insanity",
         "special": "null_burst",
     },
 }
@@ -2239,71 +2239,116 @@ class Enemy:
     def _draw_nexus(self, surface, sx, sy, now):
         is_hit = now - self.hit_flash < 100
         half = self.size // 2
-        pulse = 0.6 + 0.4 * math.sin(now * 0.003)
+        pulse  = 0.6 + 0.4 * math.sin(now * 0.003)
+        pulse2 = 0.5 + 0.5 * math.sin(now * 0.007 + 1.6)
 
-        # Orbiting void fragments (draw behind)
-        for i in range(6):
-            oa = now * 0.002 + i * math.tau / 6
-            od = half + 15 + math.sin(now * 0.003 + i) * 8
-            ox = sx + int(math.cos(oa) * od)
-            oy = sy + int(math.sin(oa) * od)
-            frag_size = 6 + int(math.sin(now * 0.005 + i * 2) * 2)
-            frag_color = (80, 40, 120) if not is_hit else (200, 200, 200)
-            pygame.draw.circle(surface, frag_color, (ox, oy), frag_size)
-            # Trail
-            ts = self._get_surf(frag_size * 2, frag_size * 2)
-            pygame.draw.circle(ts, (120, 60, 180, 60), (frag_size, frag_size), frag_size)
-            surface.blit(ts, (ox - frag_size, oy - frag_size))
+        # ── Outer insanity aura — slow-breathing crimson/void ring ───────────
+        aura_r = int(half + 28 + 12 * pulse)
+        aura_s = self._get_surf((half + 42) * 2, (half + 42) * 2)
+        aura_c = (half + 42)
+        pygame.draw.circle(aura_s, (100, 20, 160, int(30 * pulse2)), (aura_c, aura_c), aura_r)
+        pygame.draw.circle(aura_s, (200, 30, 80, int(18 * pulse)), (aura_c, aura_c), aura_r, 6)
+        surface.blit(aura_s, (sx - aura_c, sy - aura_c))
 
-        # Outer ring
-        ring_s = self._get_surf(self.size + 20, self.size + 20)
-        rc = (self.size + 20) // 2
-        ring_color_a = int(80 + 60 * pulse)
-        pygame.draw.circle(ring_s, (100, 50, 180, ring_color_a), (rc, rc), half + 4, 4)
+        # ── 12 orbiting void fragments in two rings ───────────────────────────
+        for ring_idx, (ring_r, frag_spd, frag_sz_base) in enumerate(
+                ((half + 22, 0.0018, 7), (half + 44, 0.0012, 5))):
+            for i in range(6):
+                oa = now * frag_spd * (1 if ring_idx == 0 else -1) + i * math.tau / 6
+                od = ring_r + math.sin(now * 0.003 + i + ring_idx) * 6
+                ox = sx + int(math.cos(oa) * od)
+                oy = sy + int(math.sin(oa) * od)
+                frag_sz = frag_sz_base + int(math.sin(now * 0.005 + i * 2.1) * 2)
+                frag_color = (80, 30, 130) if not is_hit else (200, 200, 200)
+                frag_glow_color = (160, 60, 220, 70) if ring_idx == 0 else (220, 40, 100, 50)
+                pygame.draw.circle(surface, frag_color, (ox, oy), frag_sz)
+                ts = self._get_surf(frag_sz * 2 + 4, frag_sz * 2 + 4)
+                pygame.draw.circle(ts, frag_glow_color, (frag_sz + 2, frag_sz + 2), frag_sz + 2)
+                surface.blit(ts, (ox - frag_sz - 2, oy - frag_sz - 2))
+
+        # ── Outer void ring ───────────────────────────────────────────────────
+        ring_s = self._get_surf(self.size + 30, self.size + 30)
+        rc = (self.size + 30) // 2
+        pygame.draw.circle(ring_s, (120, 50, 200, int(90 + 50 * pulse)), (rc, rc), half + 8, 5)
+        pygame.draw.circle(ring_s, (220, 40, 90, int(40 * pulse2)), (rc, rc), half + 8, 2)
         surface.blit(ring_s, (sx - rc, sy - rc))
 
-        # Inner ring
-        ring_s2 = self._get_surf(self.size, self.size)
-        rc2 = self.size // 2
-        pygame.draw.circle(ring_s2, (140, 80, 220, int(100 * pulse)), (rc2, rc2), half - 10, 3)
+        # ── Secondary rotating ring ───────────────────────────────────────────
+        ring_s2 = self._get_surf(self.size + 4, self.size + 4)
+        rc2 = (self.size + 4) // 2
+        pygame.draw.circle(ring_s2, (160, 80, 255, int(110 * pulse)), (rc2, rc2), half - 8, 3)
         surface.blit(ring_s2, (sx - rc2, sy - rc2))
 
-        # Core mass
-        body_color = (50, 20, 70) if not is_hit else (255, 255, 255)
-        pygame.draw.circle(surface, body_color, (sx, sy), half - 14)
-        # Pulsing inner glow
+        # ── Core mass ────────────────────────────────────────────────────────
+        body_color = (30, 10, 50) if not is_hit else (255, 255, 255)
+        pygame.draw.circle(surface, body_color, (sx, sy), half - 16)
+        # Deep void glow
         glow_r = int((half - 18) * pulse)
         if glow_r > 0:
-            _gmax = half - 18
+            _gmax = half - 16
             gs = self._get_surf(_gmax * 2, _gmax * 2)
-            pygame.draw.circle(gs, (160, 100, 255, int(120 * pulse)), (_gmax, _gmax), glow_r)
+            pygame.draw.circle(gs, (180, 80, 255, int(140 * pulse)), (_gmax, _gmax), glow_r)
+            pygame.draw.circle(gs, (240, 40, 100, int(60 * pulse2)), (_gmax, _gmax),
+                               max(1, glow_r - 10))
             surface.blit(gs, (sx - _gmax, sy - _gmax))
 
-        # Central eye
-        eye_r = 10 + int(4 * pulse)
-        pygame.draw.circle(surface, (200, 120, 255), (sx, sy), eye_r)
-        pygame.draw.circle(surface, (255, 200, 255), (sx, sy), max(2, eye_r - 4))
-        pygame.draw.circle(surface, (0, 0, 0), (sx, sy), max(1, eye_r - 7))
+        # ── 8 reality-tear spikes radiating from core ─────────────────────────
+        for i in range(8):
+            spike_a = now * 0.0008 + i * math.tau / 8
+            spike_in  = half - 18
+            spike_out = half - 4 + int(math.sin(now * 0.005 + i * 1.3) * 8)
+            sx1 = sx + int(math.cos(spike_a) * spike_in)
+            sy1 = sy + int(math.sin(spike_a) * spike_in)
+            sx2 = sx + int(math.cos(spike_a) * spike_out)
+            sy2 = sy + int(math.sin(spike_a) * spike_out)
+            pygame.draw.line(surface, (160, 60, 220), (sx1, sy1), (sx2, sy2), 3)
+            pygame.draw.circle(surface, (220, 100, 255), (sx2, sy2), 3)
 
-        # Reality distortion lines (premultiplied — no SRCALPHA allocation)
-        _pm_line = (33, 18, 52)  # (140*60//255, 80*60//255, 220*60//255)
-        for i in range(4):
-            la = now * 0.001 + i * math.pi / 2
-            lx = sx + int(math.cos(la) * half * 1.2)
-            ly = sy + int(math.sin(la) * half * 1.2)
-            ex = lx + int(math.cos(la) * 20)
-            ey = ly + int(math.sin(la) * 20)
-            pygame.draw.line(surface, _pm_line, (lx, ly), (ex, ey), 2)
+        # ── Central insanity eye — vertical slit pupil that tracks player ─────
+        eye_r = 14 + int(5 * pulse)
+        # Iris
+        pygame.draw.circle(surface, (210, 80, 255), (sx, sy), eye_r)
+        pygame.draw.circle(surface, (240, 160, 255), (sx, sy), max(3, eye_r - 5))
+        # Vertical slit pupil
+        pupil_h = eye_r - 2
+        pupil_w = max(2, eye_r // 3)
+        pygame.draw.ellipse(surface, (0, 0, 0), (sx - pupil_w, sy - pupil_h, pupil_w * 2, pupil_h * 2))
+        # Blood-red reflection glint
+        glint_x = sx + int(self.face_x * 4)
+        glint_y = sy + int(self.face_y * 4)
+        pygame.draw.circle(surface, (255, 40, 60), (glint_x, glint_y - 3), 2)
 
-        # Gun flash
+        # ── Reality distortion tendrils (8 directions, animated) ─────────────
+        for i in range(8):
+            la = now * 0.0014 + i * math.tau / 8
+            l_near = half - 10
+            l_far  = half + 6 + int(math.sin(now * 0.004 + i) * 10)
+            lx1 = sx + int(math.cos(la) * l_near)
+            ly1 = sy + int(math.sin(la) * l_near)
+            lx2 = sx + int(math.cos(la) * l_far)
+            ly2 = sy + int(math.sin(la) * l_far)
+            c_a = int(60 + 40 * math.sin(now * 0.006 + i))
+            pygame.draw.line(surface, (140, 60, 220), (lx1, ly1), (lx2, ly2), 2)
+
+        # ── Gun flash ────────────────────────────────────────────────────────
         if now - self.gun_flash_timer < 200:
             fx = sx + int(self.face_x * half)
             fy = sy + int(self.face_y * half)
-            pygame.draw.circle(surface, (180, 100, 255), (fx, fy), 12)
+            gs2 = self._get_surf(28, 28)
+            pygame.draw.circle(gs2, (220, 80, 255, 220), (14, 14), 14)
+            surface.blit(gs2, (fx - 14, fy - 14))
+            pygame.draw.circle(surface, (255, 200, 255), (fx, fy), 6)
 
-        # BOSS label
-        label = get_font("consolas", 12, True).render("BOSS", True, (180, 100, 255))
-        surface.blit(label, (sx - label.get_width() // 2, sy - half - 28))
+        # ── FINAL BOSS label ─────────────────────────────────────────────────
+        label = get_font("consolas", 13, True).render("FINAL BOSS", True, (255, 60, 180))
+        surface.blit(label, (sx - label.get_width() // 2, sy - half - 32))
+        # Pulsing subtitle
+        sub_a = int(160 + 95 * pulse2)
+        sub_s = get_font("consolas", 9, False).render("THE NEXUS", True, (180, 80, 255))
+        sub_surf = pygame.Surface(sub_s.get_size(), pygame.SRCALPHA)
+        sub_surf.blit(sub_s, (0, 0))
+        sub_surf.set_alpha(sub_a)
+        surface.blit(sub_surf, (sx - sub_surf.get_width() // 2, sy - half - 18))
 
     def _draw_dying_phase(self, surface: pygame.Surface, sx: int, sy: int,
                           elapsed: int, now: int):

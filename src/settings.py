@@ -88,7 +88,7 @@ ENEMY_SKIRT_COLOR = (90, 82, 74)    # Dalek skirt
 # -- Spawning --
 WAVE_BASE_COUNT = 8
 WAVE_GROWTH = 4
-SPAWN_MARGIN = 80                   # px from screen edge
+SPAWN_MARGIN = 120                  # px from screen edge (larger on bigger map)
 
 # -- XP / Leveling --
 XP_PER_KILL = 8
@@ -128,7 +128,12 @@ ENEMY_DARKNESS_DMG_BONUS = 0.5      # extra damage fraction at full darkness
 
 # -- Map --
 TILE_SIZE = 64
-MAP_WIDTH = 50                      # tiles
-MAP_HEIGHT = 50                     # tiles
+MAP_WIDTH = 88                      # tiles  (was 50)
+MAP_HEIGHT = 88                     # tiles
 FLOOR_COLOR = (34, 60, 28)
 WALL_COLOR = (20, 35, 18)
+
+# -- Camera zoom --
+# Render world to a smaller surface then scale up so entities look larger.
+# 1.0 = no zoom, 1.4 = 40% larger (see fewer world pixels per screen pixel).
+CAMERA_ZOOM = 1.40
