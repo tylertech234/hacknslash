@@ -414,7 +414,7 @@ The heads-up display shows:
 - **Wave counter** — current wave number
 - **Boss HP bar** — appears when a boss is alive
 - **Coin count** — your current coin total
-- **Radar** (corner) — shows dots for nearby enemies and the campfire
+- **Minimap** (corner) — full-map overlay showing all enemies as colored dots
 - **Status effect icons** — appear on your character when affected
 - **Floating damage numbers** — pop up when you or enemies take hits
 
@@ -476,4 +476,4 @@ Press **R** on the death screen to enter the **Legacy Shop**. Spend points on pe
 
 Costs increase with each rank. Press **1–6** to buy, **Enter** to continue to character select.
 
-Your progress is saved to `legacy_save.json` automatically.
+Your progress is saved automatically to `%APPDATA%/CyberSurvivor/legacy_save.json` (Windows) or `~/.cyber_survivor/legacy_save.json` (Linux/macOS).

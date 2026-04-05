@@ -108,7 +108,7 @@ hacknslash/
 │   │   └── run_stats.py     # Per-run statistics tracking
 │   └── ui/                  # User interface
 │       ├── hud.py           # HP/XP bars, wave info, boss HP bar, danger vignette
-│       ├── radar.py         # AVP-style motion tracker
+        ├── minimap.py       # Full-map enemy tracker — colored dots overlay
 │       ├── levelup.py       # Level-up upgrade selection
 │       ├── charselect.py    # Character class picker
 │       ├── cursor.py        # Animated procedural crosshair — class-themed
@@ -120,12 +120,15 @@ hacknslash/
 │       ├── passive_swap.py  # Passive swap screen when all slots are full
 │       ├── toast.py         # Slide-in achievement-style toast notifications
 │       ├── tooltip.py       # Weapon/passive info tooltips
-│       ├── weapon_swap.py   # Weapon swap selection screen
-│       ├── icons.py         # 35 procedural icon drawings
+│       ├── weapon_swap.py   # Weapon swap selection screen        ├── arsenal_screen.py# Persistent weapon unlock browser per class│       ├── icons.py         # 35 procedural icon drawings
 │       ├── debug_menu.py    # Developer debug menu
 │       └── debug_overlay.py # In-game debug overlay (F3)
 └── assets/                  # Empty placeholder folders (all art/sound is procedural)
 ```
+
+> **Save data location:** All saves (profiles, compendium, legacy, run logs, screenshots, music cache)
+> are written to `%APPDATA%/CyberSurvivor` (Windows) or `~/.cyber_survivor` (Linux/macOS).
+> The install directory is never written to.
 
 ### How the code flows
 
@@ -176,6 +179,7 @@ Here's where to edit based on what you're doing:
 | Modify the portal/between-zone menu | `src/ui/portal_screen.py` + `src/systems/portal.py` |
 | Edit run statistics tracking | `src/systems/run_stats.py` + `src/ui/run_summary.py` |
 | Edit the compendium bestiary | `src/systems/compendium.py` + `src/ui/compendium_screen.py` |
+| Change save data location | `src/settings.py` — update `DATA_DIR` |
 | Change the cursor appearance | `src/ui/cursor.py` |
 
 ### Step 3: Test your changes
