@@ -1375,6 +1375,10 @@ class Game:
         for enemy, dmg in thrown_hits:
             # Record projectile hit in run stats (before crit display modifier)
             self.run_stats.record_hit(self.player.weapon_name, dmg)
+            # Energy from projectile damage (same rate as melee: 1 per 8 dmg)
+            self.player.energy = min(
+                self.player.max_energy,
+                self.player.energy + max(1, dmg // 8))
             # Passive: crit_shots — 20% chance double damage on projectile
             if "crit_shots" in self.player.passives and _rng.random() < 0.20:
                 dmg *= 2
