@@ -923,6 +923,12 @@ class Game:
             _dying_keys = _FrozenKeys()
         self.player.update(dt, now, _dying_keys if _dying_keys else keys, world_w, world_h)
 
+        # Wind trail while dashing
+        if self.player.is_dashing:
+            self.animations.spawn_dash_trail(
+                self.player.x, self.player.y,
+                self.player.dash_dx, self.player.dash_dy)
+
         # Track HP this frame to detect any damage for vignette
         _frame_start_hp = self.player.hp
 

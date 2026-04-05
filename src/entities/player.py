@@ -65,6 +65,8 @@ class Player:
         self._dash_charges_remaining = 1
         self.dash_dx = 0.0
         self.dash_dy = 0.0
+        self.move_dx = 0.0   # last WASD direction (for dash)
+        self.move_dy = -1.0  # default: up
 
         # XP / Level
         self.xp = 0
@@ -141,8 +143,9 @@ class Player:
             # Start the cooldown clock only once all charges are spent
             if self._dash_charges_remaining == 0:
                 self.last_dash_time = now
-            self.dash_dx = self.facing_x
-            self.dash_dy = self.facing_y
+            # Dash in movement (WASD) direction, not mouse facing direction
+            self.dash_dx = self.move_dx
+            self.dash_dy = self.move_dy
             self.invincible = True
             self.invincible_timer = now
             return True
@@ -216,6 +219,8 @@ class Player:
         if length > 0:
             dx /= length
             dy /= length
+            self.move_dx = dx   # remember last movement direction for dash
+            self.move_dy = dy
             self.walk_cycle += dt * 0.012
         else:
             self.walk_cycle = 0.0

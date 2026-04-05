@@ -61,7 +61,7 @@ PLAYER_ATTACK_RANGE = 60
 PLAYER_ATTACK_COOLDOWN = 400        # ms
 PLAYER_MAX_SPEED = 9                # hard cap — prevents melee from feeling weightless
 PLAYER_MAX_RANGE = 135              # hard cap on attack range
-PLAYER_DASH_SPEED = 12
+PLAYER_DASH_SPEED = 18
 PLAYER_DASH_DURATION = 150          # ms
 PLAYER_DASH_COOLDOWN = 800          # ms
 
