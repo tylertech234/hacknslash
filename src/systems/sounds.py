@@ -142,7 +142,7 @@ class SoundManager:
         self.sounds["dash"] = self._make_dash()
         self.sounds["boss_roar"] = self._make_boss_roar()
         self.sounds["throw"] = self._make_throw()
-        self.sounds["chicken"] = _load_asset("chicken", volume=0.62) or self._make_chicken()
+        self.sounds["chicken"] = _load_asset("chicken", volume=0.31) or self._make_chicken()
         self.sounds["confetti_boom"] = self._make_confetti_boom()
         self.sounds["parry"] = self._make_parry()
         self.sounds["wheel_tick"] = self._make_wheel_tick()
@@ -175,7 +175,7 @@ class SoundManager:
             "dash":          0.32,
             "boss_roar":     0.42,
             "throw":         0.30,
-            "chicken":       0.62,
+            "chicken":       0.31,
             "confetti_boom": 0.35,
             "parry":         0.40,
             "wheel_tick":    0.18,
