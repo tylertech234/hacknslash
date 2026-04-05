@@ -4,6 +4,7 @@ import json
 import os
 import time
 import pygame
+from src.settings import DATA_DIR
 
 
 class RunStats:
@@ -163,7 +164,7 @@ class RunStats:
             "passives": {k: v["procs"] for k, v in self.passive_stats.items()},
         }
 
-        log_dir = os.path.join(os.path.dirname(__file__), "..", "..", "logs")
+        log_dir = os.path.join(DATA_DIR, "logs")
         os.makedirs(log_dir, exist_ok=True)
         log_path = os.path.join(log_dir, "runs.jsonl")
         with open(log_path, "a", encoding="utf-8") as f:

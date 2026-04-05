@@ -271,6 +271,20 @@ class AnimationSystem:
             self.particles.append(
                 Particle(world_x, world_y, dx, dy, life, c, size, gravity=0.15))
 
+    def spawn_dash_trail(self, world_x: float, world_y: float, dash_dx: float, dash_dy: float):
+        """2-3 wind streak particles behind the player during a dash."""
+        for _ in range(3):
+            # Offset behind the player (opposite to dash direction)
+            ox = -dash_dx * random.uniform(4, 14) + random.uniform(-4, 4)
+            oy = -dash_dy * random.uniform(4, 14) + random.uniform(-4, 4)
+            # Drift slowly backward and disperse
+            ndx = -dash_dx * random.uniform(0.5, 1.5) + random.uniform(-0.4, 0.4)
+            ndy = -dash_dy * random.uniform(0.5, 1.5) + random.uniform(-0.4, 0.4)
+            life = random.randint(5, 11)
+            c = random.choice([(220, 240, 255), (180, 220, 255), (255, 255, 255), (160, 200, 240)])
+            size = random.uniform(1.5, 3.5)
+            self.particles.append(Particle(world_x + ox, world_y + oy, ndx, ndy, life, c, size))
+
     def add_screen_shake(self, amount: float):
         self.screen_shake = min(12, self.screen_shake + amount)
 

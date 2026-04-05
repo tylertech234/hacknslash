@@ -5,8 +5,10 @@ import os
 
 from src.systems.profile import StorageBackend, FileStorage
 
-# Default save location: project root (used when no profile storage is provided)
-_SAVE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from src.settings import DATA_DIR
+
+# Default save location: user data dir (used when no profile storage is provided)
+_SAVE_DIR = DATA_DIR
 SAVE_FILE = os.path.join(_SAVE_DIR, "legacy_save.json")
 
 LEGACY_UPGRADES = [

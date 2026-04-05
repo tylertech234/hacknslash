@@ -10,7 +10,9 @@ from src.systems.profile import StorageBackend, FileStorage
 
 log = logging.getLogger("compendium")
 
-_DEFAULT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from src.settings import DATA_DIR
+
+_DEFAULT_DIR = DATA_DIR
 
 # ── Enemy metadata ────────────────────────────────────────────────────────────
 

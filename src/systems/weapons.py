@@ -20,26 +20,26 @@ WEAPONS = {
     },
     "axe": {
         "name": "Battle Axe",
-        "damage_mult": 1.6,
-        "range": 50,
-        "cooldown": 650,
+        "damage_mult": 1.7,
+        "range": 54,
+        "cooldown": 620,
         "duration": 300,
-        "sweep_deg": 90,
-        "blade_color": (160, 160, 170),
-        "trail_color": (255, 180, 80),
-        "desc": "Heavy hits, slower swing.",
+        "sweep_deg": 100,
+        "blade_color": (160, 165, 180),
+        "trail_color": (255, 180, 60),
+        "desc": "Double-bit axe. Each swing cleaves through armor.",
         "class": "knight",
     },
-    "spear": {
-        "name": "Spear",
-        "damage_mult": 1.3,
-        "range": 90,
-        "cooldown": 500,
-        "duration": 250,
-        "sweep_deg": 40,
-        "blade_color": (190, 170, 140),
-        "trail_color": (200, 200, 150),
-        "desc": "Long thrust, narrow arc.",
+    "flail": {
+        "name": "Flail",
+        "damage_mult": 1.8,
+        "range": 78,
+        "cooldown": 580,
+        "duration": 300,
+        "sweep_deg": 200,
+        "blade_color": (200, 175, 120),
+        "trail_color": (255, 210, 90),
+        "desc": "Spiked chain ball. Massive arc, sends enemies flying.",
         "class": "knight",
     },
     "hammer": {
@@ -117,11 +117,13 @@ WEAPONS = {
         "sweep_deg": 60,
         "blade_color": (180, 220, 220),
         "trail_color": (150, 255, 200),
-        "desc": "Precision throw. Single deadly dagger.",
+        "desc": "Twin throw. Two daggers one after the other.",
         "projectile": True,
         "proj_speed": 8.0,
         "proj_lifetime": 900,
         "proj_count": 1,
+        "burst_count": 2,
+        "burst_delay_ms": 120,
         "proj_visual": "dagger",
         "class": "archer",
     },
@@ -242,6 +244,7 @@ WEAPONS = {
         "trail_color": (255, 255, 100),
         "desc": "BAWK! Surprisingly effective.",
         "class": "jester",
+        "sound": "chicken",
     },
     "banana_rang": {
         "name": "Banana-Rang",
@@ -327,10 +330,10 @@ CHARACTER_CLASSES = {
         "desc": "Heavy armor. Each blow sends foes flying. Born to fight up close.",
         "color": (0, 180, 255),
         "start_weapon": "sword",
-        "hp_bonus": 15,
+        "hp_bonus": 10,
         "damage_bonus": -2,
         "speed_bonus": 0,
-        "knockback_bonus": 3.0,
+        "knockback_bonus": 2.0,
         "passives": ["melee_lifesteal", "armor_plating"],
     },
     "archer": {
@@ -338,20 +341,20 @@ CHARACTER_CLASSES = {
         "desc": "Fast and deadly at range. Keep your distance.",
         "color": (0, 255, 150),
         "start_weapon": "dagger",
-        "hp_bonus": -10,
+        "hp_bonus": 5,
         "damage_bonus": 0,
         "speed_bonus": 0.5,
-        "passives": ["crit_shots", "evasion"],
+        "passives": ["crit_shots", "evasion", "nano_regen"],
     },
     "jester": {
         "name": "Jester",
         "desc": "Chaos incarnate. Funny weapons, unpredictable power.",
         "color": (255, 50, 255),
         "start_weapon": "rubber_chicken",
-        "hp_bonus": 0,
+        "hp_bonus": 10,
         "damage_bonus": 0,
         "speed_bonus": 0.8,
-        "passives": ["lucky_crits", "confetti_burst"],
+        "passives": ["lucky_crits", "confetti_burst", "vampiric_strike"],
     },
 }
 
@@ -398,12 +401,14 @@ def draw_weapon(surface: pygame.Surface, sx: int, sy: int,
             _draw_axe_swing(surface, sx, sy, swing_angle, blade_len, blade_color, trail_color, progress, sword_angle, sweep)
         elif "Grenade" in wname:
             _draw_grenade_swing(surface, sx, sy, swing_angle, blade_len, blade_color, trail_color, progress, sword_angle, sweep)
+        elif "Crossbow" in wname:
+            _draw_crossbow_swing(surface, sx, sy, sword_angle, blade_len, blade_color, trail_color, progress)
         elif "Dagger" in wname or "Bow" in wname or "Rifle" in wname or "Scatter" in wname or "Banana" in wname or "Pie" in wname or "Ricochet" in wname or "Jack" in wname:
             _draw_dagger_swing(surface, sx, sy, swing_angle, blade_len, blade_color, trail_color, progress, sword_angle, sweep)
         elif "Shield" in wname:
             _draw_shield_swing(surface, sx, sy, swing_angle, blade_len, blade_color, trail_color, progress, sword_angle, sweep)
-        elif "Spear" in wname:
-            _draw_spear_thrust(surface, sx, sy, sword_angle, blade_len, blade_color, trail_color, progress)
+        elif "Flail" in wname:
+            _draw_flail_swing(surface, sx, sy, swing_angle, blade_len, blade_color, trail_color, progress, sword_angle, sweep)
         elif "Chicken" in wname:
             _draw_chicken_swing(surface, sx, sy, swing_angle, blade_len, blade_color, trail_color, progress, sword_angle, sweep)
         elif "Buzzer" in wname:
@@ -420,12 +425,14 @@ def draw_weapon(surface: pygame.Surface, sx: int, sy: int,
             _draw_axe_idle(surface, sx, sy, idle_angle, blade_len, blade_color)
         elif "Grenade" in wname:
             _draw_grenade_idle(surface, sx, sy, sword_angle, blade_len, blade_color)
+        elif "Crossbow" in wname:
+            _draw_crossbow_idle(surface, sx, sy, sword_angle, blade_len, blade_color)
         elif "Dagger" in wname or "Bow" in wname or "Rifle" in wname or "Scatter" in wname or "Banana" in wname or "Pie" in wname or "Ricochet" in wname or "Jack" in wname:
             _draw_dagger_idle(surface, sx, sy, sword_angle, blade_len, blade_color)
         elif "Shield" in wname:
             _draw_shield_idle(surface, sx, sy, idle_angle, blade_len, blade_color)
-        elif "Spear" in wname:
-            _draw_spear_idle(surface, sx, sy, idle_angle, blade_len, blade_color)
+        elif "Flail" in wname:
+            _draw_flail_idle(surface, sx, sy, idle_angle, blade_len, blade_color)
         elif "Chicken" in wname:
             _draw_chicken_idle(surface, sx, sy, idle_angle, blade_len, blade_color)
         elif "Buzzer" in wname:
@@ -496,40 +503,50 @@ def _draw_axe_swing(surface, sx, sy, swing_angle, blade_len, blade_color, trail_
     bx = sx + int(math.cos(swing_angle) * blade_len)
     by = sy + int(math.sin(swing_angle) * blade_len)
     # Shaft
-    pygame.draw.line(surface, (120, 80, 40), (sx, sy), (bx, by), 4)
-    # Axe head
+    pygame.draw.line(surface, (100, 55, 18), (sx, sy), (bx, by), 5)
+    # Double-bit axe head — two crescent blades on each side of shaft tip
     perp = swing_angle + math.pi / 2
-    h1x = bx + int(math.cos(perp) * 10)
-    h1y = by + int(math.sin(perp) * 10)
-    h2x = bx - int(math.cos(perp) * 4)
-    h2y = by - int(math.sin(perp) * 4)
-    h3x = bx + int(math.cos(swing_angle) * 6)
-    h3y = by + int(math.sin(swing_angle) * 6)
-    pygame.draw.polygon(surface, blade_color, [(bx, by), (h1x, h1y), (h3x, h3y)])
-    pygame.draw.polygon(surface, blade_color, [(bx, by), (h2x, h2y), (h3x, h3y)])
+    hs, tip = 15, 10  # half-size, tip forward length
+    for sign in (1, -1):
+        pts = [
+            (bx, by),
+            (bx + int(math.cos(perp) * hs * 1.3 * sign), by + int(math.sin(perp) * hs * 1.3 * sign)),
+            (bx + int(math.cos(perp) * hs * 0.7 * sign + math.cos(swing_angle) * tip),
+             by + int(math.sin(perp) * hs * 0.7 * sign + math.sin(swing_angle) * tip)),
+        ]
+        pygame.draw.polygon(surface, blade_color, pts)
+        pygame.draw.polygon(surface, (230, 230, 240), pts, 1)
+    # Impact spark at end of swing
+    if progress > 0.75:
+        spark_size = int(12 * (progress - 0.75) / 0.25)
+        pygame.draw.circle(surface, (255, 200, 80), (bx, by), spark_size)
     # Trail
-    for i in range(4):
-        t = max(0, progress - i * 0.08)
+    for i in range(5):
+        t = max(0, progress - i * 0.07)
         ta = base_angle - sweep / 2 + sweep * min(1.0, t)
-        tr = blade_len - i * 4
+        tr = blade_len - i * 3
         tx = sx + int(math.cos(ta) * tr)
         ty = sy + int(math.sin(ta) * tr)
-        alpha = max(20, 180 - i * 45)
-        ts = pygame.Surface((8, 8), pygame.SRCALPHA)
-        pygame.draw.circle(ts, (*trail_color, alpha), (4, 4), 4)
-        surface.blit(ts, (tx - 4, ty - 4))
+        alpha = max(20, 200 - i * 40)
+        ts = pygame.Surface((12, 12), pygame.SRCALPHA)
+        pygame.draw.circle(ts, (*trail_color, alpha), (6, 6), max(1, 6 - i))
+        surface.blit(ts, (tx - 6, ty - 6))
 
 
 def _draw_axe_idle(surface, sx, sy, idle_angle, blade_len, blade_color):
     bx = sx + int(math.cos(idle_angle) * blade_len)
     by = sy + int(math.sin(idle_angle) * blade_len)
-    pygame.draw.line(surface, (120, 80, 40), (sx, sy), (bx, by), 4)
+    pygame.draw.line(surface, (100, 55, 18), (sx, sy), (bx, by), 5)
     perp = idle_angle + math.pi / 2
-    h1x = bx + int(math.cos(perp) * 8)
-    h1y = by + int(math.sin(perp) * 8)
-    h3x = bx + int(math.cos(idle_angle) * 5)
-    h3y = by + int(math.sin(idle_angle) * 5)
-    pygame.draw.polygon(surface, blade_color, [(bx, by), (h1x, h1y), (h3x, h3y)])
+    for sign in (1, -1):
+        pts = [
+            (bx, by),
+            (bx + int(math.cos(perp) * 11 * sign), by + int(math.sin(perp) * 11 * sign)),
+            (bx + int(math.cos(perp) * 7 * sign + math.cos(idle_angle) * 7),
+             by + int(math.sin(perp) * 7 * sign + math.sin(idle_angle) * 7)),
+        ]
+        pygame.draw.polygon(surface, blade_color, pts)
+        pygame.draw.polygon(surface, (200, 200, 210), pts, 1)
 
 
 # ---- Daggers ----
@@ -561,7 +578,146 @@ def _draw_dagger_idle(surface, sx, sy, angle, blade_len, blade_color):
         pygame.draw.line(surface, blade_color, (sx, sy), (bx, by), 2)
 
 
-# ---- Spear ----
+# ---- Crossbow ----
+def _draw_crossbow_swing(surface, sx, sy, angle, blade_len, blade_color, trail_color, progress):
+    """T-shaped crossbow: stock goes back, limbs are perpendicular at the front."""
+    # Stock (points away from target — toward player's body)
+    stock_len = 16
+    stock_x = sx - int(math.cos(angle) * stock_len)
+    stock_y = sy - int(math.sin(angle) * stock_len)
+    pygame.draw.line(surface, (90, 60, 25), (sx, sy), (stock_x, stock_y), 4)
+    # Tiller (body forward)
+    til_x = sx + int(math.cos(angle) * 14)
+    til_y = sy + int(math.sin(angle) * 14)
+    pygame.draw.line(surface, (90, 60, 25), (sx, sy), (til_x, til_y), 3)
+    # Prod (limbs) — snap from relaxed to fired as progress increases
+    prod_len = int(16 * (1.0 - progress * 0.35))
+    perp = angle + math.pi / 2
+    l1x = sx + int(math.cos(perp) * prod_len)
+    l1y = sy + int(math.sin(perp) * prod_len)
+    l2x = sx - int(math.cos(perp) * prod_len)
+    l2y = sy - int(math.sin(perp) * prod_len)
+    pygame.draw.line(surface, blade_color, (l1x, l1y), (l2x, l2y), 4)
+    # Bowstring to tiller tip
+    pygame.draw.line(surface, (200, 175, 130), (l1x, l1y), (til_x, til_y), 1)
+    pygame.draw.line(surface, (200, 175, 130), (l2x, l2y), (til_x, til_y), 1)
+    # Bolt in flight after 0.3 progress
+    if progress > 0.3:
+        fly = min(1.0, (progress - 0.3) / 0.7)
+        bolt_dist = int(blade_len * 0.8 * fly)
+        bx = sx + int(math.cos(angle) * bolt_dist)
+        by = sy + int(math.sin(angle) * bolt_dist)
+        bolt_tip_x = bx + int(math.cos(angle) * 10)
+        bolt_tip_y = by + int(math.sin(angle) * 10)
+        pygame.draw.line(surface, blade_color, (bx, by), (bolt_tip_x, bolt_tip_y), 3)
+        # Glowing tip
+        pygame.draw.circle(surface, (255, 200, 80), (bolt_tip_x, bolt_tip_y), 3)
+        # Trail
+        trail_alpha = int(180 * (1 - fly))
+        if trail_alpha > 10:
+            trail_len = int(bolt_dist * 0.3)
+            t1x = bx - int(math.cos(angle) * trail_len)
+            t1y = by - int(math.sin(angle) * trail_len)
+            ts = pygame.Surface((4, 4), pygame.SRCALPHA)
+            pygame.draw.line(surface, (*trail_color, trail_alpha), (t1x, t1y), (bx, by), 2)
+
+
+def _draw_crossbow_idle(surface, sx, sy, angle, blade_len, blade_color):
+    # Stock
+    stock_x = sx - int(math.cos(angle) * 15)
+    stock_y = sy - int(math.sin(angle) * 15)
+    pygame.draw.line(surface, (90, 60, 25), (sx, sy), (stock_x, stock_y), 4)
+    # Tiller
+    til_x = sx + int(math.cos(angle) * 14)
+    til_y = sy + int(math.sin(angle) * 14)
+    pygame.draw.line(surface, (90, 60, 25), (sx, sy), (til_x, til_y), 3)
+    # Prod (limbs — cocked and ready)
+    perp = angle + math.pi / 2
+    l1x = sx + int(math.cos(perp) * 16)
+    l1y = sy + int(math.sin(perp) * 16)
+    l2x = sx - int(math.cos(perp) * 16)
+    l2y = sy - int(math.sin(perp) * 16)
+    pygame.draw.line(surface, blade_color, (l1x, l1y), (l2x, l2y), 4)
+    # Bowstring
+    pygame.draw.line(surface, (200, 175, 130), (l1x, l1y), (til_x, til_y), 1)
+    pygame.draw.line(surface, (200, 175, 130), (l2x, l2y), (til_x, til_y), 1)
+    # Bolt on track
+    bt_x = sx + int(math.cos(angle) * 5)
+    bt_y = sy + int(math.sin(angle) * 5)
+    bt_tip_x = sx + int(math.cos(angle) * 14)
+    bt_tip_y = sy + int(math.sin(angle) * 14)
+    pygame.draw.line(surface, blade_color, (bt_x, bt_y), (bt_tip_x, bt_tip_y), 2)
+    pygame.draw.circle(surface, (255, 180, 50), (bt_x, bt_y), 2)
+
+
+# ---- Flail ----
+def _draw_flail_swing(surface, sx, sy, swing_angle, blade_len, blade_color, trail_color, progress, base_angle, sweep):
+    """Chain links from player ending in a spiked ball that lags behind the arm."""
+    ball_lag = 0.18
+    ball_angle = base_angle - sweep / 2 + sweep * max(0.0, progress - ball_lag)
+    n_links = 5
+    prev_x, prev_y = sx, sy
+    for i in range(n_links):
+        t_frac = (i + 1) / n_links
+        # Links lag progressively more near the ball
+        lag = ball_lag * (n_links - i) / n_links
+        link_angle = base_angle - sweep / 2 + sweep * max(0.0, progress - lag)
+        lx = sx + int(math.cos(link_angle) * blade_len * 0.88 * t_frac)
+        ly = sy + int(math.sin(link_angle) * blade_len * 0.88 * t_frac)
+        pygame.draw.line(surface, (155, 135, 95), (prev_x, prev_y), (lx, ly), 2)
+        if i < n_links - 1:
+            pygame.draw.rect(surface, (185, 165, 115), (lx - 2, ly - 2, 4, 4))
+        prev_x, prev_y = lx, ly
+    # Spiked ball
+    ball_len = blade_len * 0.90
+    bx = sx + int(math.cos(ball_angle) * ball_len)
+    by = sy + int(math.sin(ball_angle) * ball_len)
+    pygame.draw.circle(surface, blade_color, (bx, by), 8)
+    pygame.draw.circle(surface, (235, 215, 160), (bx, by), 8, 2)
+    for si in range(6):
+        spike_a = ball_angle + si * math.pi / 3
+        spx = bx + int(math.cos(spike_a) * 12)
+        spy = by + int(math.sin(spike_a) * 12)
+        pygame.draw.line(surface, (220, 200, 145), (bx, by), (spx, spy), 2)
+        pygame.draw.circle(surface, blade_color, (spx, spy), 2)
+    # Ball trail
+    for i in range(5):
+        t = max(0, progress - i * 0.07 - ball_lag)
+        ta = base_angle - sweep / 2 + sweep * min(1.0, max(0, t))
+        tr = ball_len - i * 3
+        tx = sx + int(math.cos(ta) * tr)
+        ty = sy + int(math.sin(ta) * tr)
+        alpha = max(20, 190 - i * 42)
+        ts = pygame.Surface((12, 12), pygame.SRCALPHA)
+        pygame.draw.circle(ts, (*trail_color, alpha), (6, 6), max(1, 6 - i))
+        surface.blit(ts, (tx - 6, ty - 6))
+
+
+def _draw_flail_idle(surface, sx, sy, idle_angle, blade_len, blade_color):
+    n_links = 5
+    now_f = pygame.time.get_ticks()
+    prev_x, prev_y = sx, sy
+    for i in range(n_links):
+        t_frac = (i + 1) / n_links
+        wobble = math.sin(now_f * 0.004 + i * 0.8) * 3
+        lx = sx + int(math.cos(idle_angle) * blade_len * 0.82 * t_frac) + int(wobble)
+        ly = sy + int(math.sin(idle_angle) * blade_len * 0.82 * t_frac)
+        pygame.draw.line(surface, (155, 135, 95), (prev_x, prev_y), (lx, ly), 2)
+        if i < n_links - 1:
+            pygame.draw.rect(surface, (185, 165, 115), (lx - 2, ly - 2, 4, 4))
+        prev_x, prev_y = lx, ly
+    bx = sx + int(math.cos(idle_angle) * blade_len * 0.82)
+    by = sy + int(math.sin(idle_angle) * blade_len * 0.82)
+    pygame.draw.circle(surface, blade_color, (bx, by), 7)
+    pygame.draw.circle(surface, (235, 215, 160), (bx, by), 7, 2)
+    for si in range(6):
+        spike_a = idle_angle + si * math.pi / 3
+        spx = bx + int(math.cos(spike_a) * 10)
+        spy = by + int(math.sin(spike_a) * 10)
+        pygame.draw.line(surface, (220, 200, 145), (bx, by), (spx, spy), 2)
+
+
+# ---- Spear (kept for save-file compat, mapped identically to sword) ----
 def _draw_spear_thrust(surface, sx, sy, angle, blade_len, blade_color, trail_color, progress):
     # Thrust forward
     extend = blade_len * (0.5 + 0.5 * progress)

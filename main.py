@@ -27,7 +27,8 @@ _RESOLUTIONS = {
 _settings.RESOLUTIONS = _RESOLUTIONS
 
 # Load saved resolution preference
-_settings_file = os.path.join(os.path.dirname(__file__), "settings_save.json")
+from src.settings import DATA_DIR as _DATA_DIR
+_settings_file = os.path.join(_DATA_DIR, "settings_save.json")
 _res_key = "native"
 try:
     with open(_settings_file) as _f:

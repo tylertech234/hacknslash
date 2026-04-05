@@ -12,166 +12,169 @@ from src.settings import (
 from src.systems.status_effects import StatusManager
 from src.font_cache import get_font
 
+_DYING_MS = 250  # duration of the squash-and-spark death animation (ms)
+
 # ── Enemy type presets ──
 ENEMY_TYPES = {
-    # ── Zone 1: The Forest (intro zone) ──
+    # ── Zone 1: The Forest (regulars ×1.25 HP; bosses ×1.875 HP) ──
     "cyber_rat": {
-        "hp": 38, "speed": 4.5, "size": 16,
+        "hp": 48, "speed": 4.5, "size": 16,
         "damage": 9, "shoot_range": 0,
         "shoot_cooldown": 9999, "bullet_damage": 0,
         "xp_value": 15, "status_on_hit": None,
     },
     "cyber_raccoon": {
-        "hp": 100, "speed": 2.6, "size": 26,
+        "hp": 125, "speed": 2.6, "size": 26,
         "damage": 15, "shoot_range": 0,
         "shoot_cooldown": 9999, "bullet_damage": 0,
         "xp_value": 28, "status_on_hit": "bleed",
     },
     "mega_cyber_deer": {
-        "hp": 750, "speed": 1.9, "size": 56,
-        "damage": 26, "shoot_range": 0,
+        "hp": 2100, "speed": 1.9, "size": 56,
+        "damage": 32, "shoot_range": 0,
         "shoot_cooldown": 9999, "bullet_damage": 0,
         "xp_value": 180, "status_on_hit": None,
         "special": "buck_charge",
     },
     "d_lek": {
-        "hp": 81, "speed": ENEMY_SPEED, "size": ENEMY_SIZE,
+        "hp": 102, "speed": ENEMY_SPEED, "size": ENEMY_SIZE,
         "damage": ENEMY_DAMAGE, "shoot_range": ENEMY_SHOOT_RANGE,
         "shoot_cooldown": ENEMY_SHOOT_COOLDOWN, "bullet_damage": ENEMY_BULLET_DAMAGE,
         "xp_value": 22, "status_on_hit": None,
     },
     "iron_sentinel": {
-        "hp": 1000, "speed": 1.5, "size": 56,
-        "damage": 25, "shoot_range": 350,
-        "shoot_cooldown": 900, "bullet_damage": 16,
+        "hp": 2800, "speed": 1.5, "size": 56,
+        "damage": 30, "shoot_range": 350,
+        "shoot_cooldown": 800, "bullet_damage": 20,
         "xp_value": 200, "status_on_hit": "fire",
         "special": "ground_slam",
     },
     "supreme_d_lek": {
-        "hp": 3125, "speed": 1.2, "size": 72,
-        "damage": 40, "shoot_range": 400,
-        "shoot_cooldown": 600, "bullet_damage": 25,
+        "hp": 8800, "speed": 1.2, "size": 72,
+        "damage": 50, "shoot_range": 400,
+        "shoot_cooldown": 500, "bullet_damage": 32,
         "xp_value": 800, "status_on_hit": "bleed",
         "special": "war_cry",
     },
     "emperors_elite_guard": {
-        "hp": 563, "speed": 2.0, "size": 38,
-        "damage": 22, "shoot_range": 380,
-        "shoot_cooldown": 850, "bullet_damage": 18,
+        "hp": 1050, "speed": 2.0, "size": 38,
+        "damage": 28, "shoot_range": 400,
+        "shoot_cooldown": 750, "bullet_damage": 22,
         "xp_value": 150, "status_on_hit": "bleed",
+        "special": "elite_volley",
     },
     "charger": {
-        "hp": 88, "speed": 2.5, "size": 28,
+        "hp": 110, "speed": 2.5, "size": 28,
         "damage": 24, "shoot_range": 0,
         "shoot_cooldown": 9999, "bullet_damage": 0,
         "xp_value": 30, "status_on_hit": None,
     },
     "shielder": {
-        "hp": 175, "speed": 1.6, "size": 38,
+        "hp": 220, "speed": 1.6, "size": 38,
         "damage": 18, "shoot_range": 0,
         "shoot_cooldown": 9999, "bullet_damage": 0,
         "xp_value": 40, "status_on_hit": "slow",
     },
     "spitter": {
-        "hp": 75, "speed": 2.0, "size": 30,
+        "hp": 94, "speed": 2.0, "size": 30,
         "damage": 10, "shoot_range": 280,
         "shoot_cooldown": 1100, "bullet_damage": 13,
         "xp_value": 26, "status_on_hit": "poison",
     },
-    # ── Zone 2: Ruined City ──
+    # ── Zone 2: Ruined City (regulars ×2.0 HP; bosses ×3.0 HP) ──
     "cyber_zombie": {
-        "hp": 100, "speed": 1.8, "size": 30,
-        "damage": 22, "shoot_range": 0,
-        "shoot_cooldown": 9999, "bullet_damage": 0,
-        "xp_value": 26, "status_on_hit": None,
-    },
-    "cyber_dog": {
-        "hp": 63, "speed": 4.0, "size": 24,
-        "damage": 16, "shoot_range": 0,
-        "shoot_cooldown": 9999, "bullet_damage": 0,
-        "xp_value": 26, "status_on_hit": "bleed",
-    },
-    "drone": {
-        "hp": 56, "speed": 2.8, "size": 22,
-        "damage": 8, "shoot_range": 300,
-        "shoot_cooldown": 800, "bullet_damage": 16,
-        "xp_value": 22, "status_on_hit": None,
-    },
-    "cultist": {
-        "hp": 125, "speed": 2.0, "size": 32,
-        "damage": 12, "shoot_range": 260,
-        "shoot_cooldown": 1300, "bullet_damage": 18,
-        "xp_value": 38, "status_on_hit": "fire",
-    },
-    "shambler": {
-        "hp": 225, "speed": 1.0, "size": 42,
+        "hp": 200, "speed": 1.8, "size": 30,
         "damage": 28, "shoot_range": 0,
-        "shoot_cooldown": 9999, "bullet_damage": 0,
-        "xp_value": 48, "status_on_hit": "poison",
-    },
-    "street_preacher": {
-        "hp": 1500, "speed": 1.4, "size": 52,
-        "damage": 20, "shoot_range": 320,
-        "shoot_cooldown": 1000, "bullet_damage": 16,
-        "xp_value": 250, "status_on_hit": "fire",
-        "special": "flame_pillar",
-    },
-    "eldritch_horror": {
-        "hp": 4375, "speed": 1.0, "size": 80,
-        "damage": 35, "shoot_range": 380,
-        "shoot_cooldown": 700, "bullet_damage": 22,
-        "xp_value": 1000, "status_on_hit": "bleed",
-        "special": "tentacle_sweep",
-    },
-    # ── Zone 3: The Abyss ──
-    "specter": {
-        "hp": 100, "speed": 3.8, "size": 34,
-        "damage": 22, "shoot_range": 0,  # melee only
-        "shoot_cooldown": 9999, "bullet_damage": 0,
-        "xp_value": 38, "status_on_hit": "bleed",
-    },
-    "void_wisp": {
-        "hp": 38, "speed": 3.5, "size": 20,
-        "damage": 10, "shoot_range": 0,
-        "shoot_cooldown": 9999, "bullet_damage": 0,
-        "xp_value": 22, "status_on_hit": None,
-    },
-    "rift_walker": {
-        "hp": 81, "speed": 2.2, "size": 34,
-        "damage": 18, "shoot_range": 0,
-        "shoot_cooldown": 9999, "bullet_damage": 0,
-        "xp_value": 32, "status_on_hit": "slow",
-    },
-    "mirror_shade": {
-        "hp": 60, "speed": 2.5, "size": 28,
-        "damage": 14, "shoot_range": 0,
         "shoot_cooldown": 9999, "bullet_damage": 0,
         "xp_value": 32, "status_on_hit": None,
     },
+    "cyber_dog": {
+        "hp": 126, "speed": 4.0, "size": 24,
+        "damage": 20, "shoot_range": 0,
+        "shoot_cooldown": 9999, "bullet_damage": 0,
+        "xp_value": 32, "status_on_hit": "bleed",
+    },
+    "drone": {
+        "hp": 112, "speed": 2.8, "size": 22,
+        "damage": 12, "shoot_range": 300,
+        "shoot_cooldown": 750, "bullet_damage": 20,
+        "xp_value": 28, "status_on_hit": None,
+    },
+    "cultist": {
+        "hp": 250, "speed": 2.0, "size": 32,
+        "damage": 16, "shoot_range": 260,
+        "shoot_cooldown": 1100, "bullet_damage": 22,
+        "xp_value": 42, "status_on_hit": "fire",
+    },
+    "shambler": {
+        "hp": 450, "speed": 1.0, "size": 42,
+        "damage": 35, "shoot_range": 0,
+        "shoot_cooldown": 9999, "bullet_damage": 0,
+        "xp_value": 55, "status_on_hit": "poison",
+    },
+    "street_preacher": {
+        "hp": 6750, "speed": 1.4, "size": 52,
+        "damage": 26, "shoot_range": 320,
+        "shoot_cooldown": 900, "bullet_damage": 20,
+        "xp_value": 300, "status_on_hit": "fire",
+        "special": "flame_pillar",
+    },
+    "eldritch_horror": {
+        "hp": 20000, "speed": 1.0, "size": 80,
+        "damage": 45, "shoot_range": 380,
+        "shoot_cooldown": 600, "bullet_damage": 28,
+        "xp_value": 1200, "status_on_hit": "bleed",
+        "special": "tentacle_sweep",
+    },
+    # ── Zone 3: The Abyss (regulars ×4.0 HP; bosses ×6.0 HP) ──
+    "specter": {
+        "hp": 400, "speed": 3.8, "size": 34,
+        "damage": 28, "shoot_range": 0,  # melee only
+        "shoot_cooldown": 9999, "bullet_damage": 0,
+        "xp_value": 48, "status_on_hit": "bleed",
+    },
+    "void_wisp": {
+        "hp": 152, "speed": 3.5, "size": 20,
+        "damage": 14, "shoot_range": 0,
+        "shoot_cooldown": 9999, "bullet_damage": 0,
+        "xp_value": 28, "status_on_hit": None,
+    },
+    "rift_walker": {
+        "hp": 324, "speed": 2.2, "size": 34,
+        "damage": 24, "shoot_range": 0,
+        "shoot_cooldown": 9999, "bullet_damage": 0,
+        "xp_value": 40, "status_on_hit": "slow",
+    },
+    "mirror_shade": {
+        "hp": 240, "speed": 2.5, "size": 28,
+        "damage": 20, "shoot_range": 0,
+        "shoot_cooldown": 9999, "bullet_damage": 0,
+        "xp_value": 40, "status_on_hit": None,
+    },
     "gravity_warden": {
-        "hp": 113, "speed": 1.5, "size": 40,
-        "damage": 12, "shoot_range": 250,
-        "shoot_cooldown": 1200, "bullet_damage": 15,
-        "xp_value": 42, "status_on_hit": "slow",
+        "hp": 452, "speed": 1.5, "size": 40,
+        "damage": 18, "shoot_range": 250,
+        "shoot_cooldown": 1000, "bullet_damage": 20,
+        "xp_value": 52, "status_on_hit": "slow",
     },
     "null_serpent": {
-        "hp": 88, "speed": 2.8, "size": 36,
-        "damage": 16, "shoot_range": 0,
+        "hp": 352, "speed": 2.8, "size": 36,
+        "damage": 22, "shoot_range": 0,
         "shoot_cooldown": 9999, "bullet_damage": 0,
-        "xp_value": 38, "status_on_hit": "poison",
+        "xp_value": 48, "status_on_hit": "poison",
     },
     "architect": {
-        "hp": 1875, "speed": 1.2, "size": 56,
-        "damage": 22, "shoot_range": 340,
-        "shoot_cooldown": 900, "bullet_damage": 18,
-        "xp_value": 300, "status_on_hit": "slow",
+        "hp": 16800, "speed": 1.2, "size": 56,
+        "damage": 30, "shoot_range": 340,
+        "shoot_cooldown": 800, "bullet_damage": 24,
+        "xp_value": 400, "status_on_hit": "slow",
         "special": "void_rift",
     },
     "nexus": {
-        "hp": 6250, "speed": 0.8, "size": 90,
-        "damage": 45, "shoot_range": 420,
-        "shoot_cooldown": 500, "bullet_damage": 28,
-        "xp_value": 1500, "status_on_hit": "bleed",
+        "hp": 84000, "speed": 0.9, "size": 120,
+        "damage": 70, "shoot_range": 480,
+        "shoot_cooldown": 380, "bullet_damage": 42,
+        "xp_value": 2000, "status_on_hit": "insanity",
         "special": "null_burst",
     },
 }
@@ -256,6 +259,9 @@ class Enemy:
             "eldritch_pull":    {"cooldown": 6000, "duration": 1500, "range": 500, "aoe_mult": 3.0},
             "void_cage":        {"cooldown": 6500, "duration": 1800, "range": 450, "aoe_mult": 2.5},
             "reality_collapse": {"cooldown": 5500, "duration": 1000, "range": 500, "aoe_mult": 3.5},
+            # Elite Guard specials
+            "elite_volley":     {"cooldown": 4000, "duration": 700,  "range": 380, "aoe_mult": 3.0},
+            "imperial_barrage": {"cooldown": 3500, "duration": 600,  "range": 500, "aoe_mult": 2.0},
         }
         sp = _special_params.get(self._special, {})
         self._special_cooldown = sp.get("cooldown", 5000)
@@ -271,6 +277,7 @@ class Enemy:
             "eldritch_horror": "eldritch_pull",
             "architect":       "void_cage",
             "nexus":           "reality_collapse",
+            "emperors_elite_guard": "imperial_barrage",
         }
         self._special2 = _special2_map.get(enemy_type)
         if self._special2:
@@ -328,6 +335,7 @@ class Enemy:
         # Corpse linger — stays visible this many ms after death
         self._corpse_until = 0
         self._death_time = 0
+        self._corpse_surf = None  # cached at death
 
         # Animation
         self.anim_offset = random.uniform(0, math.tau)
@@ -434,7 +442,7 @@ class Enemy:
         if self.hp <= 0:
             self.alive = False
             self._death_time = now
-            self._corpse_until = now + 1800  # linger 1.8s as corpse
+            self._corpse_until = now + 6000  # linger 6s as corpse
         # Apply knockback (reduced for bosses)
         length = math.hypot(knockback_x, knockback_y)
         if length > 0:
@@ -458,6 +466,8 @@ class Enemy:
             self.hp -= status_dmg
             if self.hp <= 0:
                 self.alive = False
+                self._death_time = now
+                self._corpse_until = now + 6000
                 return
 
         speed_mult = self.statuses.get_speed_mult()
@@ -502,6 +512,16 @@ class Enemy:
         if self.enemy_type == "spitter" and dist < 120 and dist > 10:
             self.x -= (dx / dist) * effective_speed * 2.0
             self.y -= (dy / dist) * effective_speed * 2.0
+
+        # Ranged bosses: maintain distance — retreat + strafe when player charges in
+        if self.is_boss and self.shoot_range > 0 and 0 < dist < 260:
+            flee_speed = effective_speed * 1.8
+            self.x -= (dx / dist) * flee_speed
+            self.y -= (dy / dist) * flee_speed
+            # Lateral strafe while retreating so they don't get cornered
+            strafe_bob = math.sin(now * 0.004 + self.anim_offset) * effective_speed * 0.9
+            self.x += -self.face_y * strafe_bob
+            self.y += self.face_x * strafe_bob
 
         # Void wisp: random lateral burst-dashes every ~700ms
         if self.enemy_type == "void_wisp":
@@ -590,6 +610,15 @@ class Enemy:
                 self.x = player_x + math.cos(angle) * td
                 self.y = player_y + math.sin(angle) * td
 
+        # D-Lek: tactical blink to optimal firing range when player closes in
+        if self.enemy_type == "d_lek" and now - self._last_teleport > 7000:
+            if dist < 100:  # player too close — blink away to shooting range
+                angle = random.uniform(0, math.tau)
+                td = random.uniform(200, 320)
+                self.x = player_x + math.cos(angle) * td
+                self.y = player_y + math.sin(angle) * td
+                self._last_teleport = now
+
         # Charger: burst dash toward player
         if self.enemy_type == "charger":
             if self._charging:
@@ -608,12 +637,12 @@ class Enemy:
         # Mega Cyber Deer: powerful charge at player, covers ground fast
         if self.enemy_type == "mega_cyber_deer":
             if self._charging:
-                if now - self._last_charge > 650:
+                if now - self._last_charge > 500:
                     self._charging = False
                 else:
-                    self.x += self._charge_dx * 8.0 * speed_mult
-                    self.y += self._charge_dy * 8.0 * speed_mult
-            elif dist < 350 and now - self._last_charge > 3000:
+                    self.x += self._charge_dx * 11.0 * speed_mult
+                    self.y += self._charge_dy * 11.0 * speed_mult
+            elif dist < 475 and now - self._last_charge > 1800:
                 self._charging = True
                 self._last_charge = now
                 if dist > 0:
@@ -751,29 +780,33 @@ class Enemy:
     def draw(self, surface: pygame.Surface, camera_x: int, camera_y: int):
         now = pygame.time.get_ticks()
         if not self.alive:
+            elapsed = now - self._death_time
+            sx = int(self.x - camera_x)
+            sy = int(self.y - camera_y)
+            margin = self.size + 32
+            if sx < -margin or sx > SCREEN_WIDTH + margin or sy < -margin or sy > SCREEN_HEIGHT + margin:
+                return
+            if elapsed < _DYING_MS:
+                self._draw_dying_phase(surface, sx, sy, elapsed, now)
+                return
             # Corpse crumble: flat fading body on the floor
             if now < self._corpse_until:
-                sx = int(self.x - camera_x)
-                sy = int(self.y - camera_y)
-                margin = self.size + 32
-                if sx < -margin or sx > SCREEN_WIDTH + margin or sy < -margin or sy > SCREEN_HEIGHT + margin:
-                    return
                 t = (now - self._death_time) / max(1, self._corpse_until - self._death_time)
                 alpha = int(220 * (1.0 - t) ** 1.4)
                 half = self.size // 2
                 cw = max(4, int(self.size * 1.2))
                 ch = max(3, int(self.size * 0.35))
-                csurf = pygame.Surface((cw, ch + 6), pygame.SRCALPHA)
-                # Dark flattened body ellipse
-                pygame.draw.ellipse(csurf, (40, 20, 20, alpha), (0, 0, cw, ch))
-                pygame.draw.ellipse(csurf, (80, 30, 30, alpha // 2), (0, 0, cw, ch), 2)
-                # Small spark bleed-out dots fading in first 600ms
-                if t < 0.33:
-                    spark_a = int(200 * (1.0 - t / 0.33))
+                # Build corpse surface once, reuse with fading alpha
+                if self._corpse_surf is None:
+                    csurf = pygame.Surface((cw, ch + 6), pygame.SRCALPHA)
+                    pygame.draw.ellipse(csurf, (40, 20, 20, 220), (0, 0, cw, ch))
+                    pygame.draw.ellipse(csurf, (80, 30, 30, 110), (0, 0, cw, ch), 2)
                     for i in range(3):
                         dot_x = cw // 2 + int((i - 1) * cw * 0.25)
-                        pygame.draw.circle(csurf, (200, 20, 20, spark_a), (dot_x, ch // 2), 2)
-                surface.blit(csurf, (sx - cw // 2, sy - ch // 2 + half // 2))
+                        pygame.draw.circle(csurf, (200, 20, 20, 200), (dot_x, ch // 2), 2)
+                    self._corpse_surf = csurf
+                self._corpse_surf.set_alpha(alpha)
+                surface.blit(self._corpse_surf, (sx - cw // 2, sy - ch // 2 + half // 2))
             return
         sx = int(self.x - camera_x)
         sy = int(self.y - camera_y)
@@ -2220,68 +2253,171 @@ class Enemy:
     def _draw_nexus(self, surface, sx, sy, now):
         is_hit = now - self.hit_flash < 100
         half = self.size // 2
-        pulse = 0.6 + 0.4 * math.sin(now * 0.003)
+        pulse  = 0.6 + 0.4 * math.sin(now * 0.003)
+        pulse2 = 0.5 + 0.5 * math.sin(now * 0.007 + 1.6)
 
-        # Orbiting void fragments (draw behind)
-        for i in range(6):
-            oa = now * 0.002 + i * math.tau / 6
-            od = half + 15 + math.sin(now * 0.003 + i) * 8
-            ox = sx + int(math.cos(oa) * od)
-            oy = sy + int(math.sin(oa) * od)
-            frag_size = 6 + int(math.sin(now * 0.005 + i * 2) * 2)
-            frag_color = (80, 40, 120) if not is_hit else (200, 200, 200)
-            pygame.draw.circle(surface, frag_color, (ox, oy), frag_size)
-            # Trail
-            ts = self._get_surf(frag_size * 2, frag_size * 2)
-            pygame.draw.circle(ts, (120, 60, 180, 60), (frag_size, frag_size), frag_size)
-            surface.blit(ts, (ox - frag_size, oy - frag_size))
+        # ── Outer insanity aura — slow-breathing crimson/void ring ───────────
+        aura_r = int(half + 28 + 12 * pulse)
+        aura_s = self._get_surf((half + 42) * 2, (half + 42) * 2)
+        aura_c = (half + 42)
+        pygame.draw.circle(aura_s, (100, 20, 160, int(30 * pulse2)), (aura_c, aura_c), aura_r)
+        pygame.draw.circle(aura_s, (200, 30, 80, int(18 * pulse)), (aura_c, aura_c), aura_r, 6)
+        surface.blit(aura_s, (sx - aura_c, sy - aura_c))
 
-        # Outer ring
-        ring_s = self._get_surf(self.size + 20, self.size + 20)
-        rc = (self.size + 20) // 2
-        ring_color_a = int(80 + 60 * pulse)
-        pygame.draw.circle(ring_s, (100, 50, 180, ring_color_a), (rc, rc), half + 4, 4)
+        # ── 12 orbiting void fragments in two rings ───────────────────────────
+        for ring_idx, (ring_r, frag_spd, frag_sz_base) in enumerate(
+                ((half + 22, 0.0018, 7), (half + 44, 0.0012, 5))):
+            for i in range(6):
+                oa = now * frag_spd * (1 if ring_idx == 0 else -1) + i * math.tau / 6
+                od = ring_r + math.sin(now * 0.003 + i + ring_idx) * 6
+                ox = sx + int(math.cos(oa) * od)
+                oy = sy + int(math.sin(oa) * od)
+                frag_sz = frag_sz_base + int(math.sin(now * 0.005 + i * 2.1) * 2)
+                frag_color = (80, 30, 130) if not is_hit else (200, 200, 200)
+                frag_glow_color = (160, 60, 220, 70) if ring_idx == 0 else (220, 40, 100, 50)
+                pygame.draw.circle(surface, frag_color, (ox, oy), frag_sz)
+                ts = self._get_surf(frag_sz * 2 + 4, frag_sz * 2 + 4)
+                pygame.draw.circle(ts, frag_glow_color, (frag_sz + 2, frag_sz + 2), frag_sz + 2)
+                surface.blit(ts, (ox - frag_sz - 2, oy - frag_sz - 2))
+
+        # ── Outer void ring ───────────────────────────────────────────────────
+        ring_s = self._get_surf(self.size + 30, self.size + 30)
+        rc = (self.size + 30) // 2
+        pygame.draw.circle(ring_s, (120, 50, 200, int(90 + 50 * pulse)), (rc, rc), half + 8, 5)
+        pygame.draw.circle(ring_s, (220, 40, 90, int(40 * pulse2)), (rc, rc), half + 8, 2)
         surface.blit(ring_s, (sx - rc, sy - rc))
 
-        # Inner ring
-        ring_s2 = self._get_surf(self.size, self.size)
-        rc2 = self.size // 2
-        pygame.draw.circle(ring_s2, (140, 80, 220, int(100 * pulse)), (rc2, rc2), half - 10, 3)
+        # ── Secondary rotating ring ───────────────────────────────────────────
+        ring_s2 = self._get_surf(self.size + 4, self.size + 4)
+        rc2 = (self.size + 4) // 2
+        pygame.draw.circle(ring_s2, (160, 80, 255, int(110 * pulse)), (rc2, rc2), half - 8, 3)
         surface.blit(ring_s2, (sx - rc2, sy - rc2))
 
-        # Core mass
-        body_color = (50, 20, 70) if not is_hit else (255, 255, 255)
-        pygame.draw.circle(surface, body_color, (sx, sy), half - 14)
-        # Pulsing inner glow
+        # ── Core mass ────────────────────────────────────────────────────────
+        body_color = (30, 10, 50) if not is_hit else (255, 255, 255)
+        pygame.draw.circle(surface, body_color, (sx, sy), half - 16)
+        # Deep void glow
         glow_r = int((half - 18) * pulse)
         if glow_r > 0:
-            _gmax = half - 18
+            _gmax = half - 16
             gs = self._get_surf(_gmax * 2, _gmax * 2)
-            pygame.draw.circle(gs, (160, 100, 255, int(120 * pulse)), (_gmax, _gmax), glow_r)
+            pygame.draw.circle(gs, (180, 80, 255, int(140 * pulse)), (_gmax, _gmax), glow_r)
+            pygame.draw.circle(gs, (240, 40, 100, int(60 * pulse2)), (_gmax, _gmax),
+                               max(1, glow_r - 10))
             surface.blit(gs, (sx - _gmax, sy - _gmax))
 
-        # Central eye
-        eye_r = 10 + int(4 * pulse)
-        pygame.draw.circle(surface, (200, 120, 255), (sx, sy), eye_r)
-        pygame.draw.circle(surface, (255, 200, 255), (sx, sy), max(2, eye_r - 4))
-        pygame.draw.circle(surface, (0, 0, 0), (sx, sy), max(1, eye_r - 7))
+        # ── 8 reality-tear spikes radiating from core ─────────────────────────
+        for i in range(8):
+            spike_a = now * 0.0008 + i * math.tau / 8
+            spike_in  = half - 18
+            spike_out = half - 4 + int(math.sin(now * 0.005 + i * 1.3) * 8)
+            sx1 = sx + int(math.cos(spike_a) * spike_in)
+            sy1 = sy + int(math.sin(spike_a) * spike_in)
+            sx2 = sx + int(math.cos(spike_a) * spike_out)
+            sy2 = sy + int(math.sin(spike_a) * spike_out)
+            pygame.draw.line(surface, (160, 60, 220), (sx1, sy1), (sx2, sy2), 3)
+            pygame.draw.circle(surface, (220, 100, 255), (sx2, sy2), 3)
 
-        # Reality distortion lines (premultiplied — no SRCALPHA allocation)
-        _pm_line = (33, 18, 52)  # (140*60//255, 80*60//255, 220*60//255)
-        for i in range(4):
-            la = now * 0.001 + i * math.pi / 2
-            lx = sx + int(math.cos(la) * half * 1.2)
-            ly = sy + int(math.sin(la) * half * 1.2)
-            ex = lx + int(math.cos(la) * 20)
-            ey = ly + int(math.sin(la) * 20)
-            pygame.draw.line(surface, _pm_line, (lx, ly), (ex, ey), 2)
+        # ── Central insanity eye — vertical slit pupil that tracks player ─────
+        eye_r = 14 + int(5 * pulse)
+        # Iris
+        pygame.draw.circle(surface, (210, 80, 255), (sx, sy), eye_r)
+        pygame.draw.circle(surface, (240, 160, 255), (sx, sy), max(3, eye_r - 5))
+        # Vertical slit pupil
+        pupil_h = eye_r - 2
+        pupil_w = max(2, eye_r // 3)
+        pygame.draw.ellipse(surface, (0, 0, 0), (sx - pupil_w, sy - pupil_h, pupil_w * 2, pupil_h * 2))
+        # Blood-red reflection glint
+        glint_x = sx + int(self.face_x * 4)
+        glint_y = sy + int(self.face_y * 4)
+        pygame.draw.circle(surface, (255, 40, 60), (glint_x, glint_y - 3), 2)
 
-        # Gun flash
+        # ── Reality distortion tendrils (8 directions, animated) ─────────────
+        for i in range(8):
+            la = now * 0.0014 + i * math.tau / 8
+            l_near = half - 10
+            l_far  = half + 6 + int(math.sin(now * 0.004 + i) * 10)
+            lx1 = sx + int(math.cos(la) * l_near)
+            ly1 = sy + int(math.sin(la) * l_near)
+            lx2 = sx + int(math.cos(la) * l_far)
+            ly2 = sy + int(math.sin(la) * l_far)
+            c_a = int(60 + 40 * math.sin(now * 0.006 + i))
+            pygame.draw.line(surface, (140, 60, 220), (lx1, ly1), (lx2, ly2), 2)
+
+        # ── Gun flash ────────────────────────────────────────────────────────
         if now - self.gun_flash_timer < 200:
             fx = sx + int(self.face_x * half)
             fy = sy + int(self.face_y * half)
-            pygame.draw.circle(surface, (180, 100, 255), (fx, fy), 12)
+            gs2 = self._get_surf(28, 28)
+            pygame.draw.circle(gs2, (220, 80, 255, 220), (14, 14), 14)
+            surface.blit(gs2, (fx - 14, fy - 14))
+            pygame.draw.circle(surface, (255, 200, 255), (fx, fy), 6)
 
-        # BOSS label
-        label = get_font("consolas", 12, True).render("BOSS", True, (180, 100, 255))
-        surface.blit(label, (sx - label.get_width() // 2, sy - half - 28))
+        # ── FINAL BOSS label ─────────────────────────────────────────────────
+        label = get_font("consolas", 13, True).render("FINAL BOSS", True, (255, 60, 180))
+        surface.blit(label, (sx - label.get_width() // 2, sy - half - 32))
+        # Pulsing subtitle
+        sub_a = int(160 + 95 * pulse2)
+        sub_s = get_font("consolas", 9, False).render("THE NEXUS", True, (180, 80, 255))
+        sub_surf = pygame.Surface(sub_s.get_size(), pygame.SRCALPHA)
+        sub_surf.blit(sub_s, (0, 0))
+        sub_surf.set_alpha(sub_a)
+        surface.blit(sub_surf, (sx - sub_surf.get_width() // 2, sy - half - 18))
+
+    def _draw_dying_phase(self, surface: pygame.Surface, sx: int, sy: int,
+                          elapsed: int, now: int):
+        """250ms squash-and-spark death animation before the corpse appears."""
+        t = elapsed / _DYING_MS  # 0..1
+
+        # Color by enemy type family (mirrors game_actions.py mapping)
+        et = self.enemy_type
+        if et in ("cultist", "street_preacher", "eldritch_horror"):
+            col = (160, 60, 200)
+        elif et in ("void_wisp", "rift_walker", "null_serpent", "specter"):
+            col = (140, 80, 220)
+        elif et in ("gravity_warden", "architect", "nexus"):
+            col = (80, 200, 240)
+        elif et == "mirror_shade":
+            col = (100, 100, 120)
+        else:
+            col = (80, 160, 255)  # default: blue-white
+
+        half = max(1, self.size // 2)
+
+        # Ellipse: widen and squash as t increases
+        ew = max(4, int(self.size * (1.0 + t * 0.55)))
+        eh = max(2, int(self.size * (1.0 - t * 0.88)))
+        tilt_deg = t * 82  # fall over (degrees)
+
+        tsz = self.size * 3 + 8
+        tc = tsz // 2
+        tmp = pygame.Surface((tsz, tsz), pygame.SRCALPHA)
+
+        # Main squashed body
+        pygame.draw.ellipse(tmp, (*col, 210), (tc - ew // 2, tc - eh // 2, ew, eh))
+
+        # White impact flash (first ~40% of the phase)
+        if t < 0.4:
+            fa = int(240 * (1.0 - t / 0.4) ** 1.5)
+            pygame.draw.ellipse(tmp, (255, 255, 255, fa),
+                                (tc - ew // 2, tc - eh // 2, ew, eh))
+
+        # Spark lines (4 cardinal directions, fade out by 78%)
+        if t < 0.78:
+            spark_alpha = int(255 * (1.0 - t / 0.78) ** 0.7)
+            ao = (now * 0.006) % (math.pi * 2)  # slow spin offset
+            for i in range(4):
+                angle = i * math.pi / 2 + ao
+                slen = max(2, int(half * 1.2 * (1.0 - t / 0.78)))
+                ex1 = tc + int(math.cos(angle) * (half * 0.55))
+                ey1 = tc + int(math.sin(angle) * (half * 0.55))
+                ex2 = ex1 + int(math.cos(angle) * slen)
+                ey2 = ey1 + int(math.sin(angle) * slen)
+                sc = [(255, 240, 60), (255, 130, 30), (160, 255, 80)][i % 3]
+                pygame.draw.line(tmp, (*sc, spark_alpha), (ex1, ey1), (ex2, ey2), 2)
+
+        # Rotate (fall to the side) and drop slightly
+        rotated = pygame.transform.rotate(tmp, tilt_deg)
+        rw, rh = rotated.get_size()
+        y_drop = int(half * t * 0.35)
+        surface.blit(rotated, (sx - rw // 2, sy - rh // 2 + y_drop))

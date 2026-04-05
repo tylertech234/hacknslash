@@ -8,7 +8,14 @@ NATIVE_HEIGHT = 0  # filled in by main.py
 RESOLUTIONS: dict = {}  # filled in by main.py
 FPS = 60
 TITLE = "Cyber Survivor"
-VERSION = "0.9.3"
+VERSION = "0.9.5"
+
+# -- User data directory (%APPDATA%/CyberSurvivor on Windows) --
+import os as _os
+DATA_DIR = _os.path.join(_os.environ.get("APPDATA", ""), "CyberSurvivor") \
+    if _os.name == "nt" \
+    else _os.path.join(_os.path.expanduser("~"), ".cyber_survivor")
+_os.makedirs(DATA_DIR, exist_ok=True)
 
 # -- Colors --
 BLACK = (0, 0, 0)
@@ -54,7 +61,7 @@ PLAYER_ATTACK_RANGE = 60
 PLAYER_ATTACK_COOLDOWN = 400        # ms
 PLAYER_MAX_SPEED = 9                # hard cap — prevents melee from feeling weightless
 PLAYER_MAX_RANGE = 135              # hard cap on attack range
-PLAYER_DASH_SPEED = 12
+PLAYER_DASH_SPEED = 18
 PLAYER_DASH_DURATION = 150          # ms
 PLAYER_DASH_COOLDOWN = 800          # ms
 
@@ -81,11 +88,11 @@ ENEMY_SKIRT_COLOR = (90, 82, 74)    # Dalek skirt
 # -- Spawning --
 WAVE_BASE_COUNT = 8
 WAVE_GROWTH = 4
-SPAWN_MARGIN = 80                   # px from screen edge
+SPAWN_MARGIN = 120                  # px from screen edge (larger on bigger map)
 
 # -- XP / Leveling --
 XP_PER_KILL = 8
-XP_TO_LEVEL = 100
+XP_TO_LEVEL = 200                   # doubled — level up half as often
 XP_LEVEL_SCALE = 1.4                # multiplier per level
 
 # -- Pickups --
@@ -121,7 +128,12 @@ ENEMY_DARKNESS_DMG_BONUS = 0.5      # extra damage fraction at full darkness
 
 # -- Map --
 TILE_SIZE = 64
-MAP_WIDTH = 50                      # tiles
-MAP_HEIGHT = 50                     # tiles
+MAP_WIDTH = 88                      # tiles  (was 50)
+MAP_HEIGHT = 88                     # tiles
 FLOOR_COLOR = (34, 60, 28)
 WALL_COLOR = (20, 35, 18)
+
+# -- Camera zoom --
+# Render world to a smaller surface then scale up so entities look larger.
+# 1.0 = no zoom, 1.4 = 40% larger (see fewer world pixels per screen pixel).
+CAMERA_ZOOM = 1.40

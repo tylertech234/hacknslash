@@ -235,14 +235,17 @@ class HazardSystem:
     def is_entropic_decay_active(self) -> bool:
         return self._entropic_decay_active
 
-    def draw(self, surface: pygame.Surface, camera_x: int, camera_y: int, now: int):
+    def draw(self, surface: pygame.Surface, camera_x: int, camera_y: int, now: int,
+             vp_w: int = 0, vp_h: int = 0):
         """Draw hazard warnings and active effects."""
+        sw = vp_w if vp_w > 0 else SCREEN_WIDTH
+        sh = vp_h if vp_h > 0 else SCREEN_HEIGHT
         for h in self.hazards:
             sx = int(h.x - camera_x)
             sy = int(h.y - camera_y)
 
             # Skip off-screen
-            if sx < -100 or sx > SCREEN_WIDTH + 100 or sy < -100 or sy > SCREEN_HEIGHT + 100:
+            if sx < -100 or sx > sw + 100 or sy < -100 or sy > sh + 100:
                 continue
 
             if h.is_warning(now):

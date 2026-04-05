@@ -4,10 +4,10 @@ import pygame
 import math
 import json
 import os
-from src.settings import SCREEN_WIDTH, SCREEN_HEIGHT, WHITE, YELLOW, BLACK, VERSION
+from src.settings import SCREEN_WIDTH, SCREEN_HEIGHT, WHITE, YELLOW, BLACK, VERSION, DATA_DIR
 
 
-SETTINGS_FILE = os.path.join(os.path.dirname(__file__), "..", "..", "settings_save.json")
+SETTINGS_FILE = os.path.join(DATA_DIR, "settings_save.json")
 
 DEFAULT_SETTINGS = {
     "master_volume": 1.0,
@@ -101,6 +101,52 @@ class MainMenuScreen:
                 bug_x, bug_y, bug_r = SCREEN_WIDTH - 60, 150, 18
                 if (mx - bug_x) ** 2 + (my - bug_y) ** 2 <= (bug_r + 5) ** 2:
                     return "debug_menu"
+
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            mx, my = event.pos
+            if self.settings_open:
+                # Click on a settings row
+                start_y, row_h = 330, 40
+                box_w = 400
+                box_x = SCREEN_WIDTH // 2 - box_w // 2
+                for i, item in enumerate(self.settings_items):
+                    iy = start_y + i * row_h
+                    if box_x <= mx <= box_x + box_w and iy <= my <= iy + row_h - 4:
+                        self.settings_selected = i
+                        if item["type"] == "toggle":
+                            self.settings[item["key"]] = not self.settings[item["key"]]
+                        elif item["type"] == "choice":
+                            choices = item["choices"]
+                            idx = choices.index(self.settings[item["key"]]) if self.settings[item["key"]] in choices else 0
+                            self.settings[item["key"]] = choices[(idx + 1) % len(choices)]
+                            if item["key"] == "resolution":
+                                self._res_changed = True
+                        return None
+                return None
+            else:
+                # Click on a main menu item
+                start_y = 320
+                for i, opt in enumerate(self.options):
+                    iy = start_y + i * 50
+                    if iy - 4 <= my <= iy + 32:
+                        self.selected = i
+                        if opt == "New Run":
+                            self.active = False
+                            return "new_run"
+                        elif opt == "Compendium":
+                            return "compendium"
+                        elif opt == "Leaderboard":
+                            return "leaderboard"
+                        elif opt == "Settings":
+                            self.settings_open = True
+                            self.settings_selected = 0
+                            if self.settings.get("dev_options") and self._dev_item not in self.settings_items:
+                                self._dev_revealed = True
+                                self.settings_items.append(self._dev_item)
+                        elif opt == "Quit":
+                            return "quit"
+                        return None
+            return None
 
         if event.type != pygame.KEYDOWN:
             return None

@@ -48,11 +48,13 @@ python main.py
 - **Settable resolution** — defaults to native desktop, changeable in settings
 - **Player death animation** — 2.2-second zoom + vignette → YOU DIED screen
 - **Unique enemy death animations** — 8 styles by enemy type
-- **AVP-style radar** — motion tracker with sweep-line and proximity beeps
+- **Minimap** — lightweight full-map overlay in the HUD corner; shows all enemy positions as colored dots
 - **Status effects** — fire, bleed, poison, slow with visual particles
 - **Boss chests** — powerful upgrades from defeated bosses
 - **Campfire healing** between waves
 - **Floating damage numbers** with scale-pop and outlines
+- **Download-only desktop game** — Windows, Linux, and macOS builds; no browser required
+- **Save data in user profile** — all saves written to `%APPDATA%/CyberSurvivor` (Windows) or `~/.cyber_survivor` (Linux/macOS); safe to move or reinstall
 
 ## Project Structure
 
@@ -91,7 +93,7 @@ hacknslash/
     │   └── run_stats.py       # Per-run statistics tracking
     └── ui/
         ├── hud.py             # HP/XP bars, boss HP, coins, wave info, vignette
-        ├── radar.py           # Motion tracker
+        ├── minimap.py         # Lightweight full-map enemy tracker — colored dots overlay
         ├── levelup.py         # Level-up upgrade selection
         ├── charselect.py      # Character class picker
         ├── cursor.py          # Animated procedural crosshair — class-themed
@@ -106,7 +108,8 @@ hacknslash/
         ├── weapon_swap.py     # Weapon swap selection screen
         ├── icons.py           # 35 procedural icon drawings
         ├── debug_menu.py      # Developer debug menu
-        └── debug_overlay.py   # In-game debug overlay (F3)
+        ├── debug_overlay.py   # In-game debug overlay (F3)
+        └── arsenal_screen.py  # Persistent weapon unlock browser per class
 ```
 
 ## Gameplay Guide

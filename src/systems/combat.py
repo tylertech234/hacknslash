@@ -39,9 +39,9 @@ class CombatSystem:
                 enemy.take_damage(total_dmg, kb_x, kb_y, now, kb_mult)
                 self.damage_log.append((player.weapon_name, total_dmg))
                 self._add_damage_number(enemy.x, enemy.y - enemy.size, total_dmg, (255, 255, 100))
-                # Passive: vampiric_strike — heal 3 per hit
+                # Passive: vampiric_strike — heal 4 per hit
                 if "vampiric_strike" in getattr(player, 'passives', []):
-                    player.hp = min(player.max_hp, player.hp + 3)
+                    player.hp = min(player.max_hp, player.hp + 4)
                 # Passive: chain_lightning — arc to 2 nearby enemies
                 if "chain_lightning" in getattr(player, 'passives', []):
                     chain_dmg = max(1, total_dmg // 2)

@@ -7,7 +7,7 @@ from src.settings import SCREEN_WIDTH, SCREEN_HEIGHT, PASSIVE_INFO
 
 # Detailed passive descriptions for tooltips
 PASSIVE_DETAILS = {
-    "vampiric_strike":  {"name": "Vampiric Strike",  "effect": "Heal 3 HP per melee hit", "type": "Sustain"},
+    "vampiric_strike":  {"name": "Vampiric Strike",  "effect": "Heal 4 HP per melee hit", "type": "Sustain"},
     "chain_lightning":  {"name": "Chain Lightning",   "effect": "Hits arc to 2 nearby enemies (50% dmg, 120px range)", "type": "AoE"},
     "thorns":           {"name": "Thorns",            "effect": "Reflect 30% of melee damage taken back at attacker", "type": "Defense"},
     "second_wind":      {"name": "Second Wind",       "effect": "Revive once at 30% HP on death (1 use per run)", "type": "Survival"},

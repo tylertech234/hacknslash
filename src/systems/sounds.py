@@ -1,6 +1,22 @@
 import pygame
 import math
 import array
+import os
+
+# Directory for optional real audio files that override procedural synthesis.
+# Drop a file named e.g. "chicken.mp3" here to use it instead of synthesis.
+_ASSETS_SOUNDS = os.path.join(os.path.dirname(__file__), "..", "assets", "sounds")
+
+
+def _load_asset(name: str, volume: float = 1.0) -> "pygame.mixer.Sound | None":
+    """Try to load name.mp3 / .wav / .ogg from assets/sounds. Returns None if absent."""
+    for ext in (".mp3", ".wav", ".ogg"):
+        path = os.path.normpath(os.path.join(_ASSETS_SOUNDS, name + ext))
+        if os.path.isfile(path):
+            snd = pygame.mixer.Sound(path)
+            snd.set_volume(volume)
+            return snd
+    return None
 
 
 class SoundManager:
@@ -126,12 +142,13 @@ class SoundManager:
         self.sounds["dash"] = self._make_dash()
         self.sounds["boss_roar"] = self._make_boss_roar()
         self.sounds["throw"] = self._make_throw()
-        self.sounds["chicken"] = self._make_chicken()
+        self.sounds["chicken"] = _load_asset("chicken", volume=0.31) or self._make_chicken()
         self.sounds["confetti_boom"] = self._make_confetti_boom()
         self.sounds["parry"] = self._make_parry()
         self.sounds["wheel_tick"] = self._make_wheel_tick()
         self.sounds["wheel_stop"] = self._make_wheel_stop()
         self.sounds["chest_open"] = self._make_chest_open()
+        self.sounds["chest_fanfare"] = self._make_chest_fanfare()
         self.sounds["shield_block"] = self._make_shield_block()
         self.sounds["enemy_death"] = self._make_enemy_death()
         self.sounds["charge_whoosh"] = self._make_charge_whoosh()
@@ -146,6 +163,43 @@ class SoundManager:
         self.sounds["big_boss_death"] = self._make_big_boss_death()
         self.sounds["player_death"] = self._make_player_death()
         self.sounds["player_hit"] = self._make_player_hit()
+
+        # Explicit headphone-friendly volumes — clearly lower than raw generator output
+        _vol = {
+            "swing":         0.40,
+            "enemy_shoot":   0.35,
+            "hit":           0.38,
+            "step":          0.18,
+            "pickup":        0.30,
+            "levelup":       0.58,
+            "dash":          0.32,
+            "boss_roar":     0.42,
+            "throw":         0.30,
+            "chicken":       0.31,
+            "confetti_boom": 0.35,
+            "parry":         0.40,
+            "wheel_tick":    0.18,
+            "wheel_stop":    0.40,
+            "chest_open":    0.35,
+            "chest_fanfare": 0.55,
+            "shield_block":  0.38,
+            "enemy_death":   0.32,
+            "charge_whoosh": 0.35,
+            "dog_bark":      0.35,
+            "dog_growl":     0.28,
+            "radar_beep_far":   0.12,
+            "radar_beep_mid":   0.16,
+            "radar_beep_close": 0.22,
+            "pause":         0.20,
+            "unpause":       0.20,
+            "boss_death":    0.45,
+            "big_boss_death": 0.50,
+            "player_death":  0.45,
+            "player_hit":    0.48,
+        }
+        for _name, _v in _vol.items():
+            if _name in self.sounds:
+                self.sounds[_name].set_volume(_v)
 
     # ---- individual sound generators ----
 
@@ -296,32 +350,79 @@ class SoundManager:
         return pygame.mixer.Sound(buffer=buf)
 
     def _make_levelup(self) -> pygame.mixer.Sound:
-        """Triumphant ascending arpeggio with shimmer and sparkle."""
+        """Deep gong strike + low brass swell — WoW-style level-up DING.
+        Phase 1 (0–0.15s): deep resonant GONG hit (inharmonic bell partials)
+        Phase 2 (0.05–2.2s): low brass chord swells up and fades (F2 major triad)
+        Total: ~2.5s"""
         rate = 22050
-        n = int(rate * 0.7)
+        total = int(rate * 2.5)
         buf = array.array("h")
-        notes = [523, 659, 784, 1047]
-        note_len = n // len(notes)
-        for i in range(n):
-            t_abs = i / rate
-            pos = i / n
-            note_idx = min(i // note_len, len(notes) - 1)
-            freq = notes[note_idx]
-            # Crossfade between notes
-            note_pos = (i % note_len) / note_len
-            env = (1.0 - pos ** 1.5) * min(1.0, pos * 8)
-            # Rich tone stack
-            val = math.sin(2 * math.pi * freq * t_abs) * 0.35
-            val += math.sin(2 * math.pi * freq * 2 * t_abs) * 0.15
-            val += math.sin(2 * math.pi * freq * 3 * t_abs) * 0.08
-            # Bell-like attack per note
-            bell = math.sin(2 * math.pi * freq * 4 * t_abs) * 0.06 * max(0, 1 - note_pos * 3)
-            # Sparkle noise
-            if (i % 350) < 40:
-                noise = (((i * 31 + 17) * 1103515245 + 12345) >> 16) & 0x7FFF
-                bell += (noise / 16384.0 - 1.0) * 0.04
-            sample = int((val + bell) * env * 32767)
+
+        # Gong partials — inharmonic ratios typical of a bronze bell/gong
+        # Root F2 = 87 Hz
+        root = 87.0
+        gong_partials = [
+            (root,        0.55),   # fundamental
+            (root * 1.50, 0.30),   # quint
+            (root * 2.00, 0.18),   # octave
+            (root * 2.76, 0.22),   # characteristic inharmonic bell partial
+            (root * 3.00, 0.10),
+            (root * 3.50, 0.08),
+            (root * 4.07, 0.06),   # another inharmonic partial
+        ]
+        gong_decay = 4.5   # slow resonant decay
+
+        # Brass chord: F2 major triad voiced low
+        # F2=87, A2=110, C3=131, (F3=175 for brightness)
+        brass_notes = [
+            (87,  0.35),
+            (110, 0.28),
+            (131, 0.22),
+            (175, 0.15),
+        ]
+        brass_start = int(rate * 0.05)   # brass enters just after gong
+        brass_attack_dur = int(rate * 0.25)
+        brass_decay_start = int(rate * 1.4)
+        brass_end = total
+
+        for i in range(total):
+            t = i / rate
+            val = 0.0
+
+            # ── Gong ──────────────────────────────────────────
+            gong_env = math.exp(-t * gong_decay)
+            for freq, amp in gong_partials:
+                val += math.sin(2 * math.pi * freq * t) * amp * gong_env
+
+            # ── Brass swell ───────────────────────────────────
+            if i >= brass_start:
+                bi = i - brass_start
+                # Attack swell
+                b_attack = min(1.0, bi / brass_attack_dur)
+                # Sustain + decay
+                if i < brass_decay_start:
+                    b_env = b_attack
+                else:
+                    b_env = b_attack * max(0.0, 1.0 - (i - brass_decay_start) /
+                                           (brass_end - brass_decay_start))
+                # Brass timbre: saw wave (buzz) + strong harmonics
+                for freq, amp in brass_notes:
+                    bphase = (t * freq) % 1.0
+                    bsaw = 2.0 * bphase - 1.0   # raw saw
+                    # Soft clip for warm brass (not harsh)
+                    bsaw = math.tanh(bsaw * 1.6) * 0.75
+                    val += bsaw * amp * b_env
+                    # Add 2nd harmonic for richness
+                    val += math.sin(2 * math.pi * freq * 2 * t) * amp * 0.25 * b_env
+                    # Slight vibrato on sustain
+                    if i > brass_attack_dur + brass_start:
+                        vib = 1.0 + 0.006 * math.sin(2 * math.pi * 5.5 * t)
+                        val += math.sin(2 * math.pi * freq * vib * t) * amp * 0.10 * b_env
+
+            # Normalise — gong + brass stack can exceed 1.0
+            sample = int(val * 0.38 * 32767)
             buf.append(max(-32768, min(32767, sample)))
+
         return pygame.mixer.Sound(buffer=buf)
 
     def _make_dash(self) -> pygame.mixer.Sound:
@@ -390,45 +491,97 @@ class SoundManager:
         return pygame.mixer.Sound(buffer=buf)
 
     def _make_chicken(self) -> pygame.mixer.Sound:
-        # Rubber chicken honk - nasal squawky waveform with comedy vibrato
-        rate = 22050
-        n = int(rate * 0.35)
-        buf = array.array("h")
+        """Rubber chicken — resonant cavity evacuation model.
+        White noise through a high-Q IIR bandpass filter whose centre
+        frequency sweeps from high → low as the hollow rubber body empties.
+        This is the same DSP as a Moog filter sweep, which is exactly what
+        gives rubber toys their rubbery 'talking' quality.
+        3.0 s: sharp squeeze → held peak → loooong dying exhale."""
+        rate   = 22050
+        n      = int(rate * 3.0)
+        buf    = array.array("h")
+
+        # IIR resonant bandpass state (2 samples of history)
+        bp_y1 = 0.0
+        bp_y2 = 0.0
+        # Secondary low-Q bandpass for "body air" layer
+        lp_y1 = 0.0
+        lp_y2 = 0.0
+
+        ph = 0.0  # thin tonal reed layer
+
         for i in range(n):
-            t = i / rate
             pos = i / n
-            # Envelope: quick honk attack, sustain, squeaky decay
-            if pos < 0.03:
-                env = pos / 0.03
+
+            # ── Centre-frequency sweep ────────────────────────────────────
+            # 0–5%:   fast squeeze rise    150 → 1050 Hz
+            # 5–14%:  peak hold            ~1050 Hz
+            # 14–20%: inflection dip       1050 → 900 Hz
+            # 20–100% long cavity exhale   900 → 55 Hz
+            if pos < 0.05:
+                freq = 150.0 + 900.0 * (pos / 0.05) ** 0.55
+            elif pos < 0.14:
+                freq = 1050.0
+            elif pos < 0.20:
+                freq = 1050.0 - 150.0 * ((pos - 0.14) / 0.06)
+            else:
+                r    = (pos - 0.20) / 0.80
+                freq = 900.0 * (1.0 - r * 0.939) ** 1.55   # 900 → 55 Hz
+            freq = max(45.0, freq)
+
+            # ── Amplitude ────────────────────────────────────────────────
+            if pos < 0.04:
+                amp = (pos / 0.04) ** 0.35   # very snappy onset
             elif pos < 0.15:
-                env = 1.0
-            elif pos < 0.5:
-                env = 1.0 - (pos - 0.15) * 0.3
+                amp = 1.0
+            elif pos < 0.20:
+                amp = 1.0 - 0.35 * ((pos - 0.15) / 0.05)   # 1.0 → 0.65
             else:
-                env = max(0, (1.0 - (pos - 0.5) / 0.5) ** 1.5)
-            # Base frequency: big honk up then down
-            base_freq = 280 + 350 * math.sin(pos * math.pi * 0.7)
-            # Fast nasal vibrato
-            vibrato = math.sin(t * 45 * 2 * math.pi) * 120
-            # Comedy wobble
-            wobble = math.sin(t * 12 * 2 * math.pi) * 40
-            freq = base_freq + vibrato + wobble
-            # Nasal square-ish waveform (not pure square)
-            phase = (t * freq) % 1.0
-            if phase < 0.3:
-                wave = 1.0
-            elif phase < 0.5:
-                wave = -0.5
-            elif phase < 0.7:
-                wave = -0.3
-            else:
-                wave = 0.2
-            # Nasal overtone at 3x frequency
-            overtone = math.sin(2 * math.pi * freq * 3 * t) * 0.25
-            # Slight noise for rubber texture
-            noise = (((i * 13 + 5) * 1103515245 + 12345) >> 16) & 0x7FFF
-            n_val = (noise / 16384.0 - 1.0) * 0.06
-            sample = int((wave * 0.4 + overtone + n_val) * env * 0.6 * 32767)
+                # Long slow breath out — still ~18% at pos=0.85
+                r   = (pos - 0.20) / 0.80
+                amp = 0.65 * (1.0 - r) ** 0.60
+
+            # ── White noise source ────────────────────────────────────────
+            raw = (((i * 1103515245 + 12345) >> 16) & 0x7FFF) / 16384.0 - 1.0
+
+            # ── High-Q resonant bandpass (narrow peak = rubbery resonance)
+            # Classic 2-pole IIR bandpass: y[n] = (1-r²)·sin(ω)·x - 2r·cos(ω)·y1 + r²·y2
+            omega  = 2.0 * math.pi * freq / rate
+            cos_w  = math.cos(omega)
+            sin_w  = math.sin(omega)
+            r_hi   = 0.955   # high Q → narrow peak, very "rubbery"
+            bp_out = (1.0 - r_hi * r_hi) * sin_w * raw \
+                     - 2.0 * r_hi * cos_w * bp_y1 \
+                     + r_hi * r_hi * bp_y2
+            bp_y2  = bp_y1
+            bp_y1  = bp_out
+
+            # ── Low-Q body-air bandpass (broader, centred ~1.5 octaves below)
+            freq_b = max(40.0, freq * 0.45)
+            om_b   = 2.0 * math.pi * freq_b / rate
+            r_lo   = 0.82
+            lp_out = (1.0 - r_lo * r_lo) * math.sin(om_b) * raw \
+                     - 2.0 * r_lo * math.cos(om_b) * lp_y1 \
+                     + r_lo * r_lo * lp_y2
+            lp_y2  = lp_y1
+            lp_y1  = lp_out
+
+            # ── Thin tonal reed (just enough "voice") ────────────────────
+            ph    = (ph + freq / rate) % 1.0
+            reed  = math.sin(2 * math.pi * ph) * 0.18 \
+                  + math.sin(2 * math.pi * ph * 1.97) * 0.08  # slight inharmonic
+
+            # ── Mix: resonance body air thin-reed ────────────────────────
+            # Tail becomes almost pure breath (lp_out dominates)
+            body_w = min(0.55, 0.25 + 0.30 * pos / 0.20) if pos < 0.20 else \
+                     0.55 + 0.40 * (pos - 0.20) / 0.80
+            val  = bp_out * (1.0 - body_w) + lp_out * body_w
+            val  = val * 0.82 + reed * 0.18
+            val *= amp
+
+            # Rubber fuzz — very light
+            val    = math.tanh(val * 1.15) / 1.15
+            sample = int(val * 0.52 * 32767)
             buf.append(max(-32768, min(32767, sample)))
         return pygame.mixer.Sound(buffer=buf)
 
@@ -533,6 +686,61 @@ class SoundManager:
                          math.sin(2 * math.pi * 2093 * t) * 0.06) * c_env
             sample = int((creak + groan + n_val + chime) * env * 32767)
             buf.append(max(-32768, min(32767, sample)))
+        return pygame.mixer.Sound(buffer=buf)
+
+    def _make_chest_fanfare(self) -> pygame.mixer.Sound:
+        """Brass DU-DU-DUHHHHNN boss-chest jackpot fanfare — three punchy hits then a held swell."""
+        rate = 22050
+        buf = array.array("h")
+
+        def brass_hit(freq: float, dur_s: float, amp: float = 0.7) -> list:
+            """Single brass stab at freq for dur_s seconds."""
+            n = int(rate * dur_s)
+            out = []
+            for i in range(n):
+                t = i / rate
+                pos = i / n
+                # Fast attack, quick decay
+                env = min(1.0, pos * 30) * math.exp(-pos * 5)
+                # Saw + harmonics = brass timbre
+                val = (2.0 * (t * freq % 1.0) - 1.0) * 0.35
+                val += math.sin(2 * math.pi * freq * t) * 0.30
+                val += math.sin(2 * math.pi * freq * 2 * t) * 0.18
+                val += math.sin(2 * math.pi * freq * 3 * t) * 0.10
+                val += math.sin(2 * math.pi * freq * 4 * t) * 0.05
+                out.append(int(val * amp * env * 32767))
+            return out
+
+        def brass_swell(freq: float, dur_s: float) -> list:
+            """Sustained brass swell with slight vibrato and reverb tail."""
+            n = int(rate * dur_s)
+            out = []
+            for i in range(n):
+                t = i / rate
+                pos = i / n
+                attack = min(1.0, pos * 10)
+                release = max(0.0, 1.0 - max(0.0, pos - 0.6) / 0.4)
+                env = attack * release
+                vibrato = 1.0 + 0.008 * math.sin(2 * math.pi * 5.5 * t)
+                val = (2.0 * (t * freq * vibrato % 1.0) - 1.0) * 0.28
+                val += math.sin(2 * math.pi * freq * vibrato * t) * 0.32
+                val += math.sin(2 * math.pi * freq * 2 * vibrato * t) * 0.16
+                val += math.sin(2 * math.pi * freq * 3 * vibrato * t) * 0.08
+                # Low sub-bass thump under the swell
+                val += math.sin(2 * math.pi * (freq / 2) * t) * 0.12 * max(0, 1 - pos * 3)
+                out.append(int(val * env * 32767))
+            return out
+
+        # DU (220 Hz) — 0.13s, gap 0.04s
+        # DU (277 Hz) — 0.13s, gap 0.04s
+        # DUHHHHNN (330 Hz) — 0.80s sustained swell
+        gap = [0] * int(rate * 0.04)
+        segments = (brass_hit(220, 0.13) + gap +
+                    brass_hit(277, 0.13) + gap +
+                    brass_hit(330, 0.10) +
+                    brass_swell(330, 0.80))
+        for s in segments:
+            buf.append(max(-32768, min(32767, s)))
         return pygame.mixer.Sound(buffer=buf)
 
     def _make_shield_block(self) -> pygame.mixer.Sound:
@@ -742,8 +950,9 @@ class SoundManager:
         """Generate intense boss combat tracks per zone — cached separately."""
         import os
         import pickle
-        _cache_dir = os.path.join(os.path.dirname(__file__), '..', '..', '.cache')
-        _cache_file = os.path.join(_cache_dir, 'boss_music_v1.pkl')
+        from src.settings import DATA_DIR
+        _cache_dir = os.path.join(DATA_DIR, '.cache')
+        _cache_file = os.path.join(_cache_dir, 'boss_music_v2.pkl')
         if os.path.exists(_cache_file):
             try:
                 with open(_cache_file, 'rb') as _f:
@@ -760,20 +969,21 @@ class SoundManager:
         # WASTELAND BOSS — Military march: heavy saw bass + war drums
         # D minor pentatonic, BPM 168, aggressive and relentless
         # ================================================================
-        bpm_w = 168
+        # Wasteland — tuned down a fifth, slower BPM, less distortion
+        bpm_w = 148
         spb_w = int(rate * 60.0 / bpm_w)
         bars_w = 16
         beats_w = bars_w * 4
-        # D minor riff: D2=73, A2=110, C3=131, D3=147, F3=175, A3=220
-        bass_riff = [73, 73, 110, 73, 131, 73, 147, 110,
-                     73, 110, 131, 147, 110, 73, 73, 110,
-                     147, 147, 131, 110, 73, 73, 110, 131,
-                     73, 147, 110, 73, 131, 147, 110, 73]
-        # Lead arp: D4=294, F4=349, A4=440, C5=523, D5=587
-        lead_riff = [294, 349, 440, 349, 294, 0, 440, 523,
-                     349, 440, 523, 440, 349, 294, 0, 294,
-                     440, 523, 587, 523, 440, 0, 349, 440,
-                     523, 440, 349, 294, 440, 587, 523, 440]
+        # A minor riff (D minor transposed down a fifth): A1=55, E2=82, G2=98, A2=110, C3=131, E3=165
+        bass_riff = [55, 55, 82, 55, 98, 55, 110, 82,
+                     55, 82, 98, 110, 82, 55, 55, 82,
+                     110, 110, 98, 82, 55, 55, 82, 98,
+                     55, 110, 82, 55, 98, 110, 82, 55]
+        # Lead arp down a fifth: A3=220, C4=262, E4=330, G4=392, A4=440
+        lead_riff = [220, 262, 330, 262, 220, 0, 330, 392,
+                     262, 330, 392, 330, 262, 220, 0, 220,
+                     330, 392, 440, 392, 330, 0, 262, 330,
+                     392, 330, 262, 220, 330, 440, 392, 330]
         # Drums: 1=kick, 2=snare, 3=hat, 4=open hat, 0=rest
         drum_w = [1, 3, 2, 3, 1, 3, 2, 4, 1, 3, 2, 3, 1, 2, 1, 2]
         buf_w = array.array("h")
@@ -784,20 +994,21 @@ class SoundManager:
             for i in range(spb_w):
                 t = i / rate
                 pos = i / spb_w
-                # Heavy distorted saw bass
+                # Warm saw bass — lighter distortion
                 bphase = (t * bf) % 1.0
                 bsaw = 2.0 * bphase - 1.0
-                # Add clipping distortion
-                bsaw = max(-0.7, min(0.7, bsaw * 1.6)) / 0.7
-                bass_v = bsaw * 0.14 * (1.0 - pos * 0.1)
+                # Soft clip instead of hard (less harsh)
+                bsaw = math.tanh(bsaw * 1.2) * 0.85
+                bass_v = bsaw * 0.12 * (1.0 - pos * 0.1)
                 # Sub octave
-                sub = math.sin(2 * math.pi * bf * 0.5 * t) * 0.08
-                # Lead: square wave arpeggio, short notes
+                sub = math.sin(2 * math.pi * bf * 0.5 * t) * 0.07
+                # Lead: soft triangle arpeggio
                 lead_v = 0.0
                 if lf > 0 and pos < 0.5:
                     lenv = (1.0 - pos / 0.5) ** 1.2
-                    sq = 1.0 if math.sin(2 * math.pi * lf * t) > 0 else -1.0
-                    lead_v = sq * 0.06 * lenv
+                    ltri_p = (t * lf) % 1.0
+                    ltri = 4.0 * abs(ltri_p - 0.5) - 1.0
+                    lead_v = ltri * 0.05 * lenv
                 # Hard drum hits
                 drum_v = 0.0
                 if dr == 1 and pos < 0.18:
@@ -822,19 +1033,20 @@ class SoundManager:
         # CITY BOSS — Cyborg terror: glitchy industrial crush
         # C# minor, BPM 180, electronic dystopia
         # ================================================================
-        bpm_c = 180
+        # City — transposed down a fourth, BPM 160, detuned but less shrill
+        bpm_c = 160
         spb_c = int(rate * 60.0 / bpm_c)
         beats_c = 64
-        # C# minor: C#2=69, G#2=104, B2=123, C#3=138, E3=165, G#3=208
-        cbass = [69, 69, 104, 69, 123, 138, 104, 69,
-                 104, 138, 165, 138, 104, 69, 0, 69,
-                 138, 165, 208, 165, 138, 104, 69, 104,
-                 69, 123, 138, 104, 69, 138, 165, 138]
-        # Glitch lead: C#4=277, E4=330, G#4=415, B4=494, C#5=554
-        clead = [277, 0, 330, 415, 277, 0, 494, 415,
-                 330, 415, 494, 554, 415, 330, 0, 277,
-                 415, 494, 554, 0, 415, 330, 277, 0,
-                 494, 415, 330, 277, 415, 554, 494, 415]
+        # G# minor (C# minor down a fourth): G#1=52, D#2=78, F#2=92, G#2=104, B2=123, D#3=156
+        cbass = [52, 52, 78, 52, 92, 104, 78, 52,
+                 78, 104, 123, 104, 78, 52, 0, 52,
+                 104, 123, 156, 123, 104, 78, 52, 78,
+                 52, 92, 104, 78, 52, 104, 123, 104]
+        # Glitch lead down a fourth: G#3=208, B3=247, D#4=311, F#4=370, G#4=415
+        clead = [208, 0, 247, 311, 208, 0, 370, 311,
+                 247, 311, 370, 415, 311, 247, 0, 208,
+                 311, 370, 415, 0, 311, 247, 208, 0,
+                 370, 311, 247, 208, 311, 415, 370, 311]
         drum_c = [1, 3, 2, 1, 1, 3, 2, 3, 1, 3, 2, 1, 1, 2, 1, 3]
         buf_c = array.array("h")
         for bi in range(beats_c):
@@ -844,24 +1056,23 @@ class SoundManager:
             for i in range(spb_c):
                 t = i / rate
                 pos = i / spb_c
-                # Pulsing industrial bass drone
+                # Smooth industrial bass
                 bass_v = 0.0
                 if bf > 0:
-                    # Frequency modulated saw
-                    fm_mod = 1.0 + 0.04 * math.sin(2 * math.pi * 3 * t)
+                    fm_mod = 1.0 + 0.03 * math.sin(2 * math.pi * 3 * t)
                     bphase = (t * bf * fm_mod) % 1.0
-                    bsaw = 2.0 * bphase - 1.0
-                    bass_v = bsaw * 0.12 * (0.85 + 0.15 * (1 - pos))
-                    # Sub
-                    bass_v += math.sin(2 * math.pi * bf * 0.5 * t) * 0.08
-                # Glitch lead: detuned square wave
+                    bsaw = math.tanh((2.0 * bphase - 1.0) * 1.1) * 0.9
+                    bass_v = bsaw * 0.11 * (0.85 + 0.15 * (1 - pos))
+                    bass_v += math.sin(2 * math.pi * bf * 0.5 * t) * 0.07
+                # Glitch lead: detuned triangle (softer than square)
                 lead_v = 0.0
                 if lf > 0 and pos < 0.45:
                     lenv = (1.0 - pos / 0.45) ** 0.8
-                    # Two detuned oscillators
-                    sq1 = 1.0 if math.sin(2 * math.pi * lf * t) > 0 else -1.0
-                    sq2 = 1.0 if math.sin(2 * math.pi * lf * 1.012 * t) > 0 else -1.0
-                    lead_v = (sq1 * 0.04 + sq2 * 0.03) * lenv
+                    lt1_p = (t * lf) % 1.0
+                    lt2_p = (t * lf * 1.010) % 1.0
+                    lt1 = 4.0 * abs(lt1_p - 0.5) - 1.0
+                    lt2 = 4.0 * abs(lt2_p - 0.5) - 1.0
+                    lead_v = (lt1 * 0.035 + lt2 * 0.025) * lenv
                 # Industrial percussion — punchy kick + hard snare + noise clicks
                 drum_v = 0.0
                 if dr == 1 and pos < 0.20:
@@ -889,19 +1100,20 @@ class SoundManager:
         # ABYSS BOSS — Cosmic horror: slow massive bass drops + chaos
         # Tritone/dissonant intervals. BPM 85, ominous and overwhelming.
         # ================================================================
-        bpm_a = 85
+        # Abyss — slower (BPM 72), transposed down an octave for deep rumble
+        bpm_a = 72
         spb_a = int(rate * 60.0 / bpm_a)
         beats_a = 64
-        # Tritone-heavy Phrygian: E1=41, Bb1=58, E2=82, Bb2=117, F#2=92, B1=62
-        abass = [41, 41, 58, 41, 82, 58, 41, 82,
-                 58, 82, 92, 82, 58, 41, 41, 58,
-                 82, 82, 117, 82, 92, 58, 41, 82,
-                 41, 58, 82, 92, 82, 58, 41, 41]
-        # Whistle/choir lead: E4=330, Bb4=466, F#4=370, B3=247, C4=262
-        alead = [330, 0, 466, 0, 370, 0, 330, 0,
-                 247, 0, 262, 466, 330, 0, 0, 0,
-                 466, 0, 370, 0, 330, 247, 0, 466,
-                 370, 0, 330, 0, 247, 466, 330, 0]
+        # Down an octave from original: E0/1=41→21, Bb1→29, E1→41, Bb1→58, F#1→46, B0→31
+        abass = [21, 21, 29, 21, 41, 29, 21, 41,
+                 29, 41, 46, 41, 29, 21, 21, 29,
+                 41, 41, 58, 41, 46, 29, 21, 41,
+                 21, 29, 41, 46, 41, 29, 21, 21]
+        # Lead down an octave: E3=165, Bb3=233, F#3=185, B2=124, C3=131
+        alead = [165, 0, 233, 0, 185, 0, 165, 0,
+                 124, 0, 131, 233, 165, 0, 0, 0,
+                 233, 0, 185, 0, 165, 124, 0, 233,
+                 185, 0, 165, 0, 124, 233, 165, 0]
         drum_a = [1, 0, 0, 2, 0, 0, 1, 0, 2, 0, 1, 0, 0, 2, 0, 1]
         buf_a = array.array("h")
         for bi in range(beats_a):
@@ -962,12 +1174,21 @@ class SoundManager:
                 _pk.dump(_raw, _f)
         except Exception:
             pass
+        # Clean up old cache version
+        import os as _os2
+        _old = os.path.join(_cache_dir, 'boss_music_v1.pkl')
+        if _os2.path.exists(_old):
+            try:
+                _os2.remove(_old)
+            except Exception:
+                pass
 
     def _generate_zone_music(self):
         """Generate ambient base + combat layers for each zone."""
         import os
         import pickle
-        _cache_dir = os.path.join(os.path.dirname(__file__), '..', '..', '.cache')
+        from src.settings import DATA_DIR
+        _cache_dir = os.path.join(DATA_DIR, '.cache')
         _cache_file = os.path.join(_cache_dir, 'zone_music_v1.pkl')
         if os.path.exists(_cache_file):
             try:

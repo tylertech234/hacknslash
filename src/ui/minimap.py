@@ -9,7 +9,7 @@ _WORLD_H = MAP_HEIGHT * TILE_SIZE
 class Minimap:
     """Lightweight full-map minimap showing player and enemy positions as dots."""
 
-    def __init__(self, size: int = 140):
+    def __init__(self, size: int = 160):
         self.size = size
         self.margin = 12
         # Position: bottom-right corner
@@ -26,8 +26,8 @@ class Minimap:
             pygame.draw.line(self._bg, (0, 35, 0), (0, pos), (size, pos))
 
     def draw(self, surface: pygame.Surface, player_x: float, player_y: float,
-             enemies: list):
-        """Draw the minimap with player and enemy blips."""
+             enemies: list, campfire_x: float = None, campfire_y: float = None):
+        """Draw the minimap with player, enemy, and campfire blips."""
         s = self.size
         # Blit cached background
         surface.blit(self._bg, (self.x, self.y))
@@ -47,15 +47,16 @@ class Minimap:
             else:
                 pygame.draw.rect(surface, (220, 50, 50), (ex - 1, ey - 1, 2, 2))
 
-        # Player blip (bright green dot)
+        # Campfire blip (orange dot)
+        if campfire_x is not None and campfire_y is not None:
+            cfx = self.x + int(campfire_x * sx)
+            cfy = self.y + int(campfire_y * sy)
+            pygame.draw.circle(surface, (255, 140, 30), (cfx, cfy), 4)
+
+        # Player blip (bright green dot — drawn on top)
         px = self.x + int(player_x * sx)
         py = self.y + int(player_y * sy)
         pygame.draw.circle(surface, (0, 255, 0), (px, py), 3)
 
         # Border (drawn last so dots don't overlap it)
         pygame.draw.rect(surface, (0, 120, 0), (self.x, self.y, s, s), 1)
-
-        # Label
-        from src.font_cache import get_font
-        label = get_font("consolas", 11).render("MAP", True, (0, 140, 0))
-        surface.blit(label, (self.x + s // 2 - label.get_width() // 2, self.y - 14))

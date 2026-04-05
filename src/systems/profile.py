@@ -23,9 +23,9 @@ import logging
 
 log = logging.getLogger("profile")
 
-_PROJECT_ROOT = os.path.dirname(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-)
+from src.settings import DATA_DIR
+
+_PROJECT_ROOT = DATA_DIR
 _ROOT_POINTER = os.path.join(_PROJECT_ROOT, "profile.json")
 
 

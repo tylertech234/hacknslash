@@ -10,11 +10,13 @@ log = logging.getLogger("game")
 
 
 def process_enemy_death(enemy, player, alive, animations, combat, sounds,
-                        lighting, boss_chests, kills_tracker, pickups, now):
+                        lighting, boss_chests, kills_tracker, pickups, now,
+                        toasts=None):
     """Handle a single enemy death: effects, passives, XP, drops, chests.
 
     Args:
         kills_tracker: dict with 'kills' and 'boss_kills' integer values (mutated)
+        toasts: optional toast manager for mini-drop notifications
 
     Returns nothing — mutates lists/counters in place.
     """
@@ -112,6 +114,26 @@ def process_enemy_death(enemy, player, alive, animations, combat, sounds,
         chest = BossChest(enemy.x, enemy.y)
         boss_chests.append(chest)
         log.info("Boss chest spawned at (%.0f, %.0f)", enemy.x, enemy.y)
+
+    # -- mini stat drops for boss kills (2-3 instant bonuses)
+    if is_boss:
+        _mini_pool = [
+            ("damage", 3, "+3 Damage", (255, 120, 60)),
+            ("speed", 0.35, "+0.35 Speed", (80, 200, 255)),
+            ("max_hp", 8, "+8 Max HP", (255, 80, 80)),
+            ("damage", 2, "+2 Damage", (255, 150, 80)),
+        ]
+        _picks = _rng.sample(_mini_pool, _rng.randint(2, 3))
+        for _stat, _val, _name, _col in _picks:
+            if _stat == "damage":
+                player.damage += _val
+            elif _stat == "speed":
+                player.speed += _val
+            elif _stat == "max_hp":
+                player.max_hp += int(_val)
+                player.hp = min(player.max_hp, player.hp + int(_val))
+            if toasts:
+                toasts.show("Boss Drop!", _name, _col)
 
 
 def fire_player_projectile(player, player_projectiles, sounds):

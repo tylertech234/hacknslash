@@ -65,6 +65,8 @@ class Player:
         self._dash_charges_remaining = 1
         self.dash_dx = 0.0
         self.dash_dy = 0.0
+        self.move_dx = 0.0   # last WASD direction (for dash)
+        self.move_dy = -1.0  # default: up
 
         # XP / Level
         self.xp = 0
@@ -98,6 +100,12 @@ class Player:
 
         # Vision debuff (from Nexus boss)
         self.vision_debuff_until = 0
+
+        # Insanity (from Nexus null_burst) — stores end time; control is randomised
+        self.insanity_until = 0
+        self._insane_dir_change = 0   # timestamp of last forced direction change
+        self._insane_dx = 0.0
+        self._insane_dy = 1.0
 
     def _apply_weapon_stats(self):
         """Reset weapon stats from the equipped weapon, then restore accumulated bonuses."""
@@ -141,8 +149,9 @@ class Player:
             # Start the cooldown clock only once all charges are spent
             if self._dash_charges_remaining == 0:
                 self.last_dash_time = now
-            self.dash_dx = self.facing_x
-            self.dash_dy = self.facing_y
+            # Dash in movement (WASD) direction, not mouse facing direction
+            self.dash_dx = self.move_dx
+            self.dash_dy = self.move_dy
             self.invincible = True
             self.invincible_timer = now
             return True
@@ -171,12 +180,12 @@ class Player:
         if "shield_matrix" in self.passives and now - self._shield_matrix_last >= 10000:
             self._shield_matrix_last = now
             return
-        # Passive: evasion — 15% dodge chance
-        if "evasion" in self.passives and random.random() < 0.15:
+        # Passive: evasion — 20% dodge chance
+        if "evasion" in self.passives and random.random() < 0.20:
             return  # dodged!
-        # Passive: armor_plating — 20% damage reduction
+        # Passive: armor_plating — 15% damage reduction
         if "armor_plating" in self.passives:
-            amount = max(1, int(amount * 0.80))
+            amount = max(1, int(amount * 0.85))
         # Legacy: permanent damage reduction
         if self.legacy_dr > 0:
             amount = max(1, int(amount * (1.0 - self.legacy_dr)))
@@ -199,26 +208,42 @@ class Player:
         if "adrenaline" in self.passives and now < self._adrenaline_until:
             speed_mult *= 1.3
 
-        # Movement input
-        dx, dy = 0.0, 0.0
-        if keys[pygame.K_w] or keys[pygame.K_UP]:
-            dy -= 1
-        if keys[pygame.K_s] or keys[pygame.K_DOWN]:
-            dy += 1
-        if keys[pygame.K_a] or keys[pygame.K_LEFT]:
-            dx -= 1
-        if keys[pygame.K_d] or keys[pygame.K_RIGHT]:
-            dx += 1
-
-        # Normalize
-        length = math.hypot(dx, dy)
-        self.moving = length > 0
-        if length > 0:
-            dx /= length
-            dy /= length
+        # ── Insanity: override player input with random lurching movement ──
+        if now < self.insanity_until:
+            # Change forced direction every 300-450 ms for erratic feel
+            if now - self._insane_dir_change > 350:
+                angle = random.uniform(0, math.tau)
+                self._insane_dx = math.cos(angle)
+                self._insane_dy = math.sin(angle)
+                self._insane_dir_change = now
+            dx, dy = self._insane_dx, self._insane_dy
+            self.moving = True
+            self.move_dx = dx
+            self.move_dy = dy
             self.walk_cycle += dt * 0.012
         else:
-            self.walk_cycle = 0.0
+            # Normal movement input
+            dx, dy = 0.0, 0.0
+            if keys[pygame.K_w] or keys[pygame.K_UP]:
+                dy -= 1
+            if keys[pygame.K_s] or keys[pygame.K_DOWN]:
+                dy += 1
+            if keys[pygame.K_a] or keys[pygame.K_LEFT]:
+                dx -= 1
+            if keys[pygame.K_d] or keys[pygame.K_RIGHT]:
+                dx += 1
+
+            # Normalize
+            length = math.hypot(dx, dy)
+            self.moving = length > 0
+            if length > 0:
+                dx /= length
+                dy /= length
+                self.move_dx = dx   # remember last movement direction for dash
+                self.move_dy = dy
+                self.walk_cycle += dt * 0.012
+            else:
+                self.walk_cycle = 0.0
 
         # Dash movement overrides normal movement
         if self.is_dashing:
@@ -272,16 +297,18 @@ class Player:
 
         half = self.size // 2
 
-        # Dash trail — energy streaks
+        # Dash trail — energy streaks (reuse single surface)
         if self.is_dashing:
+            ts = self.size
+            trail_surf = pygame.Surface((ts, ts + 6), pygame.SRCALPHA)
             for i in range(4):
                 t = (i + 1) * 7
                 tx = sx - int(self.dash_dx * t)
                 ty = sy - int(self.dash_dy * t)
-                trail_surf = pygame.Surface((self.size, self.size + 6), pygame.SRCALPHA)
+                trail_surf.fill((0, 0, 0, 0))
                 a = 55 - i * 14
                 pygame.draw.rect(trail_surf, (*trim_color, max(0, a)),
-                                 (4, 2, self.size - 8, self.size + 2), border_radius=4)
+                                 (4, 2, ts - 8, ts + 2), border_radius=4)
                 surface.blit(trail_surf, (tx - half, ty - half - 3))
 
         # ---- Cyberknight body ----

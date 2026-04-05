@@ -49,11 +49,66 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## [0.9.2] — 2026-04-03
+
+### Added
+- **Weapon Arsenal screen** — persistent weapon unlock browser per class; unlocked weapons survive between runs
+- **3 new weapons** for Ranger: Burst Crossbow (3-bolt burst), Explosive Crossbow (splash on impact, 60px radius), added to level-up pools
+- **Corpse crumble animation** — enemies leave a fading flattened body with spark bleed-out dots on death
+- **GitHub Actions CI** — parallel Windows / Linux / macOS builds using PyInstaller; artifacts uploaded automatically
+- **itch.io publishing** via butler — `windows-stable` channel updated on every merge to main and tag push
+
+### Changed
+- Enemy HP increased (first pass — larger, more satisfying fights)
+- Player base stats tuned: incoming damage multiplier raised to 1.45×
+- Magnetic field passive pickup radius adjusted
+- Hit feedback improved: more visible flash and impact response
+- Level-up and chest upgrade pools expanded with additional weapon entries
+
+### Technical
+- `build.yml` reads `VERSION` from `settings.py`; injects Supabase secrets at build time
+- `cyber_survivor.spec` PyInstaller spec file committed for reproducible builds
+
+---
+
+## [0.9.3] — 2026-04-04
+
+### Added
+- Nothing new — focused on balance, stability, and polish
+
+### Changed
+- **+25% HP** across all 25 enemy types for longer, more engaging fights
+- Controls hint text in main menu moved below gameplay elements (prevents overlap at 1280×720)
+- Game is now **download-only** — web/HTML5 build removed after extensive testing; desktop builds are the sole targets
+
+### Fixed
+- **Exe crash** `ModuleNotFoundError: No module named 'urllib'` — removed urllib/http/email from PyInstaller excludes
+- **Exe crash** `ModuleNotFoundError: No module named 'xml'` — removed xml and setuptools from PyInstaller excludes
+- **`AttributeError: 'SoundManager' object has no attribute '_boss_channel'`** on character select — added `hasattr` guard in `stop_boss_music()`
+- **Dev mode persisting across runs** — `dev_options` is now explicitly reset to `False` on profile load
+- **Leaderboard showing "not configured"** in release builds — CI now injects `SUPABASE_URL` / `SUPABASE_ANON_KEY` secrets before PyInstaller build
+- **CI secrets injection condition** — removed `if: env.SUPABASE_URL` guard which always evaluated false (env var only accessible inside the step)
+
+### Technical
+- CI: `publish-itch` job now runs on merge to main, manual dispatch, and tag push (previously missed merges)
+
+---
+
 ## [Unreleased]
 
-_Planned for future updates:_
-- Web build (pending pygame/numpy WebAssembly compatibility)
-- macOS / Linux builds via GitHub Actions CI
+### Added
+- **Save data in user profile directory** — all saves, caches, screenshots, and logs now write to `%APPDATA%/CyberSurvivor` (Windows) or `~/.cyber_survivor` (Linux/macOS); no more files written to the install folder
+  - Affected: display settings, player profiles, compendium, legacy saves, run logs, screenshots, procedural music cache
+
+### Performance (zero visual quality change)
+- Low-HP vignette surface cached by intensity bucket — rebuilt only ~10 times total (was rebuilding 100+ lines every frame)
+- Damage vignette surface cached by alpha bucket — ~20 rebuilds per hit instead of one full-screen surface per frame
+- Energy bar flame: single `SRCALPHA` surface instead of ~44 tiny 5×1 surfaces per frame
+- Passive slot glow: `set_alpha()` on plain surface instead of per-slot `SRCALPHA` allocation
+- Dash trail: single surface reused across 4 ghost positions (was allocating 4 new surfaces per frame while dashing)
+- Enemy corpse: surface built once at death, faded with `set_alpha()` over 1.8 seconds
+
+_Planned for future:_
 - Sound settings persist across sessions
 - Controller support
 - Additional zone themes

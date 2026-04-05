@@ -88,7 +88,7 @@ class HUD:
         surface.blit(num_surf, (bar_x + bar_w // 2 - num_surf.get_width() // 2, bar_y - 14))
 
     def _draw_energy_bar(self, surface: pygame.Surface, player):
-        """Horizontal energy bar under the HP bar. Gold border, fire when full."""
+        """Horizontal energy bar under the HP bar. Gold border, fireworks when full."""
         bar_x, bar_y = 20, 48
         bar_w, bar_h = 220, 16
         energy = getattr(player, "energy", 0)
@@ -96,55 +96,64 @@ class HUD:
         ratio = min(1.0, energy / max_energy) if max_energy > 0 else 0
         now = pygame.time.get_ticks()
         ready = energy >= max_energy
-        flash_on = ready and (now // 120) % 2 == 0
+        flash_on = ready and (now // 80) % 2 == 0   # faster flash
+
+        # Subtle golden edge vignette when super is ready
+        if ready:
+            edge_pulse = int(28 + 18 * math.sin(now * 0.006))
+            vig = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+            for t in range(14):
+                a = max(0, edge_pulse - t * 3)
+                pygame.draw.rect(vig, (255, 200, 0, a),
+                                 (t, t, SCREEN_WIDTH - t * 2, SCREEN_HEIGHT - t * 2), 1)
+            surface.blit(vig, (0, 0))
 
         # Background
         pygame.draw.rect(surface, (25, 18, 0), (bar_x, bar_y, bar_w, bar_h))
 
-        # Fill colour
+        # Fill
         fill_w = int(bar_w * ratio)
         if fill_w > 0:
             if ready:
-                # Flashing bright gold when full
-                if flash_on:
-                    fill_c = (255, 255, 160)
-                else:
-                    fill_c = (230, 180, 20)
+                fill_c = (255, 255, 100) if flash_on else (255, 200, 0)
             else:
-                # Dark amber gradient-ish: brighter as it fills
                 r = min(255, 160 + int(95 * ratio))
                 g = min(255, 80 + int(100 * ratio))
                 fill_c = (r, g, 0)
             pygame.draw.rect(surface, fill_c, (bar_x, bar_y, fill_w, bar_h))
 
-        # Border — plain gold, fire-glow when full
+        # Border
         if ready:
-            pulse = int(35 * abs(math.sin(now * 0.008)))
-            border_c = (255, min(255, 200 + pulse), 40)
-            pygame.draw.rect(surface, border_c, (bar_x, bar_y, bar_w, bar_h), 2)
-            # Inner bright line
-            pygame.draw.rect(surface, (255, 255, 100), (bar_x + 1, bar_y + 1, bar_w - 2, 2))
+            pulse = int(55 * abs(math.sin(now * 0.010)))
+            border_c = (255, min(255, 200 + pulse), 0)
+            # Thick glowing border
+            pygame.draw.rect(surface, border_c, (bar_x - 2, bar_y - 2, bar_w + 4, bar_h + 4), 3)
+            pygame.draw.rect(surface, (255, 255, 255), (bar_x, bar_y, bar_w, bar_h), 1)
         else:
             pygame.draw.rect(surface, (160, 110, 10), (bar_x, bar_y, bar_w, bar_h), 1)
 
-        # Flame ripple along top of bar when full
+        # Tall flame ripple above bar when full
         if ready:
-            for i in range(0, bar_w, 5):
-                flicker = math.sin(now * 0.009 + i * 0.4)
-                fh = int(3 + 3 * abs(flicker))
-                fx = bar_x + i
-                g_c = int(80 + 140 * abs(flicker))
+            _flame_h = 20
+            flame_surf = pygame.Surface((bar_w, _flame_h), pygame.SRCALPHA)
+            for i in range(0, bar_w, 4):
+                flicker = math.sin(now * 0.011 + i * 0.35)
+                fh = int(5 + 9 * abs(flicker))
+                g_c = int(60 + 160 * abs(flicker))
                 for row in range(fh):
-                    alpha = int(240 * (1.0 - row / (fh + 1)))
-                    glow_line = pygame.Surface((5, 1), pygame.SRCALPHA)
-                    glow_line.fill((255, g_c, 0, alpha))
-                    surface.blit(glow_line, (fx, bar_y + row))
+                    alpha = int(255 * (1.0 - row / (fh + 1)))
+                    pygame.draw.rect(flame_surf, (255, g_c, 0, alpha), (i, row, 4, 1))
+            surface.blit(flame_surf, (bar_x, bar_y - _flame_h + 4))
 
-        # "SUPER" label with flash
+        # Label — big bold flashing when ready
         if ready:
-            lbl_color = (255, 255, 100) if flash_on else (200, 160, 20)
-            lbl = self.font_small.render("SUPER READY", True, lbl_color)
-            surface.blit(lbl, (bar_x + bar_w // 2 - lbl.get_width() // 2, bar_y + 1))
+            lbl_color = (255, 255, 255) if flash_on else (255, 220, 0)
+            lbl = self.font.render("⚡ SUPER READY ⚡", True, lbl_color)
+            # Shadow
+            shadow = self.font.render("⚡ SUPER READY ⚡", True, (80, 40, 0))
+            lx = bar_x + bar_w // 2 - lbl.get_width() // 2
+            surface.blit(shadow, (lx + 2, bar_y + 2))
+            surface.blit(lbl, (lx, bar_y))
         else:
             e_lbl = self.font_small.render(f"ENERGY  {energy}/{max_energy}", True, (140, 100, 10))
             surface.blit(e_lbl, (bar_x + 4, bar_y + 1))
@@ -243,10 +252,11 @@ class HUD:
             if i < len(display_passives):
                 key = display_passives[i]
                 icon, color = PASSIVE_INFO.get(key, ("?", (180, 180, 180)))
-                # Filled slot glow
-                glow = pygame.Surface((slot_size, slot_size), pygame.SRCALPHA)
+                # Filled slot glow — use set_alpha instead of SRCALPHA surface
                 alpha = 40 + int(15 * math.sin(now * 0.003 + i))
-                glow.fill((*color, alpha))
+                glow = pygame.Surface((slot_size, slot_size))
+                glow.fill(color)
+                glow.set_alpha(alpha)
                 surface.blit(glow, (x, y))
                 # Procedural icon
                 picon = get_passive_icon(key, slot_size - 6, color)
@@ -256,32 +266,31 @@ class HUD:
                                  border_radius=4)
 
     def _draw_low_hp_vignette(self, surface: pygame.Surface, player):
-        """Draw red screen edges when player HP is below 20%."""
+        """Draw red screen edges when player HP is below 20%.  Cached by intensity bucket."""
         if player.hp <= 0 or player.max_hp <= 0:
             return
         ratio = player.hp / player.max_hp
         if ratio >= 0.2:
             return
-        # Intensity: 0.0 at 20%, 1.0 at 0%
+        # Quantise to ~10 visual steps so we don't rebuild every frame
         intensity = 1.0 - (ratio / 0.2)
-        alpha = int(60 + 100 * intensity)
-        vignette = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
-        # Draw red gradient borders
-        edge = int(60 + 40 * intensity)
-        for i in range(edge):
-            a = int(alpha * (1.0 - i / edge))
-            # Top
-            pygame.draw.line(vignette, (180, 0, 0, a), (0, i), (SCREEN_WIDTH, i))
-            # Bottom
-            pygame.draw.line(vignette, (180, 0, 0, a), (0, SCREEN_HEIGHT - 1 - i), (SCREEN_WIDTH, SCREEN_HEIGHT - 1 - i))
-            # Left
-            pygame.draw.line(vignette, (180, 0, 0, a), (i, 0), (i, SCREEN_HEIGHT))
-            # Right
-            pygame.draw.line(vignette, (180, 0, 0, a), (SCREEN_WIDTH - 1 - i, 0), (SCREEN_WIDTH - 1 - i, SCREEN_HEIGHT))
-        surface.blit(vignette, (0, 0))
+        bucket = int(intensity * 10)
+        if bucket != getattr(self, '_vig_bucket', -1):
+            self._vig_bucket = bucket
+            alpha = int(60 + 100 * intensity)
+            vig = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+            edge = int(60 + 40 * intensity)
+            for i in range(edge):
+                a = int(alpha * (1.0 - i / edge))
+                pygame.draw.line(vig, (180, 0, 0, a), (0, i), (SCREEN_WIDTH, i))
+                pygame.draw.line(vig, (180, 0, 0, a), (0, SCREEN_HEIGHT - 1 - i), (SCREEN_WIDTH, SCREEN_HEIGHT - 1 - i))
+                pygame.draw.line(vig, (180, 0, 0, a), (i, 0), (i, SCREEN_HEIGHT))
+                pygame.draw.line(vig, (180, 0, 0, a), (SCREEN_WIDTH - 1 - i, 0), (SCREEN_WIDTH - 1 - i, SCREEN_HEIGHT))
+            self._vig_cache = vig
+        surface.blit(self._vig_cache, (0, 0))
 
     def draw_game_over(self, surface: pygame.Surface, wave: int, level: int,
-                       kills: int = 0, legacy_points: int = 0):
+                       kills: int = 0, legacy_points: int = 0, game_over_start: int = 0):
         overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
         overlay.fill((0, 0, 0, 180))
         surface.blit(overlay, (0, 0))
@@ -296,5 +305,40 @@ class HUD:
             lp = self.font.render(f"+{legacy_points} Legacy Points", True, YELLOW)
             surface.blit(lp, (SCREEN_WIDTH // 2 - lp.get_width() // 2, SCREEN_HEIGHT // 2 + 15))
 
-        hint = self.font.render("Press R for Legacy Shop  |  ESC to quit", True, LIGHT_GRAY)
-        surface.blit(hint, (SCREEN_WIDTH // 2 - hint.get_width() // 2, SCREEN_HEIGHT // 2 + 55))
+        elapsed = pygame.time.get_ticks() - game_over_start if game_over_start else 0
+        self._gameover_btns = {}
+
+        if elapsed >= 3000:
+            # Draw 3 clickable buttons
+            btn_labels = [("run_summary", "Run Summary"), ("quit_to_menu", "Quit to Menu"), ("quit", "Quit")]
+            btn_w, btn_h = 180, 44
+            gap = 20
+            total_w = len(btn_labels) * btn_w + (len(btn_labels) - 1) * gap
+            start_x = SCREEN_WIDTH // 2 - total_w // 2
+            btn_y = SCREEN_HEIGHT // 2 + 70
+            mouse_pos = pygame.mouse.get_pos()
+            # Fade in over 400ms
+            fade_t = min(1.0, (elapsed - 3000) / 400)
+            btn_alpha = int(255 * fade_t)
+            for i, (key, label) in enumerate(btn_labels):
+                bx = start_x + i * (btn_w + gap)
+                rect = pygame.Rect(bx, btn_y, btn_w, btn_h)
+                self._gameover_btns[key] = rect
+                hovered = rect.collidepoint(mouse_pos)
+                bg_color = (60, 20, 20) if not hovered else (100, 30, 30)
+                border_color = (180, 60, 60) if not hovered else (255, 100, 100)
+                btn_surf = pygame.Surface((btn_w, btn_h), pygame.SRCALPHA)
+                pygame.draw.rect(btn_surf, (*bg_color, btn_alpha), (0, 0, btn_w, btn_h), border_radius=8)
+                pygame.draw.rect(btn_surf, (*border_color, btn_alpha), (0, 0, btn_w, btn_h), 2, border_radius=8)
+                surface.blit(btn_surf, (bx, btn_y))
+                lbl_color = (255, 220, 220) if hovered else (200, 160, 160)
+                lbl_surf = self.font_small.render(label, True, lbl_color)
+                lbl_surf.set_alpha(btn_alpha)
+                surface.blit(lbl_surf, (bx + btn_w // 2 - lbl_surf.get_width() // 2,
+                                        btn_y + btn_h // 2 - lbl_surf.get_height() // 2))
+        else:
+            # Show a brief "..." while waiting
+            wait_t = elapsed / 3000
+            dots = "." * (int(wait_t * 6) % 4)
+            hint = self.font_small.render(dots, True, LIGHT_GRAY)
+            surface.blit(hint, (SCREEN_WIDTH // 2 - hint.get_width() // 2, SCREEN_HEIGHT // 2 + 70))
