@@ -28,6 +28,8 @@ def load_settings() -> dict:
             data = json.load(f)
         # Merge with defaults for any missing keys
         merged = {**DEFAULT_SETTINGS, **data}
+        # dev_options should never persist — always require manual activation
+        merged["dev_options"] = False
         return merged
     except (FileNotFoundError, json.JSONDecodeError):
         return dict(DEFAULT_SETTINGS)

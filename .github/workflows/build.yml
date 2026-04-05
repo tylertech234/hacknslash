@@ -58,6 +58,20 @@ jobs:
                           out.write(f"value={ver}\n")
                       break
 
+      - name: Inject Supabase secrets
+        if: env.SUPABASE_URL != ''
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        shell: python
+        run: |
+          import os
+          url = os.environ.get('SUPABASE_URL', '')
+          key = os.environ.get('SUPABASE_ANON_KEY', '')
+          with open('src/secrets.py', 'w') as f:
+              f.write(f'SUPABASE_URL = "{url}"\n')
+              f.write(f'SUPABASE_ANON_KEY = "{key}"\n')
+
       - name: Build with PyInstaller
         run: pyinstaller cyber_survivor.spec --clean --noconfirm
 

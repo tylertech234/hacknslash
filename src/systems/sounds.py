@@ -104,6 +104,8 @@ class SoundManager:
 
     def stop_boss_music(self):
         """Stop boss music and restore zone music."""
+        if not hasattr(self, '_boss_channel'):
+            return
         self._boss_channel.stop()
         self.boss_music_playing = False
         # Restore zone BGM
