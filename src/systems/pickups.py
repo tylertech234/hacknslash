@@ -7,13 +7,9 @@ from src.settings import (
 )
 
 
-# Upgrade types and their stat effects
+# Upgrade types that drop on the floor (stat drops removed — only heals drop now)
 UPGRADE_TYPES = [
-    {"name": "Heal",        "color": (50, 220, 50),   "icon": "+",  "effect": "heal"},
-    {"name": "Damage Up",   "color": (255, 80, 60),   "icon": "D",  "effect": "damage"},
-    {"name": "Speed Up",    "color": (80, 180, 255),   "icon": "S",  "effect": "speed"},
-    {"name": "Range Up",    "color": (255, 200, 50),   "icon": "R",  "effect": "range"},
-    {"name": "Max HP Up",   "color": (220, 50, 220),   "icon": "H",  "effect": "max_hp"},
+    {"name": "Heal", "color": (50, 220, 50), "icon": "+", "effect": "heal"},
 ]
 
 
@@ -49,10 +45,20 @@ class Pickup:
         sy = int(self.y - camera_y + bob)
         color = self.upgrade["color"]
 
-        # Outer glow
-        glow_surf = pygame.Surface((self.size * 3, self.size * 3), pygame.SRCALPHA)
-        pygame.draw.circle(glow_surf, (*color, 40), (self.size * 3 // 2, self.size * 3 // 2), self.size)
-        surface.blit(glow_surf, (sx - self.size * 3 // 2, sy - self.size * 3 // 2))
+        # Outer glow — stronger for XP orbs and coins
+        effect = self.upgrade.get("effect", "")
+        pulse = int(45 + 35 * math.sin(now * 0.008)) if effect in ("xp", "coin") else 30
+        glow_r = self.size * 2
+        glow_surf = pygame.Surface((glow_r * 2, glow_r * 2), pygame.SRCALPHA)
+        pygame.draw.circle(glow_surf, (*color, pulse), (glow_r, glow_r), glow_r)
+        surface.blit(glow_surf, (sx - glow_r, sy - glow_r))
+        if effect in ("xp", "coin"):
+            # Outer ring pulse
+            ring_r = self.size + int(3 + 4 * math.sin(now * 0.006))
+            ring_alpha = int(60 + 40 * math.sin(now * 0.006))
+            ring_s = pygame.Surface((ring_r * 2 + 4, ring_r * 2 + 4), pygame.SRCALPHA)
+            pygame.draw.circle(ring_s, (*color, ring_alpha), (ring_r + 2, ring_r + 2), ring_r, 2)
+            surface.blit(ring_s, (sx - ring_r - 2, sy - ring_r - 2))
 
         # Diamond shape
         half = self.size // 2

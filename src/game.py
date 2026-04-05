@@ -1712,10 +1712,6 @@ class Game:
                 chest.alive = False
                 self.chest_reward.open_chest(
                     self.player.char_class, self.player.passives, self.sounds,
-                    player_weapon_name=self.player.weapon_name,
-                    upgrade_tiers=getattr(self.player, "upgrade_tiers", {}),
-                    arsenal=getattr(self.player, "arsenal", []),
-                    player=self.player,
                 )
                 log.info("Boss chest opened!")
                 break
@@ -1926,7 +1922,9 @@ class Game:
 
         # Minimap
         alive_for_map = self.spawner.get_alive_enemies()
-        self.minimap.draw(self.screen, self.player.x, self.player.y, alive_for_map)
+        self.minimap.draw(self.screen, self.player.x, self.player.y, alive_for_map,
+                        campfire_x=getattr(self.campfire, 'x', None),
+                        campfire_y=getattr(self.campfire, 'y', None))
 
         # Level-up fanfare flash overlay
         if self._levelup_fanfare_time:
