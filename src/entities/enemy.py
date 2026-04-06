@@ -1107,12 +1107,14 @@ class Enemy:
             wu_elapsed = now - self._windup_start
             wu_frac = wu_elapsed / max(1, self._windup_duration)
             # Increasing flash intensity + shake offset
-            flash_alpha = int(40 + 160 * wu_frac)
+            flash_alpha = min(255, int(40 + 160 * wu_frac))
             shake_x = int(math.sin(now * 0.05) * (2 + 6 * wu_frac))
-            flash_s = self._get_surf(self.size + 20, self.size + 20)
-            pygame.draw.circle(flash_s, (255, 200, 60, min(255, flash_alpha)),
-                               (self.size // 2 + 10, self.size // 2 + 10), self.size // 2 + 4)
-            surface.blit(flash_s, (sx - self.size // 2 - 10 + shake_x, sy - self.size // 2 - 10))
+            _fw = self.size + 20
+            flash_s = pygame.Surface((_fw, _fw), pygame.SRCALPHA)
+            pygame.draw.circle(flash_s, (255, 200, 60),
+                               (_fw // 2, _fw // 2), self.size // 2 + 4)
+            flash_s.set_alpha(flash_alpha)
+            surface.blit(flash_s, (sx - _fw // 2 + shake_x, sy - _fw // 2))
             # Exclamation indicator above head
             if wu_frac > 0.3:
                 warn_font = get_font(20)
@@ -1122,39 +1124,48 @@ class Enemy:
         # Supreme D-Lek laser beam rendering
         if self.enemy_type == "supreme_d_lek":
             if self._laser_charging:
-                # Charge-up: gathering energy particles converging on boss
+                # Charge-up: warning aim line + flash boss body
                 ch_elapsed = now - self._laser_charge_start
                 ch_frac = ch_elapsed / max(1, self._laser_charge_duration)
-                # Warning line showing aim direction
                 aim_len = 80 + int(420 * ch_frac)
-                aim_alpha = int(40 + 120 * ch_frac)
+                aim_alpha = min(255, int(40 + 120 * ch_frac))
                 bx = sx + int(math.cos(self._laser_angle) * aim_len)
                 by = sy + int(math.sin(self._laser_angle) * aim_len)
                 aim_s = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
-                pygame.draw.line(aim_s, (255, 50, 50, aim_alpha), (sx, sy), (bx, by), 2)
+                pygame.draw.line(aim_s, (255, 50, 50), (sx, sy), (bx, by), 2)
+                aim_s.set_alpha(aim_alpha)
                 surface.blit(aim_s, (0, 0))
                 # Flash boss body
                 shake = int(math.sin(now * 0.04) * (2 + 4 * ch_frac))
-                flash_s2 = self._get_surf(self.size + 10, self.size + 10)
-                pygame.draw.circle(flash_s2, (255, 80, 40, int(60 * ch_frac)),
-                                   (self.size // 2 + 5, self.size // 2 + 5), self.size // 2)
-                surface.blit(flash_s2, (sx - self.size // 2 - 5 + shake, sy - self.size // 2 - 5))
+                _fw2 = self.size + 10
+                flash_s2 = pygame.Surface((_fw2, _fw2), pygame.SRCALPHA)
+                pygame.draw.circle(flash_s2, (255, 80, 40),
+                                   (_fw2 // 2, _fw2 // 2), self.size // 2)
+                flash_s2.set_alpha(min(255, int(60 * ch_frac)))
+                surface.blit(flash_s2, (sx - _fw2 // 2 + shake, sy - _fw2 // 2))
             if self._laser_firing:
-                # Active beam: thick bright line with glow
+                # Active beam: thick bright line with glow layers
                 lf_elapsed = now - self._laser_fire_start
                 lf_frac = lf_elapsed / max(1, self._laser_fire_duration)
-                beam_alpha = int(255 * (1.0 - lf_frac * 0.3))
+                beam_alpha = min(255, int(255 * (1.0 - lf_frac * 0.3)))
                 beam_len = 500
                 bx = sx + int(math.cos(self._laser_angle) * beam_len)
                 by = sy + int(math.sin(self._laser_angle) * beam_len)
                 beam_s = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
                 # Outer glow
-                pygame.draw.line(beam_s, (255, 60, 20, beam_alpha // 3), (sx, sy), (bx, by), 30)
-                # Core beam
-                pygame.draw.line(beam_s, (255, 200, 100, beam_alpha), (sx, sy), (bx, by), 8)
-                # White-hot center
-                pygame.draw.line(beam_s, (255, 255, 220, beam_alpha), (sx, sy), (bx, by), 3)
+                pygame.draw.line(beam_s, (255, 60, 20), (sx, sy), (bx, by), 30)
+                beam_s.set_alpha(beam_alpha // 3)
                 surface.blit(beam_s, (0, 0))
+                # Core beam
+                core_s = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+                pygame.draw.line(core_s, (255, 200, 100), (sx, sy), (bx, by), 8)
+                core_s.set_alpha(beam_alpha)
+                surface.blit(core_s, (0, 0))
+                # White-hot center
+                ctr_s = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+                pygame.draw.line(ctr_s, (255, 255, 220), (sx, sy), (bx, by), 3)
+                ctr_s.set_alpha(beam_alpha)
+                surface.blit(ctr_s, (0, 0))
 
         # HP bar
         bar_w = self.size
