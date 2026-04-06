@@ -61,6 +61,7 @@ create table if not exists public.run_analytics (
     damage_taken    int,
     highest_hit     int,
     total_healed    int,
+    killed_by       text,           -- enemy type that killed the player (empty on victory)
     zones_completed text,   -- JSON array
     upgrades        text,   -- JSON array of upgrade names
     weapons         text,   -- JSON object: {weapon_key: stats}

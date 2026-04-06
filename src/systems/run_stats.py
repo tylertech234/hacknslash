@@ -39,6 +39,9 @@ class RunStats:
         self.zone_times: dict[str, int] = {}
         self._zone_start_time: int = pygame.time.get_ticks()
 
+        # Enemy that killed the player (empty if victory)
+        self.killed_by: str = ""
+
     def set_weapon(self, weapon_key: str, weapon_name: str, cooldown_ms: int = 500):
         """Track weapon equip/switch."""
         now = pygame.time.get_ticks()
@@ -158,6 +161,7 @@ class RunStats:
             "damage_taken": self.total_damage_taken,
             "highest_hit": self.highest_hit,
             "total_healed": self.total_healed,
+            "killed_by": self.killed_by,
             "zones_completed": self.zones_completed,
             "upgrades": self.upgrades_taken,
             "weapons": weapon_summary,
