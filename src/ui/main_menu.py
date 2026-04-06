@@ -4,6 +4,7 @@ import pygame
 import math
 import json
 import os
+import random
 from src.settings import SCREEN_WIDTH, SCREEN_HEIGHT, WHITE, YELLOW, BLACK, VERSION, DATA_DIR
 
 
@@ -77,6 +78,10 @@ class MainMenuScreen:
         ]
         self._res_changed = False  # track if restart is needed
         self._dev_item = {"key": "dev_options", "name": "Dev Options", "type": "toggle"}
+
+        # Enemy parade — groups of enemies running across the screen
+        self._parade_groups: list[dict] = []
+        self._next_parade = 0  # ms timestamp for next spawn
 
     def handle_event(self, event: pygame.event.Event) -> str | None:
         """Returns 'new_run', 'quit', 'debug_menu', or None."""
@@ -263,8 +268,89 @@ class MainMenuScreen:
         ver_surf = self.font_small.render(f"v{VERSION}  Early Access", True, (55, 55, 75))
         surface.blit(ver_surf, (SCREEN_WIDTH - ver_surf.get_width() - 12, SCREEN_HEIGHT - ver_surf.get_height() - 8))
 
+    # ── Enemy parade ──────────────────────────────────────────────────────────
+
+    def _update_parade(self, now: int) -> None:
+        """Spawn and advance groups of enemy silhouettes across the bottom."""
+        # Spawn new group
+        if now >= self._next_parade:
+            self._next_parade = now + random.randint(3000, 7000)
+            direction = random.choice((-1, 1))  # -1 = right-to-left
+            count = random.randint(3, 6)
+            speed = random.uniform(1.2, 2.5)
+            y = random.randint(SCREEN_HEIGHT - 100, SCREEN_HEIGHT - 50)
+            start_x = SCREEN_WIDTH + 30 if direction == -1 else -30
+            # Pick a random enemy color/shape
+            palette = random.choice([
+                ("rat", (100, 200, 180)),
+                ("raccoon", (120, 140, 170)),
+                ("dalek", (80, 220, 255)),
+                ("zombie", (100, 170, 100)),
+                ("dog", (180, 140, 100)),
+                ("specter", (160, 100, 220)),
+            ])
+            group = {
+                "shape": palette[0], "color": palette[1],
+                "dir": direction, "speed": speed, "y": y,
+                "members": [start_x - direction * i * random.randint(18, 30) for i in range(count)],
+            }
+            self._parade_groups.append(group)
+
+        # Advance and cull
+        alive = []
+        for g in self._parade_groups:
+            g["members"] = [x + g["speed"] * -g["dir"] for x in g["members"]]
+            if g["dir"] == -1:
+                if any(x > -40 for x in g["members"]):
+                    alive.append(g)
+            else:
+                if any(x < SCREEN_WIDTH + 40 for x in g["members"]):
+                    alive.append(g)
+        self._parade_groups = alive
+
+    def _draw_parade(self, surface: pygame.Surface, now: int) -> None:
+        """Draw enemy silhouette groups running across the bottom."""
+        for g in self._parade_groups:
+            col = g["color"]
+            shape = g["shape"]
+            flip = g["dir"] == 1  # face direction of travel
+            bob_base = now * 0.008
+            for i, x in enumerate(g["members"]):
+                xi = int(x)
+                yi = g["y"] + int(math.sin(bob_base + i * 0.7) * 2)
+                # Faded silhouette alpha
+                alpha = 50
+                s = pygame.Surface((24, 24), pygame.SRCALPHA)
+                ac = (*col, alpha)
+                if shape == "rat":
+                    pygame.draw.ellipse(s, ac, (4, 8, 16, 8))  # body
+                    pygame.draw.circle(s, ac, (10 if not flip else 14, 9), 4)  # head
+                elif shape == "raccoon":
+                    pygame.draw.ellipse(s, ac, (3, 4, 18, 14))  # stocky body
+                    pygame.draw.circle(s, ac, (11 if not flip else 13, 6), 5)  # head
+                elif shape == "dalek":
+                    pygame.draw.rect(s, ac, (6, 10, 12, 10), border_radius=2)  # skirt
+                    pygame.draw.ellipse(s, ac, (7, 4, 10, 8))  # dome
+                elif shape == "zombie":
+                    pygame.draw.rect(s, ac, (8, 6, 8, 14))  # tall body
+                    pygame.draw.circle(s, ac, (12, 5), 5)  # head
+                elif shape == "dog":
+                    pygame.draw.ellipse(s, ac, (2, 8, 20, 10))  # long body
+                    pygame.draw.circle(s, ac, (4 if flip else 20, 8), 4)  # head
+                elif shape == "specter":
+                    pygame.draw.ellipse(s, ac, (5, 2, 14, 18))  # floaty form
+                    # Wispy bottom
+                    for wx in range(7, 18, 3):
+                        wy = 18 + int(math.sin(bob_base + wx) * 2)
+                        pygame.draw.line(s, ac, (wx, 16), (wx, wy), 1)
+                surface.blit(s, (xi - 12, yi - 12))
+
     def _draw_menu(self, surface: pygame.Surface, now: int):
-        start_y = 320
+        # Update and draw enemy parade behind the menu
+        self._update_parade(now)
+        self._draw_parade(surface, now)
+
+        start_y = 310
         for i, opt in enumerate(self.options):
             is_sel = i == self.selected
             color = YELLOW if is_sel else (140, 140, 160)
@@ -276,7 +362,7 @@ class MainMenuScreen:
 
             text = self.font.render(f"{prefix}{label}", True, color)
             x = SCREEN_WIDTH // 2 - text.get_width() // 2
-            y = start_y + i * 50
+            y = start_y + i * 42
 
             if is_sel:
                 # Selection highlight bar
@@ -287,15 +373,15 @@ class MainMenuScreen:
 
             surface.blit(text, (x, y))
 
-        # Early Access disclaimer
+        # Early Access disclaimer — bottom area
         disc = self.font_small.render(
             "Early Access: breaking changes & leaderboard resets may occur  \u2014  thank you for your support!",
             True, (95, 85, 65))
-        surface.blit(disc, (SCREEN_WIDTH // 2 - disc.get_width() // 2, 562))
+        surface.blit(disc, (SCREEN_WIDTH // 2 - disc.get_width() // 2, SCREEN_HEIGHT - 42))
 
         # Controls hint
         hint = self.font_small.render("W/S to navigate  |  E/Enter to select", True, (70, 70, 90))
-        surface.blit(hint, (SCREEN_WIDTH // 2 - hint.get_width() // 2, 590))
+        surface.blit(hint, (SCREEN_WIDTH // 2 - hint.get_width() // 2, SCREEN_HEIGHT - 22))
 
         # Bug icon when dev_options enabled
         if self.settings.get("dev_options"):
