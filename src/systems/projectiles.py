@@ -8,7 +8,7 @@ class Projectile:
     """A single bullet fired by an enemy."""
 
     def __init__(self, x: float, y: float, dx: float, dy: float, damage: int,
-                 style: str = "circle"):
+                 style: str = "circle", enemy_type: str = "unknown"):
         self.x = x
         self.y = y
         self.dx = dx
@@ -17,6 +17,7 @@ class Projectile:
         self.size = ENEMY_BULLET_SIZE
         self.damage = damage
         self.style = style
+        self.enemy_type = enemy_type
         self.alive = True
         self.spawn_time = pygame.time.get_ticks()
         self.lifetime = 4000  # ms
@@ -67,13 +68,13 @@ class ProjectileSystem:
         self.blocked_positions: list[tuple] = []  # (x, y) knight-blocked bullets this frame
 
     def spawn(self, x: float, y: float, target_x: float, target_y: float, damage: int,
-               style: str = "circle"):
+               style: str = "circle", enemy_type: str = "unknown"):
         dx = target_x - x
         dy = target_y - y
         dist = math.hypot(dx, dy)
         if dist == 0:
             return
-        self.bullets.append(Projectile(x, y, dx / dist, dy / dist, damage, style))
+        self.bullets.append(Projectile(x, y, dx / dist, dy / dist, damage, style, enemy_type))
 
     def update(self, now: int, player, world_w: int, world_h: int):
         self.blocked_positions.clear()
@@ -88,6 +89,7 @@ class ProjectileSystem:
                 if getattr(player, 'char_class', '') == 'knight' and random.random() < 0.28:
                     self.blocked_positions.append((b.x, b.y))
                 else:
+                    player.last_hit_by = b.enemy_type
                     player.take_damage(b.damage, now)
                 b.alive = False
         self.bullets = [b for b in self.bullets if b.alive]

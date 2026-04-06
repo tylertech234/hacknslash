@@ -26,3 +26,6 @@ profile.json
 
 # Screenshots taken in-game (F9)
 screenshots/
+
+crash_log.txt
+error_log.txt

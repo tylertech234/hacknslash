@@ -4,6 +4,7 @@ import pygame
 import math
 import json
 import os
+import random
 from src.settings import SCREEN_WIDTH, SCREEN_HEIGHT, WHITE, YELLOW, BLACK, VERSION, DATA_DIR
 
 
@@ -77,6 +78,11 @@ class MainMenuScreen:
         ]
         self._res_changed = False  # track if restart is needed
         self._dev_item = {"key": "dev_options", "name": "Dev Options", "type": "toggle"}
+
+        # Enemy chase parade — player runs across, enemies chase
+        self._parade: dict | None = None  # active chase group
+        self._parade_done_at = 0  # ms when last group fully exited
+        self._next_parade_at = 0  # ms timestamp for next parade spawn
 
     def handle_event(self, event: pygame.event.Event) -> str | None:
         """Returns 'new_run', 'quit', 'debug_menu', or None."""
@@ -222,15 +228,27 @@ class MainMenuScreen:
             return
 
         now = pygame.time.get_ticks()
-        surface.fill((8, 8, 14))
+        surface.fill((16, 10, 30))
 
-        # Animated background particles
-        for i in range(30):
+        # Nebula background — soft purple/blue glow patches
+        for i in range(8):
+            nx = (i * 173) % SCREEN_WIDTH
+            ny = (i * 97 + 200) % SCREEN_HEIGHT
+            nr = 80 + (i * 31) % 60
+            pulse = 0.6 + 0.4 * math.sin(now * 0.0005 + i * 1.3)
+            ns = pygame.Surface((nr * 2, nr * 2), pygame.SRCALPHA)
+            na = int(12 * pulse)
+            nc = ((40 + i * 8) % 60, 15, (80 + i * 12) % 120)
+            pygame.draw.circle(ns, (*nc, na), (nr, nr), nr)
+            surface.blit(ns, (nx - nr, ny - nr))
+
+        # Animated particles
+        for i in range(35):
             px = (i * 97 + now // 40) % SCREEN_WIDTH
             py = (i * 53 + now // 60) % SCREEN_HEIGHT
             alpha = int(30 + 20 * math.sin(now * 0.001 + i))
             ps = pygame.Surface((4, 4), pygame.SRCALPHA)
-            pygame.draw.circle(ps, (80, 120, 180, alpha), (2, 2), 2)
+            pygame.draw.circle(ps, (120, 80, 200, alpha), (2, 2), 2)
             surface.blit(ps, (px, py))
 
         # Title
@@ -263,8 +281,291 @@ class MainMenuScreen:
         ver_surf = self.font_small.render(f"v{VERSION}  Early Access", True, (55, 55, 75))
         surface.blit(ver_surf, (SCREEN_WIDTH - ver_surf.get_width() - 12, SCREEN_HEIGHT - ver_surf.get_height() - 8))
 
+    # ── Enemy chase parade ───────────────────────────────────────────────────
+
+    # Enemy type visual definitions: (name, colors_dict, size)
+    _PARADE_ENEMIES = [
+        ("cyber_rat", {"body": (100, 90, 80), "cyber": (60, 140, 180), "eye": (255, 40, 40)}, 16),
+        ("cyber_raccoon", {"body": (110, 105, 100), "strap": (50, 160, 200), "eye": (255, 160, 40)}, 26),
+        ("d_lek", {"skirt": (90, 82, 74), "body": (120, 110, 100), "dome": (180, 170, 155), "eye": (0, 200, 255)}, 24),
+        ("charger", {"body": (220, 60, 30), "outline": (255, 150, 80), "eye": (255, 200, 50)}, 28),
+        ("cyber_zombie", {"body": (80, 90, 70), "vein": (200, 30, 30), "eye": (255, 40, 40)}, 30),
+        ("specter", {"cloak": (40, 20, 80), "glow": (80, 40, 160), "eye": (120, 220, 255)}, 34),
+        ("drone", {"body": (180, 185, 195), "arm": (120, 120, 130), "light": (60, 140, 255)}, 22),
+        ("mega_cyber_deer", {"body": (70, 60, 50), "implant": (60, 180, 220), "eye": (255, 80, 20), "antler": (120, 100, 70)}, 48),
+    ]
+
+    _PLAYER_CLASSES = [
+        ("knight", (0, 180, 255)),
+        ("archer", (0, 255, 150)),
+        ("jester", (255, 50, 255)),
+    ]
+
+    def _update_parade(self, now: int) -> None:
+        """Manage the chase parade — one group at a time."""
+        if self._parade is not None:
+            p = self._parade
+            speed = p["speed"]
+            d = p["dir"]
+            # Advance all positions
+            p["player_x"] += speed * d
+            for e in p["enemies"]:
+                e["x"] += speed * d
+            # Check if fully off-screen
+            all_xs = [p["player_x"]] + [e["x"] for e in p["enemies"]]
+            if d == 1 and min(all_xs) > SCREEN_WIDTH + 80:
+                self._parade = None
+                self._next_parade_at = now + random.randint(2000, 4000)
+            elif d == -1 and max(all_xs) < -80:
+                self._parade = None
+                self._next_parade_at = now + random.randint(2000, 4000)
+            return
+
+        # Wait until the pre-rolled spawn time
+        if now < self._next_parade_at:
+            return
+
+        direction = random.choice((-1, 1))
+        speed = random.uniform(2.0, 3.5)
+        # Position parade just above the bottom disclaimer text
+        y = SCREEN_HEIGHT - random.randint(60, 120)
+        # Player starts off-screen, enemies trail behind
+        player_start = -60 if direction == 1 else SCREEN_WIDTH + 60
+        # Pick random player class
+        cls_name, cls_color = random.choice(self._PLAYER_CLASSES)
+        # Pick 3-6 random enemies
+        count = random.randint(3, 6)
+        enemy_picks = random.choices(self._PARADE_ENEMIES, k=count)
+        enemies = []
+        for i, (etype, ecols, esize) in enumerate(enemy_picks):
+            gap = random.randint(40, 65)
+            enemies.append({
+                "type": etype, "colors": ecols, "size": esize,
+                "x": player_start - direction * (80 + i * gap),
+                "bob_offset": random.uniform(0, math.tau),
+            })
+        self._parade = {
+            "dir": direction, "speed": speed, "y": y,
+            "player_class": cls_name, "player_color": cls_color,
+            "player_x": player_start,
+            "enemies": enemies,
+        }
+
+    def _draw_parade(self, surface: pygame.Surface, now: int) -> None:
+        """Draw the chase parade — player fleeing, enemies pursuing."""
+        if self._parade is None:
+            return
+        p = self._parade
+        y = p["y"]
+        d = p["dir"]
+        bob_t = now * 0.008
+
+        # Draw player character
+        px = int(p["player_x"])
+        py = y + int(math.sin(bob_t * 1.5) * 2)
+        self._draw_parade_player(surface, px, py, p["player_class"], p["player_color"], now, d)
+
+        # Draw enemies
+        for e in p["enemies"]:
+            ex = int(e["x"])
+            ey = y + int(math.sin(bob_t + e["bob_offset"]) * 3)
+            self._draw_parade_enemy(surface, ex, ey, e["type"], e["colors"], e["size"], now, d)
+
+    def _draw_parade_player(self, surface, x, y, cls, color, now, d):
+        """Draw a mini player character running."""
+        leg_cycle = math.sin(now * 0.015) * 5
+        flip = -1 if d == -1 else 1
+        if cls == "knight":
+            pygame.draw.rect(surface, (30, 40, 60), (x - 5, y + 6, 4, 8))
+            pygame.draw.rect(surface, (30, 40, 60), (x + 2, y + 6, 4, 8))
+            pygame.draw.polygon(surface, (40, 55, 90), [
+                (x - 8, y + 6), (x + 8, y + 6), (x + 9, y - 6), (x - 9, y - 6)])
+            pulse = int(3 + 2 * math.sin(now * 0.006))
+            cs = pygame.Surface((pulse * 2, pulse * 2), pygame.SRCALPHA)
+            pygame.draw.circle(cs, (0, 220, 255, 140), (pulse, pulse), pulse)
+            surface.blit(cs, (x - pulse, y - 2 - pulse))
+            pygame.draw.circle(surface, (40, 55, 90), (x, y - 12), 7)
+            pygame.draw.line(surface, color, (x - 4, y - 12), (x + 4, y - 12), 2)
+        elif cls == "archer":
+            pygame.draw.rect(surface, (20, 50, 40), (x - 4, y + 6, 3, 8))
+            pygame.draw.rect(surface, (20, 50, 40), (x + 2, y + 6, 3, 8))
+            pygame.draw.polygon(surface, (30, 60, 50), [
+                (x - 6, y + 6), (x + 6, y + 6), (x + 5, y - 6), (x - 5, y - 6)])
+            pygame.draw.circle(surface, (30, 60, 50), (x, y - 12), 6)
+            pygame.draw.polygon(surface, (25, 55, 45), [
+                (x - 6, y - 10), (x + 6, y - 10), (x, y - 20)])
+            eg = int(200 + 55 * math.sin(now * 0.006))
+            pygame.draw.circle(surface, (0, min(255, eg), 100), (x - 2, y - 12), 1)
+            pygame.draw.circle(surface, (0, min(255, eg), 100), (x + 2, y - 12), 1)
+        elif cls == "jester":
+            pygame.draw.line(surface, (200, 50, 200), (x - 3, y + 4), (x - 4 + int(leg_cycle), y + 12), 2)
+            pygame.draw.line(surface, (80, 30, 80), (x + 3, y + 4), (x + 4 - int(leg_cycle), y + 12), 2)
+            pygame.draw.polygon(surface, (80, 30, 80), [
+                (x, y + 4), (x + 7, y + 4), (x + 6, y - 6), (x, y - 6)])
+            pygame.draw.polygon(surface, (200, 50, 200), [
+                (x, y + 4), (x - 7, y + 4), (x - 6, y - 6), (x, y - 6)])
+            pygame.draw.circle(surface, (200, 50, 200), (x, y - 12), 6)
+            for side in (-1, 1):
+                bx = x + side * 8
+                by = y - 18 + int(math.sin(now * 0.006 + side) * 2)
+                pygame.draw.line(surface, (200, 50, 200) if side == -1 else (80, 30, 80),
+                                 (x + side * 3, y - 15), (bx, by), 2)
+                pygame.draw.circle(surface, (255, 255, 0), (bx, by), 2)
+
+    def _draw_parade_enemy(self, surface, x, y, etype, cols, size, now, d):
+        """Draw a recognizable mini enemy based on actual game art."""
+        flip = -1 if d == -1 else 1
+        bob = math.sin(now * 0.005) * 2
+
+        if etype == "cyber_rat":
+            # Small scurrying rat — brown body, teal cyber plate, red LED eyes
+            jitter = int(math.sin(now * 0.02) * 1)
+            yj = y + jitter
+            pygame.draw.ellipse(surface, cols["body"], (x - 8, yj - 4, 16, 10))
+            pygame.draw.ellipse(surface, cols["cyber"], (x - 5, yj - 6, 10, 6))
+            hx = x + flip * 7
+            pygame.draw.circle(surface, cols["body"], (hx, yj - 2), 4)
+            pygame.draw.circle(surface, cols["eye"], (hx + flip * 2, yj - 3), 2)
+            tx = x - flip * 10
+            pygame.draw.line(surface, (80, 70, 60), (x - flip * 7, yj), (tx, yj - 2 + int(math.sin(now * 0.01) * 2)), 1)
+
+        elif etype == "cyber_raccoon":
+            # Stocky raccoon — grey body, teal straps, amber eyes, ringed tail
+            pygame.draw.ellipse(surface, cols["body"], (x - 10, y - 8, 20, 18))
+            pygame.draw.line(surface, cols["strap"], (x - 3, y - 8), (x - 3, y + 8), 2)
+            pygame.draw.line(surface, cols["strap"], (x + 3, y - 8), (x + 3, y + 8), 2)
+            hx = x + flip * 8
+            pygame.draw.circle(surface, cols["body"], (hx, y - 4), 6)
+            pygame.draw.ellipse(surface, (40, 35, 35), (hx - 5, y - 6, 10, 5))
+            pygame.draw.circle(surface, cols["eye"], (hx - 2, y - 5), 2)
+            pygame.draw.circle(surface, cols["eye"], (hx + 2, y - 5), 2)
+            # Tail
+            tx = x - flip * 10
+            for ti in range(3):
+                tc = (160, 150, 140) if ti % 2 == 0 else (60, 55, 50)
+                pygame.draw.circle(surface, tc, (tx - flip * ti * 4, y - 2 + int(math.sin(now * 0.006 + ti) * 2)), 3 - ti)
+
+        elif etype == "d_lek":
+            # Dalek-style — trapezoidal skirt, dome, eyestalk, gun arm
+            by = y + int(bob)
+            # Skirt
+            pygame.draw.polygon(surface, cols["skirt"], [
+                (x - 8, by + 8), (x + 8, by + 8), (x + 6, by - 2), (x - 6, by - 2)])
+            for bmp in range(-4, 5, 4):
+                pygame.draw.circle(surface, cols["body"], (x + bmp, by + 4), 3)
+            # Body + dome
+            pygame.draw.rect(surface, cols["body"], (x - 6, by - 8, 12, 6))
+            pygame.draw.ellipse(surface, cols["dome"], (x - 5, by - 14, 10, 8))
+            # Eyestalk
+            pygame.draw.line(surface, cols["body"], (x, by - 14), (x + flip * 4, by - 18), 2)
+            pygame.draw.circle(surface, cols["eye"], (x + flip * 4, by - 18), 2)
+            # Gun arm
+            pygame.draw.line(surface, cols["body"], (x + flip * 6, by - 4), (x + flip * 14, by - 3), 2)
+
+        elif etype == "charger":
+            # Wedge/arrow shape — red-orange, yellow eye
+            pts = [
+                (x + flip * 14, y),
+                (x - flip * 10, y - 10),
+                (x - flip * 10, y + 10),
+            ]
+            pygame.draw.polygon(surface, cols["body"], pts)
+            pygame.draw.polygon(surface, cols["outline"], pts, 2)
+            pygame.draw.circle(surface, cols["eye"], (x + flip * 4, y - 2), 3)
+            pygame.draw.circle(surface, (0, 0, 0), (x + flip * 4, y - 2), 1)
+
+        elif etype == "cyber_zombie":
+            # Tall shambling body — olive-grey, red circuit veins, red eyes, swaying arms
+            by = y + int(math.sin(now * 0.003) * 2)
+            pygame.draw.ellipse(surface, cols["body"], (x - 8, by - 10, 16, 20))
+            # Circuit veins
+            pygame.draw.line(surface, cols["vein"], (x - 4, by - 6), (x + 2, by - 2), 2)
+            pygame.draw.line(surface, cols["vein"], (x + 2, by - 2), (x - 2, by + 4), 2)
+            # Head
+            pygame.draw.circle(surface, cols["body"], (x, by - 12), 6)
+            pygame.draw.circle(surface, cols["eye"], (x - 2, by - 13), 2)
+            pygame.draw.circle(surface, cols["eye"], (x + 2, by - 13), 2)
+            # Swaying arms
+            arm_sway = int(math.sin(now * 0.005) * 3)
+            pygame.draw.line(surface, cols["body"], (x - 8, by - 4), (x - 12, by + 4 + arm_sway), 2)
+            pygame.draw.line(surface, cols["body"], (x + 8, by - 4), (x + 12, by + 4 - arm_sway), 2)
+
+        elif etype == "specter":
+            # Floating wraith — dark purple cloak, glowing eyes, wispy tendrils
+            hover = int(math.sin(now * 0.005) * 4)
+            by = y + hover
+            # Tendrils
+            for i in range(4):
+                tx = x - 8 + i * 5
+                twy = int(math.sin(now * 0.005 + i * 1.2) * 4)
+                pygame.draw.line(surface, cols["cloak"], (tx, by + 6), (tx, by + 14 + twy), 2)
+            # Body
+            pygame.draw.ellipse(surface, cols["cloak"], (x - 10, by - 14, 20, 24))
+            # Inner glow
+            gs = pygame.Surface((14, 16), pygame.SRCALPHA)
+            pygame.draw.ellipse(gs, (*cols["glow"], 80), (0, 0, 14, 16))
+            surface.blit(gs, (x - 7, by - 12))
+            # Eyes
+            pygame.draw.circle(surface, cols["eye"], (x - 4, by - 6), 3)
+            pygame.draw.circle(surface, cols["eye"], (x + 4, by - 6), 3)
+            pygame.draw.circle(surface, (0, 0, 0), (x - 4, by - 6), 1)
+            pygame.draw.circle(surface, (0, 0, 0), (x + 4, by - 6), 1)
+
+        elif etype == "drone":
+            # Flying disc — silver body, spinning props, blue center light
+            hover = int(math.sin(now * 0.006) * 4)
+            by = y + hover
+            # Shadow
+            ss = pygame.Surface((20, 6), pygame.SRCALPHA)
+            pygame.draw.ellipse(ss, (0, 0, 0, 40), (0, 0, 20, 6))
+            surface.blit(ss, (x - 10, y + 10))
+            # Body disc
+            pygame.draw.ellipse(surface, cols["body"], (x - 10, by - 4, 20, 8))
+            # Propeller arms — spinning
+            spin = now * 0.03
+            for i in range(4):
+                a = spin + i * (math.tau / 4)
+                ax = x + int(math.cos(a) * 10)
+                ay = by + int(math.sin(a) * 3)
+                pygame.draw.line(surface, cols["arm"], (x, by), (ax, ay), 1)
+                pygame.draw.circle(surface, (160, 160, 170), (ax, ay), 2)
+            # Center light
+            pygame.draw.circle(surface, cols["light"], (x, by), 3)
+
+        elif etype == "mega_cyber_deer":
+            # Large boss deer — big body, antlers, cyber implant, glowing eye
+            by = y + int(math.sin(now * 0.003) * 3)
+            # Body
+            pygame.draw.ellipse(surface, cols["body"], (x - 18, by - 10, 36, 24))
+            # Neck + head
+            hx = x + flip * 16
+            pygame.draw.line(surface, (80, 70, 58), (x + flip * 12, by - 8), (hx, by - 16), 4)
+            pygame.draw.circle(surface, cols["body"], (hx, by - 16), 8)
+            # Cyber implant on forehead
+            pygame.draw.rect(surface, cols["implant"], (hx - 4, by - 22, 8, 4))
+            # Eye
+            eg = int(200 + 55 * math.sin(now * 0.007))
+            pygame.draw.circle(surface, (min(255, eg), 80, 20), (hx + flip * 3, by - 16), 3)
+            # Antlers — branching lines
+            for side in (-1, 1):
+                ax = hx + side * 3
+                pygame.draw.line(surface, cols["antler"], (ax, by - 22), (ax + side * 6, by - 32), 2)
+                pygame.draw.line(surface, cols["antler"], (ax + side * 4, by - 28), (ax + side * 10, by - 34), 2)
+                pygame.draw.circle(surface, cols["implant"], (ax + side * 6, by - 32), 2)
+                pygame.draw.circle(surface, cols["implant"], (ax + side * 10, by - 34), 2)
+            # Legs
+            stomp = math.sin(now * 0.008)
+            for li, lx in enumerate([x - 12, x - 4, x + 4, x + 12]):
+                loff = int(stomp * 3) if li % 2 == 0 else int(-stomp * 3)
+                pygame.draw.line(surface, (90, 85, 78), (lx, by + 10), (lx + loff, by + 22), 3)
+                pygame.draw.circle(surface, cols["implant"], (lx, by + 10), 2)
+
     def _draw_menu(self, surface: pygame.Surface, now: int):
-        start_y = 320
+        # Update and draw enemy parade behind the menu
+        self._update_parade(now)
+        self._draw_parade(surface, now)
+
+        start_y = 310
         for i, opt in enumerate(self.options):
             is_sel = i == self.selected
             color = YELLOW if is_sel else (140, 140, 160)
@@ -276,7 +577,7 @@ class MainMenuScreen:
 
             text = self.font.render(f"{prefix}{label}", True, color)
             x = SCREEN_WIDTH // 2 - text.get_width() // 2
-            y = start_y + i * 50
+            y = start_y + i * 42
 
             if is_sel:
                 # Selection highlight bar
@@ -287,15 +588,15 @@ class MainMenuScreen:
 
             surface.blit(text, (x, y))
 
-        # Early Access disclaimer
+        # Early Access disclaimer — bottom area
         disc = self.font_small.render(
             "Early Access: breaking changes & leaderboard resets may occur  \u2014  thank you for your support!",
             True, (95, 85, 65))
-        surface.blit(disc, (SCREEN_WIDTH // 2 - disc.get_width() // 2, 562))
+        surface.blit(disc, (SCREEN_WIDTH // 2 - disc.get_width() // 2, SCREEN_HEIGHT - 42))
 
         # Controls hint
         hint = self.font_small.render("W/S to navigate  |  E/Enter to select", True, (70, 70, 90))
-        surface.blit(hint, (SCREEN_WIDTH // 2 - hint.get_width() // 2, 590))
+        surface.blit(hint, (SCREEN_WIDTH // 2 - hint.get_width() // 2, SCREEN_HEIGHT - 22))
 
         # Bug icon when dev_options enabled
         if self.settings.get("dev_options"):

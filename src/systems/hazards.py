@@ -33,7 +33,7 @@ class Hazard:
             self.tick_interval = 500
             self.duration = 8000
             self.warning_duration = 800
-            self.hits_enemies = False
+            self.hits_enemies = True
         elif t == "solar_flare":
             self.radius = 60
             self.damage_per_tick = 20
@@ -54,7 +54,7 @@ class Hazard:
             self.tick_interval = 500
             self.duration = 6000
             self.warning_duration = 600
-            self.hits_enemies = False
+            self.hits_enemies = True
         elif t == "electrical_surge":
             self.radius = 30
             self.damage_per_tick = 25

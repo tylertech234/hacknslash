@@ -412,6 +412,24 @@ class Enemy:
         _nexus_pool = ["null_burst", "eldritch_pull", "void_rift", "bleed_storm", "fire_ring"]
         self._nexus_cycle_pool = _nexus_pool if enemy_type == "nexus" else []
         self._nexus_cycle_idx = 0
+        # Iron Sentinel / Supreme D-Lek: mixed approach/retreat + vulnerability windows
+        self._sentinel_approach = False       # True when charging toward player
+        self._sentinel_approach_until = 0     # ms timestamp
+        self._sentinel_last_switch = 0        # cooldown for approach/retreat switching
+        self._windup_active = False           # True during volley wind-up (vulnerable)
+        self._windup_start = 0                # ms when wind-up began
+        self._windup_duration = 900           # ms of vulnerability before volley fires
+        self._windup_done = False             # True when volley should fire this frame
+        # Supreme D-Lek: laser beam attack
+        self._laser_charging = False
+        self._laser_charge_start = 0
+        self._laser_charge_duration = 1200    # ms of charge-up (flash/shake)
+        self._laser_firing = False
+        self._laser_fire_start = 0
+        self._laser_fire_duration = 800       # ms the beam stays active
+        self._laser_angle = 0.0
+        self._laser_cooldown = 8000
+        self._last_laser = -6000
 
     _BOSS_TYPES = frozenset(("iron_sentinel", "supreme_d_lek", "street_preacher",
                              "eldritch_horror", "architect", "nexus",
@@ -554,14 +572,88 @@ class Enemy:
             self.y -= (dy / dist) * effective_speed * 2.0
 
         # Ranged bosses: maintain distance — retreat + strafe when player charges in
+        # Iron Sentinel & Supreme D-Lek: mixed behavior (sometimes approach, sometimes flee)
         if self.is_boss and self.shoot_range > 0 and 0 < dist < 260:
-            flee_speed = effective_speed * 1.8
-            self.x -= (dx / dist) * flee_speed
-            self.y -= (dy / dist) * flee_speed
-            # Lateral strafe while retreating so they don't get cornered
-            strafe_bob = math.sin(now * 0.004 + self.anim_offset) * effective_speed * 0.9
-            self.x += -self.face_y * strafe_bob
-            self.y += self.face_x * strafe_bob
+            if self.enemy_type in ("iron_sentinel", "supreme_d_lek"):
+                # Skip default flee — handled by sentinel-specific AI below
+                pass
+            else:
+                flee_speed = effective_speed * 1.8
+                self.x -= (dx / dist) * flee_speed
+                self.y -= (dy / dist) * flee_speed
+                # Lateral strafe while retreating so they don't get cornered
+                strafe_bob = math.sin(now * 0.004 + self.anim_offset) * effective_speed * 0.9
+                self.x += -self.face_y * strafe_bob
+                self.y += self.face_x * strafe_bob
+
+        # Iron Sentinel / Supreme D-Lek: random approach/retreat pattern
+        if self.enemy_type in ("iron_sentinel", "supreme_d_lek") and dist > 0:
+            # Don't move during wind-up (vulnerability window) or laser
+            if self._windup_active or self._laser_charging or self._laser_firing:
+                pass
+            elif self._sentinel_approach and now < self._sentinel_approach_until:
+                # Charge toward player aggressively
+                rush = effective_speed * 2.5
+                self.x += (dx / dist) * rush
+                self.y += (dy / dist) * rush
+            elif dist < 260:
+                # Default: flee but slower than other bosses
+                flee_speed = effective_speed * 1.0
+                self.x -= (dx / dist) * flee_speed
+                self.y -= (dy / dist) * flee_speed
+                strafe_bob = math.sin(now * 0.004 + self.anim_offset) * effective_speed * 0.6
+                self.x += -self.face_y * strafe_bob
+                self.y += self.face_x * strafe_bob
+            # Randomly switch to approach mode every few seconds
+            if now - self._sentinel_last_switch > 3000 + random.randint(0, 2000):
+                self._sentinel_last_switch = now
+                if random.random() < 0.4:  # 40% chance to rush in
+                    self._sentinel_approach = True
+                    self._sentinel_approach_until = now + random.randint(800, 1500)
+                else:
+                    self._sentinel_approach = False
+
+            # Wind-up before volley (missile_barrage / bleed_storm)
+            if (not self._windup_active and not self._windup_done
+                    and self._special2 and self._special2_active
+                    and now - self._special2_timer < 50):
+                # Hijack the special2 start: insert a wind-up window first
+                self._windup_active = True
+                self._windup_start = now
+                self._special2_active = False  # pause special until wind-up ends
+                self._special2_timer = now      # will be restarted after wind-up
+            if self._windup_active:
+                if now - self._windup_start >= self._windup_duration:
+                    self._windup_active = False
+                    self._windup_done = True
+                    # Restart the special2
+                    self._special2_active = True
+                    self._special2_timer = now
+
+        # Reset wind-up done flag after special2 finishes
+        if self._windup_done and not self._special2_active:
+            self._windup_done = False
+
+        # Supreme D-Lek: laser beam attack
+        if self.enemy_type == "supreme_d_lek":
+            if (not self._laser_charging and not self._laser_firing
+                    and not self._special_active and not self._special2_active
+                    and now - self._last_laser > self._laser_cooldown
+                    and dist < 500):
+                self._laser_charging = True
+                self._laser_charge_start = now
+                self._laser_angle = math.atan2(dy, dx)
+            if self._laser_charging:
+                # Track player during charge-up
+                self._laser_angle = math.atan2(player_y - self.y, player_x - self.x)
+                if now - self._laser_charge_start >= self._laser_charge_duration:
+                    self._laser_charging = False
+                    self._laser_firing = True
+                    self._laser_fire_start = now
+                    self._last_laser = now
+            if self._laser_firing:
+                if now - self._laser_fire_start >= self._laser_fire_duration:
+                    self._laser_firing = False
 
         # Void wisp: random lateral burst-dashes every ~700ms
         if self.enemy_type == "void_wisp":
@@ -1009,6 +1101,71 @@ class Enemy:
 
         # Status effect particles
         self.statuses.draw_particles(surface, sx, sy, self.size)
+
+        # Wind-up flash overlay (iron_sentinel / supreme_d_lek)
+        if self._windup_active:
+            wu_elapsed = now - self._windup_start
+            wu_frac = wu_elapsed / max(1, self._windup_duration)
+            # Increasing flash intensity + shake offset
+            flash_alpha = min(255, int(40 + 160 * wu_frac))
+            shake_x = int(math.sin(now * 0.05) * (2 + 6 * wu_frac))
+            _fw = self.size + 20
+            flash_s = pygame.Surface((_fw, _fw), pygame.SRCALPHA)
+            pygame.draw.circle(flash_s, (255, 200, 60),
+                               (_fw // 2, _fw // 2), self.size // 2 + 4)
+            flash_s.set_alpha(flash_alpha)
+            surface.blit(flash_s, (sx - _fw // 2 + shake_x, sy - _fw // 2))
+            # Exclamation indicator above head
+            if wu_frac > 0.3:
+                warn_font = get_font("consolas", 20, bold=True)
+                warn = warn_font.render("!", True, (255, 60, 60))
+                surface.blit(warn, (sx - warn.get_width() // 2, sy - self.size // 2 - 28))
+
+        # Supreme D-Lek laser beam rendering
+        if self.enemy_type == "supreme_d_lek":
+            if self._laser_charging:
+                # Charge-up: warning aim line + flash boss body
+                ch_elapsed = now - self._laser_charge_start
+                ch_frac = ch_elapsed / max(1, self._laser_charge_duration)
+                aim_len = 80 + int(420 * ch_frac)
+                aim_alpha = min(255, int(40 + 120 * ch_frac))
+                bx = sx + int(math.cos(self._laser_angle) * aim_len)
+                by = sy + int(math.sin(self._laser_angle) * aim_len)
+                aim_s = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+                pygame.draw.line(aim_s, (255, 50, 50), (sx, sy), (bx, by), 2)
+                aim_s.set_alpha(aim_alpha)
+                surface.blit(aim_s, (0, 0))
+                # Flash boss body
+                shake = int(math.sin(now * 0.04) * (2 + 4 * ch_frac))
+                _fw2 = self.size + 10
+                flash_s2 = pygame.Surface((_fw2, _fw2), pygame.SRCALPHA)
+                pygame.draw.circle(flash_s2, (255, 80, 40),
+                                   (_fw2 // 2, _fw2 // 2), self.size // 2)
+                flash_s2.set_alpha(min(255, int(60 * ch_frac)))
+                surface.blit(flash_s2, (sx - _fw2 // 2 + shake, sy - _fw2 // 2))
+            if self._laser_firing:
+                # Active beam: thick bright line with glow layers
+                lf_elapsed = now - self._laser_fire_start
+                lf_frac = lf_elapsed / max(1, self._laser_fire_duration)
+                beam_alpha = min(255, int(255 * (1.0 - lf_frac * 0.3)))
+                beam_len = 500
+                bx = sx + int(math.cos(self._laser_angle) * beam_len)
+                by = sy + int(math.sin(self._laser_angle) * beam_len)
+                beam_s = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+                # Outer glow
+                pygame.draw.line(beam_s, (255, 60, 20), (sx, sy), (bx, by), 30)
+                beam_s.set_alpha(beam_alpha // 3)
+                surface.blit(beam_s, (0, 0))
+                # Core beam
+                core_s = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+                pygame.draw.line(core_s, (255, 200, 100), (sx, sy), (bx, by), 8)
+                core_s.set_alpha(beam_alpha)
+                surface.blit(core_s, (0, 0))
+                # White-hot center
+                ctr_s = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+                pygame.draw.line(ctr_s, (255, 255, 220), (sx, sy), (bx, by), 3)
+                ctr_s.set_alpha(beam_alpha)
+                surface.blit(ctr_s, (0, 0))
 
         # HP bar
         bar_w = self.size

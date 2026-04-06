@@ -8,6 +8,8 @@ Returns the accepted name string via .result after .active becomes False.
 import pygame
 import random
 import string
+import os
+import re
 
 from src.settings import SCREEN_WIDTH, SCREEN_HEIGHT
 
@@ -16,10 +18,55 @@ _ALLOWED = set(string.ascii_letters + string.digits + "_")
 _MIN_LEN = 3
 _MAX_LEN = 16
 
+# ── Fun name generator (no explicit words) ────────────────────────────────────
+_ADJECTIVES = [
+    "Neon", "Cyber", "Glitch", "Turbo", "Hyper", "Pixel", "Shadow",
+    "Blazing", "Iron", "Chill", "Stealth", "Arcane", "Wild", "Swift",
+    "Rogue", "Crimson", "Frozen", "Stormy", "Mystic", "Lucky",
+    "Brave", "Rusty", "Golden", "Cosmic", "Dark", "Bright", "Silent",
+    "Feral", "Solar", "Lunar", "Mega", "Ultra", "Dusk", "Dawn",
+]
+_NOUNS = [
+    "Wolf", "Hawk", "Fox", "Raven", "Viper", "Bear", "Ghost",
+    "Blade", "Storm", "Lynx", "Spark", "Bolt", "Fang", "Cobra",
+    "Tiger", "Panther", "Falcon", "Mantis", "Otter", "Badger",
+    "Orion", "Phoenix", "Drake", "Rook", "Panda", "Jackal", "Owl",
+    "Crane", "Bison", "Orca", "Moth", "Golem", "Wraith", "Nomad",
+]
+
+
+def _get_system_username() -> str:
+    """Try to get a displayable username from the OS. Works on Windows/Linux/macOS."""
+    for method in (os.getlogin, lambda: os.environ.get("USER", ""), lambda: os.environ.get("USERNAME", "")):
+        try:
+            name = method()
+            if name:
+                # Sanitise: keep only allowed chars, truncate
+                clean = re.sub(r"[^A-Za-z0-9_]", "", name)
+                if len(clean) >= _MIN_LEN:
+                    return clean[:_MAX_LEN]
+        except Exception:
+            continue
+    return ""
+
+
+def _generate_fun_name() -> str:
+    """Generate a random two-word name like 'NeonFalcon' or 'GlitchViper42'."""
+    adj = random.choice(_ADJECTIVES)
+    noun = random.choice(_NOUNS)
+    name = f"{adj}{noun}"
+    # Add a short numeric suffix sometimes to reduce collisions
+    if random.random() < 0.4:
+        name += str(random.randint(1, 99))
+    return name[:_MAX_LEN]
+
 
 def _default_name() -> str:
-    suffix = "".join(random.choices(string.digits, k=4))
-    return f"Survivor{suffix}"
+    """Best-effort display name: system user → fun random name."""
+    sys_name = _get_system_username()
+    if sys_name:
+        return sys_name
+    return _generate_fun_name()
 
 
 class NameEntryScreen:

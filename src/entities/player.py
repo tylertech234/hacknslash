@@ -107,6 +107,9 @@ class Player:
         self._insane_dx = 0.0
         self._insane_dy = 1.0
 
+        # Tracks the enemy type that last dealt damage (for killed_by analytics)
+        self.last_hit_by: str = ""
+
     def _apply_weapon_stats(self):
         """Reset weapon stats from the equipped weapon, then restore accumulated bonuses."""
         self.attack_cooldown = max(130, self.weapon["cooldown"] - self._cooldown_bonus)
@@ -201,6 +204,7 @@ class Player:
         status_dmg = self.statuses.update(now)
         if status_dmg > 0:
             self.hp = max(0, self.hp - status_dmg)
+            self.last_hit_by = "status_effect"
 
         speed_mult = self.statuses.get_speed_mult()
         # Passive: adrenaline — +30% speed for 3s after kill

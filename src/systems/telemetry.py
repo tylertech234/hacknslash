@@ -91,6 +91,83 @@ class TelemetryClient:
             log.debug("fetch_leaderboard failed: %s", e)
             return []
 
+    def fetch_run_analytics(self, limit: int = 200) -> list[dict]:
+        """Return recent runs from run_analytics for the reworked leaderboard.
+        Returns [] on any error."""
+        if not self._enabled:
+            return []
+        url = (
+            f"{self._url}/rest/v1/run_analytics"
+            f"?select=player_id,display_name,char_class,platform,"
+            f"wave,level,kills,damage_dealt,run_time_s,"
+            f"zones_completed,victory,killed_by,created_at"
+            f"&order=created_at.desc&limit={limit}"
+        )
+        try:
+            req = urllib.request.Request(url, headers=self._base_headers())
+            with urllib.request.urlopen(req, timeout=6) as resp:
+                return json.loads(resp.read().decode())
+        except Exception as e:
+            log.debug("fetch_run_analytics failed: %s", e)
+            return []
+
+    def fetch_champions(self, limit: int = 50) -> list[dict]:
+        """Return runs ordered by fastest time for champion ranking.
+        Filters to victory=true and non-null run_time_s."""
+        if not self._enabled:
+            return []
+        url = (
+            f"{self._url}/rest/v1/run_analytics"
+            f"?select=player_id,display_name,char_class,platform,"
+            f"wave,level,kills,damage_dealt,run_time_s,"
+            f"zones_completed,victory,killed_by,created_at"
+            f"&victory=eq.true&run_time_s=not.is.null"
+            f"&order=run_time_s.asc&limit={limit}"
+        )
+        try:
+            req = urllib.request.Request(url, headers=self._base_headers())
+            with urllib.request.urlopen(req, timeout=6) as resp:
+                return json.loads(resp.read().decode())
+        except Exception as e:
+            log.debug("fetch_champions failed: %s", e)
+            return []
+
+    def fetch_contenders(self, limit: int = 50) -> list[dict]:
+        """Return non-victory runs ordered by highest damage for contender ranking."""
+        if not self._enabled:
+            return []
+        url = (
+            f"{self._url}/rest/v1/run_analytics"
+            f"?select=player_id,display_name,char_class,platform,"
+            f"wave,level,kills,damage_dealt,run_time_s,"
+            f"zones_completed,victory,killed_by,created_at"
+            f"&order=damage_dealt.desc.nullslast&limit={limit}"
+        )
+        try:
+            req = urllib.request.Request(url, headers=self._base_headers())
+            with urllib.request.urlopen(req, timeout=6) as resp:
+                return json.loads(resp.read().decode())
+        except Exception as e:
+            log.debug("fetch_contenders failed: %s", e)
+            return []
+
+    def fetch_all_analytics(self, limit: int = 1000) -> list[dict]:
+        """Return all run_analytics fields for offline analysis.
+        Returns [] on any error."""
+        if not self._enabled:
+            return []
+        url = (
+            f"{self._url}/rest/v1/run_analytics"
+            f"?select=*&order=created_at.desc&limit={limit}"
+        )
+        try:
+            req = urllib.request.Request(url, headers=self._base_headers())
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                return json.loads(resp.read().decode())
+        except Exception as e:
+            log.debug("fetch_all_analytics failed: %s", e)
+            return []
+
     # ── Internal helpers ───────────────────────────────────────────────────────
 
     def _base_headers(self) -> dict:

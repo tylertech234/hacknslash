@@ -48,6 +48,7 @@ from src.ui.weapon_swap import WeaponSwapScreen
 from src.ui.arsenal_screen import ArsenalScreen
 from src.ui.main_menu import MainMenuScreen, load_settings, save_settings
 from src.ui.run_summary import RunSummaryScreen
+from src.ui.credits_screen import CreditsScreen
 from src.ui.portal_screen import PortalMenuScreen
 from src.ui.tooltip import Tooltip
 from src.systems.run_stats import RunStats
@@ -92,6 +93,7 @@ class Game:
         self.char_select = CharacterSelectScreen()
         self.char_class = None  # set after selection
         self.run_summary = RunSummaryScreen()
+        self.credits_screen = CreditsScreen()
         self.portal_menu = PortalMenuScreen()
         self._portal_next_zone: str = ""
         self._portal_summary_mode: bool = False
@@ -191,6 +193,7 @@ class Game:
             "damage_taken": rs.total_damage_taken,
             "highest_hit": rs.highest_hit,
             "total_healed": rs.total_healed,
+            "killed_by": rs.killed_by,
             "zones_completed": rs.zones_completed,
             "upgrades": rs.upgrades_taken,
             "weapons": {k: v for k, v in rs.weapon_stats.items()},
@@ -210,6 +213,13 @@ class Game:
             wave,
             _time.strftime("%Y-%m-%d"),
         )
+
+    def _on_credits_done(self):
+        """Callback after credits screen is dismissed — show run summary."""
+        self.run_summary.activate(
+            self.run_stats, self.spawner.wave,
+            self.current_zone, self._legacy_points_earned,
+            self.player.level, victory=True)
 
     def _init_world(self):
         self.game_map = GameMap()
@@ -387,6 +397,18 @@ class Game:
                     self.main_menu.draw(self.screen)
                 if self.consent_screen.active:
                     self.consent_screen.draw(self.screen)
+                _mx, _my = pygame.mouse.get_pos()
+                _draw_cursor_fn(self.screen, _mx, _my, "default", pygame.time.get_ticks())
+                pygame.display.flip()
+                continue
+
+            # Credits screen phase (after final boss victory)
+            if self.credits_screen.active:
+                for event in pygame.event.get():
+                    if event.type == pygame.QUIT:
+                        self.running = False
+                    self.credits_screen.handle_event(event)
+                self.credits_screen.draw(self.screen)
                 _mx, _my = pygame.mouse.get_pos()
                 _draw_cursor_fn(self.screen, _mx, _my, "default", pygame.time.get_ticks())
                 pygame.display.flip()
@@ -1185,6 +1207,7 @@ class Game:
             pdist = math.hypot(self.player.x - hx, self.player.y - hy)
             if pdist < hr and not self.player.invincible:
                 self.player.hp -= hdmg
+                self.player.last_hit_by = hev.get("type", "hazard")
                 self.run_stats.record_damage_taken(hdmg)
                 self.animations.spawn_hit_sparks(self.player.x, self.player.y)
                 self.sounds.play("hit")
@@ -1208,6 +1231,7 @@ class Game:
                 decay_dmg = 2 + (self.spawner.wave - 7)
                 if now % 1000 < dt:  # Roughly once per second
                     self.player.hp -= decay_dmg
+                    self.player.last_hit_by = "entropic_decay"
                     self.run_stats.record_damage_taken(decay_dmg)
 
         # Play boss roar on boss wave start + switch to boss music
@@ -1274,11 +1298,11 @@ class Game:
                         for sign in (-1, 1):
                             ox, oy = enemy.x + nx * off * sign, enemy.y + ny * off * sign
                             self.projectiles.spawn(ox, oy, self.player.x, self.player.y,
-                                                   base_dmg, proj_style)
+                                                   base_dmg, proj_style, enemy.enemy_type)
                     else:
                         self.projectiles.spawn(enemy.x, enemy.y,
                                                self.player.x, self.player.y, base_dmg,
-                                               proj_style)
+                                               proj_style, enemy.enemy_type)
                 else:
                     # Fan spread: evenly distribute shots across the arc
                     base_angle = math.atan2(self.player.y - enemy.y,
@@ -1288,7 +1312,7 @@ class Game:
                         angle = base_angle + offset
                         tx = enemy.x + math.cos(angle) * 300
                         ty = enemy.y + math.sin(angle) * 300
-                        self.projectiles.spawn(enemy.x, enemy.y, tx, ty, base_dmg, proj_style)
+                        self.projectiles.spawn(enemy.x, enemy.y, tx, ty, base_dmg, proj_style, enemy.enemy_type)
                 enemy.wants_to_shoot = False
                 self.sounds.play("enemy_shoot")
 
@@ -1396,7 +1420,7 @@ class Game:
                         _ang = base_ang + (_ei - 2) * 0.20
                         _tx = enemy.x + math.cos(_ang) * 400
                         _ty = enemy.y + math.sin(_ang) * 400
-                        self.projectiles.spawn(enemy.x, enemy.y, _tx, _ty, dmg)
+                        self.projectiles.spawn(enemy.x, enemy.y, _tx, _ty, dmg, enemy_type=enemy.enemy_type)
                     self.sounds.play("enemy_shoot")
                 else:
                     # Fallback generic AoE
@@ -1404,6 +1428,7 @@ class Game:
                         hit_player = True
 
                 if hit_player:
+                    self.player.last_hit_by = enemy.enemy_type
                     self.player.hp -= spec_dmg
                     self.run_stats.record_damage_taken(spec_dmg)
                     self.animations.spawn_hit_sparks(self.player.x, self.player.y, count=8)
@@ -1428,7 +1453,7 @@ class Game:
                         ang = base_ang + offset_ang
                         tx = enemy.x + math.cos(ang) * 400
                         ty = enemy.y + math.sin(ang) * 400
-                        self.projectiles.spawn(enemy.x, enemy.y, tx, ty, dmg)
+                        self.projectiles.spawn(enemy.x, enemy.y, tx, ty, dmg, enemy_type=enemy.enemy_type)
                     self.sounds.play("enemy_shoot")
 
                 elif spec2 == "bleed_storm":
@@ -1438,7 +1463,7 @@ class Game:
                         ang = bi * math.pi * 2 / 12
                         tx = enemy.x + math.cos(ang) * 500
                         ty = enemy.y + math.sin(ang) * 500
-                        self.projectiles.spawn(enemy.x, enemy.y, tx, ty, dmg)
+                        self.projectiles.spawn(enemy.x, enemy.y, tx, ty, dmg, enemy_type=enemy.enemy_type)
                     self.animations.spawn_death_burst(enemy.x, enemy.y, (200, 50, 50), count=16)
                     self.sounds.play("enemy_shoot")
 
@@ -1492,7 +1517,7 @@ class Game:
                         ang = ri * math.pi * 2 / 16
                         tx = enemy.x + math.cos(ang) * 500
                         ty = enemy.y + math.sin(ang) * 500
-                        self.projectiles.spawn(enemy.x, enemy.y, tx, ty, dmg)
+                        self.projectiles.spawn(enemy.x, enemy.y, tx, ty, dmg, enemy_type=enemy.enemy_type)
                     # Plus direct vision/slow + insanity at close range
                     if pdist2 < aoe_range2 and not self.player.invincible:
                         hit_player2 = True
@@ -1525,7 +1550,7 @@ class Game:
                         _oang = base_ang2 + (_ii - 2) * 0.22
                         _tx2 = enemy.x + math.cos(_oang) * 450
                         _ty2 = enemy.y + math.sin(_oang) * 450
-                        self.projectiles.spawn(enemy.x, enemy.y, _tx2, _ty2, dmg)
+                        self.projectiles.spawn(enemy.x, enemy.y, _tx2, _ty2, dmg, enemy_type=enemy.enemy_type)
                     self.sounds.play("enemy_shoot")
 
                 else:
@@ -1534,12 +1559,49 @@ class Game:
                         hit_player2 = True
 
                 if hit_player2:
+                    self.player.last_hit_by = enemy.enemy_type
                     self.player.hp -= spec2_dmg
                     self.run_stats.record_damage_taken(spec2_dmg)
                     self.animations.spawn_hit_sparks(self.player.x, self.player.y, count=10)
                     self.animations.add_screen_shake(6)
                     self.sounds.play("hit")
                 enemy.special2_attack_hit = False
+
+            # ---- Supreme D-Lek laser beam ----
+            if (enemy.enemy_type == "supreme_d_lek" and enemy._laser_firing):
+                # Beam is a line from enemy in _laser_angle direction, ~500px long
+                beam_len = 500
+                beam_width = 30
+                bx = enemy.x + math.cos(enemy._laser_angle) * beam_len
+                by = enemy.y + math.sin(enemy._laser_angle) * beam_len
+                # Point-to-line-segment distance for player
+                px, py = self.player.x, self.player.y
+                ax, ay = enemy.x, enemy.y
+                t = max(0, min(1, ((px - ax) * (bx - ax) + (py - ay) * (by - ay)) /
+                                  max(1, (bx - ax) ** 2 + (by - ay) ** 2)))
+                closest_x = ax + t * (bx - ax)
+                closest_y = ay + t * (by - ay)
+                ldist = math.hypot(px - closest_x, py - closest_y)
+                # Tick damage every 100ms
+                elapsed_lf = now - enemy._laser_fire_start
+                if ldist < beam_width and not self.player.invincible and elapsed_lf % 100 < dt:
+                    laser_dmg = enemy.damage // 2
+                    self.player.last_hit_by = enemy.enemy_type
+                    self.player.hp -= laser_dmg
+                    self.run_stats.record_damage_taken(laser_dmg)
+                    self.player.statuses.apply("fire", now)
+                    self.animations.spawn_hit_sparks(self.player.x, self.player.y, count=4)
+                    self.sounds.play("hit")
+                # Visual: screen shake while beam is active
+                if elapsed_lf % 150 < dt:
+                    self.animations.add_screen_shake(3)
+
+            # ---- Wind-up shake for sentinel / d-lek ----
+            if (enemy.enemy_type in ("iron_sentinel", "supreme_d_lek")
+                    and enemy._windup_active):
+                elapsed_wu = now - enemy._windup_start
+                if elapsed_wu % 200 < dt:
+                    self.animations.add_screen_shake(2)
 
         self.combat.process_player_attack(self.player, alive, now)
         # Screen shake + sparks on every successful melee hit
@@ -1671,7 +1733,7 @@ class Game:
             # ── Mirror Shade: reflect the hit back as an enemy projectile ──
             if enemy.enemy_type == "mirror_shade":
                 ref_dmg = max(1, dmg // 2)
-                self.projectiles.spawn(enemy.x, enemy.y, self.player.x, self.player.y, ref_dmg)
+                self.projectiles.spawn(enemy.x, enemy.y, self.player.x, self.player.y, ref_dmg, enemy_type=enemy.enemy_type)
                 self.animations.spawn_hit_sparks(enemy.x, enemy.y, count=14)
                 self.sounds.play("hit")
                 # mirror_shade still takes the damage — just continue to normal processing
@@ -1815,10 +1877,9 @@ class Game:
                 self._submit_run_telemetry(
                     self.spawner.wave, self.current_zone,
                     self.player.char_class, victory=True)
-                self.run_summary.activate(
-                    self.run_stats, self.spawner.wave,
-                    self.current_zone, self._legacy_points_earned,
-                    self.player.level, victory=True)
+                self.sounds.stop_boss_music()
+                self.credits_screen.activate(
+                    done_callback=self._on_credits_done)
 
         # Boss chest collision (skip if a reward/upgrade screen is already open)
         if not (self.chest_reward.active or self.levelup_screen.active
@@ -1865,6 +1926,7 @@ class Game:
                 self._player_dying = True
                 self._player_death_time = now
                 self.player.hp = 0
+                self.run_stats.killed_by = self.player.last_hit_by
                 self.sounds.stop_boss_music()
                 self.sounds.play("player_death")
                 self.animations.spawn_death_burst(

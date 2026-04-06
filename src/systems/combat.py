@@ -85,6 +85,7 @@ class CombatSystem:
             if enemy.can_attack(player.x, player.y, now):
                 dmg = int(enemy.perform_attack(now) * dmg_mult)
                 prev_hp = player.hp
+                player.last_hit_by = getattr(enemy, 'enemy_type', 'unknown')
                 player.take_damage(dmg, now)
                 self._add_damage_number(player.x, player.y - player.size, dmg, (255, 80, 80))
                 # Enemy applies its status effect on melee hit
