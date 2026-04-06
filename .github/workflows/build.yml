@@ -129,10 +129,10 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Download Windows build
+      - name: Download all builds
         uses: actions/download-artifact@v4
         with:
-          name: CyberSurvivor-Windows
+          merge-multiple: true
           path: dist/
 
       - name: Install butler
@@ -143,13 +143,28 @@ jobs:
           chmod +x butler
           ./butler version
 
-      - name: Push Windows channel
+      - name: Push all channels
         env:
           BUTLER_API_KEY: ${{ secrets.BUTLER_CREDENTIALS }}
         run: |
-          ZIP=$(ls dist/*.zip | head -1)
-          # Extract version from zip filename (e.g. CyberSurvivor-Windows-v0.9.5.zip → v0.9.5)
-          VER=$(basename "$ZIP" .zip | grep -oP 'v[\d.]+')
+          # Extract version from any zip filename
+          VER=$(basename $(ls dist/*.zip | head -1) .zip | grep -oP 'v[\d.]+')
           echo "Detected version: $VER"
-          ./butler push "$ZIP" tylertech/cyber-survivor:windows-stable \
-            --userversion "$VER"
+
+          for ZIP in dist/CyberSurvivor-Windows-*.zip; do
+            echo "Pushing Windows: $ZIP"
+            ./butler push "$ZIP" tylertech/cyber-survivor:windows-stable \
+              --userversion "$VER"
+          done
+
+          for ZIP in dist/CyberSurvivor-Linux-*.zip; do
+            echo "Pushing Linux: $ZIP"
+            ./butler push "$ZIP" tylertech/cyber-survivor:linux-stable \
+              --userversion "$VER"
+          done
+
+          for ZIP in dist/CyberSurvivor-macOS-*.zip; do
+            echo "Pushing macOS: $ZIP"
+            ./butler push "$ZIP" tylertech/cyber-survivor:osx-stable \
+              --userversion "$VER"
+          done
