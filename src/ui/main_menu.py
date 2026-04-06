@@ -227,15 +227,15 @@ class MainMenuScreen:
             return
 
         now = pygame.time.get_ticks()
-        surface.fill((8, 8, 14))
+        surface.fill((12, 8, 22))
 
         # Animated background particles
-        for i in range(30):
+        for i in range(40):
             px = (i * 97 + now // 40) % SCREEN_WIDTH
             py = (i * 53 + now // 60) % SCREEN_HEIGHT
-            alpha = int(30 + 20 * math.sin(now * 0.001 + i))
+            alpha = int(35 + 25 * math.sin(now * 0.001 + i))
             ps = pygame.Surface((4, 4), pygame.SRCALPHA)
-            pygame.draw.circle(ps, (80, 120, 180, alpha), (2, 2), 2)
+            pygame.draw.circle(ps, (100, 80, 180, alpha), (2, 2), 2)
             surface.blit(ps, (px, py))
 
         # Title
@@ -300,11 +300,11 @@ class MainMenuScreen:
         # Advance and cull
         alive = []
         for g in self._parade_groups:
-            g["members"] = [x + g["speed"] * -g["dir"] for x in g["members"]]
-            if g["dir"] == -1:
+            g["members"] = [x + g["speed"] * g["dir"] for x in g["members"]]
+            if g["dir"] == -1:  # moving left — cull when all past left edge
                 if any(x > -40 for x in g["members"]):
                     alive.append(g)
-            else:
+            else:  # moving right — cull when all past right edge
                 if any(x < SCREEN_WIDTH + 40 for x in g["members"]):
                     alive.append(g)
         self._parade_groups = alive

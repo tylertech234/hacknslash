@@ -106,16 +106,20 @@ class CharacterSelectScreen:
             name = self.font.render(cls["name"], True, cls["color"])
             surface.blit(name, (cx + card_w // 2 - name.get_width() // 2, card_y + 180))
 
-            # Description — wrap within card padding
-            desc_lines = self._wrap_text(cls["desc"], 34)
+            # Description — wrap to fit within card with 20px padding each side
+            max_px = card_w - 40
+            desc_lines = self._wrap_text_px(cls["desc"], self.font_small, max_px)
             for j, line in enumerate(desc_lines):
                 d = self.font_small.render(line, True, (180, 180, 180))
                 surface.blit(d, (cx + card_w // 2 - d.get_width() // 2, card_y + 210 + j * 18))
 
-            # Starting weapon — use a lightened class color for the label
+            # Starting weapon — knight gets light blue, others use their weapon's blade color
             wpn = WEAPONS[cls["start_weapon"]]
-            light_color = tuple(min(255, c + 120) for c in cls["color"])
-            wpn_text = self.font_small.render(f"Starter Weapon: {wpn['name']}", True, light_color)
+            if cls_key == "knight":
+                wpn_color = (120, 200, 255)  # light blue for knight
+            else:
+                wpn_color = wpn["blade_color"]
+            wpn_text = self.font_small.render(f"Starter Weapon: {wpn['name']}", True, wpn_color)
             surface.blit(wpn_text, (cx + card_w // 2 - wpn_text.get_width() // 2, card_y + 262))
 
             # Passives
@@ -297,6 +301,23 @@ class CharacterSelectScreen:
         for w in words:
             if len(current) + len(w) + 1 <= max_chars:
                 current = f"{current} {w}" if current else w
+            else:
+                if current:
+                    lines.append(current)
+                current = w
+        if current:
+            lines.append(current)
+        return lines
+
+    def _wrap_text_px(self, text, font, max_width):
+        """Wrap text so rendered width never exceeds max_width pixels."""
+        words = text.split()
+        lines = []
+        current = ""
+        for w in words:
+            test = f"{current} {w}" if current else w
+            if font.size(test)[0] <= max_width:
+                current = test
             else:
                 if current:
                     lines.append(current)
