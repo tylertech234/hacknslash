@@ -43,10 +43,11 @@ def save_settings(settings: dict):
 class MainMenuScreen:
     """Title screen with menu options."""
 
-    def __init__(self):
+    def __init__(self, display_name: str = ""):
         self.active = True
         self.selected = 0
-        self.options = ["New Run", "Compendium", "Leaderboard", "Settings", "Quit"]
+        self.display_name = display_name
+        self.options = ["New Run", "Compendium", "Leaderboard", "Change Name", "Settings", "Quit"]
         self.settings_open = False
         self.settings_selected = 0
         self.settings = load_settings()
@@ -137,6 +138,8 @@ class MainMenuScreen:
                             return "compendium"
                         elif opt == "Leaderboard":
                             return "leaderboard"
+                        elif opt == "Change Name":
+                            return "change_name"
                         elif opt == "Settings":
                             self.settings_open = True
                             self.settings_selected = 0
@@ -167,6 +170,8 @@ class MainMenuScreen:
                 return "compendium"
             elif opt == "Leaderboard":
                 return "leaderboard"
+            elif opt == "Change Name":
+                return "change_name"
             elif opt == "Settings":
                 self.settings_open = True
                 self.settings_selected = 0
@@ -265,7 +270,11 @@ class MainMenuScreen:
             color = YELLOW if is_sel else (140, 140, 160)
             prefix = "> " if is_sel else "  "
 
-            text = self.font.render(f"{prefix}{opt}", True, color)
+            label = opt
+            if opt == "Change Name" and self.display_name:
+                label = f"Change Name  ({self.display_name})"
+
+            text = self.font.render(f"{prefix}{label}", True, color)
             x = SCREEN_WIDTH // 2 - text.get_width() // 2
             y = start_y + i * 50
 

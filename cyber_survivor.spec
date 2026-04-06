@@ -23,6 +23,8 @@ a = Analysis(
         'pygame',
         'pygame.mixer',
         'pygame.sndarray',
+        # Created at CI build time — PyInstaller may miss try/except import
+        'src.secrets',
     ],
     hookspath=[],
     hooksconfig={},

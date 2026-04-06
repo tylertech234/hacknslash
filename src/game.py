@@ -88,7 +88,7 @@ class Game:
         self._game_over_start_time = 0
         # Profile — always present; create a local one if none was passed
         self.profile: PlayerProfile = profile or create_profile()
-        self.main_menu = MainMenuScreen()
+        self.main_menu = MainMenuScreen(display_name=self.profile.display_name)
         self.char_select = CharacterSelectScreen()
         self.char_class = None  # set after selection
         self.run_summary = RunSummaryScreen()
@@ -132,6 +132,7 @@ class Game:
         # Show name entry screen on first launch (runs synchronously before main loop)
         if self.profile.needs_name():
             self._run_name_entry_sync()
+            self.main_menu.display_name = self.profile.display_name
 
         # Analytics / leaderboard
         self.telemetry = TelemetryClient(SUPABASE_URL, SUPABASE_ANON_KEY)
@@ -151,9 +152,10 @@ class Game:
 
     def _run_name_entry_sync(self):
         """Block until the player has typed and confirmed a display name.
-        Called from __init__ on first launch before the main async loop."""
+        Called from __init__ on first launch before the main async loop,
+        and from the main menu 'Change Name' option."""
         name_entry = NameEntryScreen()
-        name_entry.activate()
+        name_entry.activate(suggested=self.profile.display_name)
         clock = pygame.time.Clock()
         while name_entry.active:
             dt = clock.tick(60)
@@ -367,6 +369,9 @@ class Game:
                         self.compendium_screen.activate()
                     elif result == "leaderboard":
                         self.leaderboard_screen.activate(self.profile.player_id)
+                    elif result == "change_name":
+                        self._run_name_entry_sync()
+                        self.main_menu.display_name = self.profile.display_name
                     elif result == "debug_menu":
                         self.debug_menu.active = True
                     elif result == "quit":

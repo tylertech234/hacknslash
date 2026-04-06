@@ -26,6 +26,3 @@ profile.json
 
 # Screenshots taken in-game (F9)
 screenshots/
-
-# Local secrets — NEVER commit this file
-src/secrets.py
