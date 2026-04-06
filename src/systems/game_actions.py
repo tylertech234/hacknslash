@@ -46,6 +46,8 @@ def process_enemy_death(enemy, player, alive, animations, combat, sounds,
         color = (80, 200, 50)
     elif enemy.enemy_type in ("cyber_zombie", "shambler"):
         color = (80, 120, 60)
+    elif enemy.enemy_type == "bulwark":
+        color = (140, 180, 220)
     elif enemy.enemy_type == "cyber_dog":
         color = (180, 180, 190)
     elif enemy.enemy_type == "drone":

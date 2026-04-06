@@ -55,6 +55,7 @@ class DeathAnimation:
         "drone":         (280, 20,  "burst_ring"),
         "cultist":       (400, 30,  "dissolve"),
         "shambler":      (500, 40,  "splat"),
+        "bulwark":       (450, 38,  "shatter"),
         "street_preacher": (750, 50,  "boss_explosion"),
         "eldritch_horror":(1200,78, "big_boss_explosion"),
         "void_wisp":     (250, 18,  "dissolve"),

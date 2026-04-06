@@ -34,6 +34,7 @@ DISPLAY_NAMES: dict[str, str] = {
     "drone":           "Drone",
     "cultist":         "Cultist",
     "shambler":        "Shambler",
+    "bulwark":         "Bulwark",
     "street_preacher": "Street Preacher",
     "eldritch_horror": "Eldritch Horror",
     # Zone 3
@@ -63,6 +64,7 @@ ENEMY_ZONES: dict[str, str] = {
     "drone":           "city",
     "cultist":         "city",
     "shambler":        "city",
+    "bulwark":         "city",
     "street_preacher": "city",
     "eldritch_horror": "city",
     "specter":         "abyss",
@@ -92,6 +94,7 @@ ENEMY_LORE: dict[str, str] = {
     "drone":           "Surveillance unit retasked\nfor elimination.\nOrbits before opening fire.",
     "cultist":         "Devoted to the Eldritch Horror.\nChannels dark energy before\nunleashing bursts.",
     "shambler":        "An ambulatory mass of rot.\nSlow but hits like a wall.\nDon't get surrounded.",
+    "bulwark":         "Front-armoured enforcer.\nShield blocks all frontal hits.\nFlank or bait the charge.",
     "street_preacher": "Fire-touched zealot.\nPreaches in flames.\nA mini-boss of pure devotion.",
     "eldritch_horror": "Tentacled nightmare from\nbeyond sane geometry.\nBoss of the Ruined City.",
     "specter":         "A wraith refined through void\nexposure. Faster, deadlier,\nand it bleeds you dry.",
@@ -110,7 +113,7 @@ COMPENDIUM_ORDER: list[str] = [
     "cyber_rat", "cyber_raccoon", "d_lek", "charger", "shielder", "spitter",
     "mega_cyber_deer", "iron_sentinel", "supreme_d_lek", "emperors_elite_guard",
     # Zone 2
-    "cyber_zombie", "cyber_dog", "drone", "cultist", "shambler",
+    "cyber_zombie", "cyber_dog", "drone", "cultist", "shambler", "bulwark",
     "street_preacher", "eldritch_horror",
     # Zone 3
     "specter", "void_wisp", "rift_walker", "mirror_shade",

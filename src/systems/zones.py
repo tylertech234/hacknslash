@@ -33,7 +33,7 @@ ZONES = {
     "city": {
         "name": "Ruined Metropolis",
         "desc": "Shattered skyscrapers. Something stirs below.",
-        "enemy_pool": ["cyber_zombie", "cyber_dog", "drone", "cultist", "shambler"],
+        "enemy_pool": ["cyber_zombie", "cyber_dog", "drone", "cultist", "shambler", "bulwark"],
         "mini_boss": "street_preacher",
         "boss": "eldritch_horror",
         "boss_wave": 10,
@@ -55,7 +55,7 @@ ZONES = {
     "abyss": {
         "name": "The Abyss",
         "desc": "Reality fractures. The source of corruption.",
-        "enemy_pool": ["specter", "void_wisp", "rift_walker", "mirror_shade", "gravity_warden", "null_serpent"],
+        "enemy_pool": ["specter", "void_wisp", "rift_walker", "mirror_shade", "gravity_warden", "null_serpent", "bulwark"],
         "mini_boss": "architect",
         "boss": "nexus",
         "boss_wave": 10,

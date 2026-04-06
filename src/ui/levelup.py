@@ -26,12 +26,12 @@ LEVEL_UPGRADES = [
     {"name": "Explosive Kills", "icon": "E", "color": (255, 150, 0),   "effect": "passive", "value": "explosive_kills", "desc": "25% chance for enemies to explode on death"},
     {"name": "Magnetic Field",  "icon": "F", "color": (150, 150, 255), "effect": "passive", "value": "magnetic_field",  "desc": "ALL pickups fly to you from much further away"},
     {"name": "Adrenaline Rush", "icon": "A", "color": (0, 255, 100),   "effect": "passive", "value": "adrenaline",      "desc": "+30% speed for 3s after each kill"},
-    {"name": "Rapid Dash",      "icon": ">", "color": (100, 220, 255), "effect": "dash_charges", "value": 1, "desc": "+1 dash charge before cooldown (max 2 total)"},
+    {"name": "Rapid Dash",      "icon": ">", "color": (100, 220, 255), "effect": "dash_charges", "value": 1, "desc": "+1 dash charge before cooldown (max 4 total)"},
     {"name": "Armor Plating",   "icon": "M", "color": (120, 180, 255), "effect": "passive", "value": "armor_plating",   "desc": "Take 15% less damage from all sources"},
     {"name": "Critical Shots",   "icon": "!", "color": (255, 200, 50),  "effect": "passive", "value": "crit_shots",     "class_restrict": ["archer", "jester"], "desc": "20% chance for double damage on projectiles. Not available to Knight."},
     {"name": "Melee Lifesteal",   "icon": "K", "color": (255, 80, 80),   "effect": "passive", "value": "melee_lifesteal", "class_restrict": ["knight", "jester"], "desc": "Heal 2 HP on melee kills. Not available to Ranger."},
-    {"name": "Confetti Burst",   "icon": "E", "color": (255, 100, 255), "effect": "passive", "value": "confetti_burst", "desc": "Kills have 20% chance to stun nearby enemies"},
-    {"name": "Parry Deflect",   "icon": "P", "color": (200, 255, 180), "effect": "passive", "value": "parry_deflect", "class_restrict": "archer", "desc": "Parried bullets fire back at nearest enemy (2x damage). Ranger only."},
+    {"name": "Confetti Burst",   "icon": "E", "color": (255, 100, 255), "effect": "passive", "value": "confetti_burst", "class_restrict": "jester", "desc": "Kills have 20% chance to stun nearby enemies"},
+    {"name": "Parry Deflect",   "icon": "P", "color": (200, 255, 180), "effect": "passive", "value": "parry_deflect", "class_restrict": "knight", "desc": "Parried bullets fire back at nearest enemy (2x damage). Knight only."},
 ]
 
 
@@ -342,19 +342,21 @@ class LevelUpScreen:
             icon = self.font_big.render(choice["icon"], True, icon_color)
             surface.blit(icon, (cx + 50, cy + 18))
 
-            # Name
+            # Name — centered in the right text area (cx+90 .. cx+card_w-10)
+            text_x = cx + 90
+            text_w = card_w - 100
             name = self.font.render(choice["name"], True, WHITE)
-            surface.blit(name, (cx + 95, cy + 18))
+            name_x = text_x + (text_w - name.get_width()) // 2
+            surface.blit(name, (max(text_x, name_x), cy + 18))
 
-            # Description — word-wrap to fit card width
+            # Description — pixel-width word-wrap, each line centered
             desc = choice.get("desc", "")
             if desc:
-                # Break into lines of ~34 chars so they fit the ~255px available space
                 words = desc.split()
                 lines, line_buf = [], []
                 for word in words:
                     test = " ".join(line_buf + [word])
-                    if len(test) > 34 and line_buf:
+                    if self.font_small.size(test)[0] > text_w and line_buf:
                         lines.append(" ".join(line_buf))
                         line_buf = [word]
                     else:
@@ -363,7 +365,8 @@ class LevelUpScreen:
                     lines.append(" ".join(line_buf))
                 for li, line_text in enumerate(lines[:2]):
                     dl = self.font_small.render(line_text, True, (160, 160, 160))
-                    surface.blit(dl, (cx + 95, cy + 46 + li * 16))
+                    dl_x = text_x + (text_w - dl.get_width()) // 2
+                    surface.blit(dl, (max(text_x, dl_x), cy + 46 + li * 16))
 
             # Type tag
             ctype = choice.get("type", "stat")
@@ -382,8 +385,8 @@ class LevelUpScreen:
             # Passives full warning on passive choices
             if self._passives_full and choice.get("effect") == "passive":
                 warn_color = (255, 180, 50)
-                warn_text = self.font_small.render("\u26a0 SLOTS FULL — SWAP", True, warn_color)
-                wx = cx + 95
+                warn_text = self.font_small.render("\u26a0 SLOTS FULL \u2014 SWAP", True, warn_color)
+                wx = text_x + (text_w - warn_text.get_width()) // 2
                 wy = cy + 80
                 pygame.draw.rect(surface, (60, 40, 10), (wx - 3, wy - 1, warn_text.get_width() + 6, warn_text.get_height() + 2), border_radius=3)
                 surface.blit(warn_text, (wx, wy))
