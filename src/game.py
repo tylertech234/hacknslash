@@ -1584,15 +1584,19 @@ class Game:
 
         # Death bursts & screen shake from melee kills + passive triggers
         _kt = {"kills": self.kills, "boss_kills": self.boss_kills}
+        _death_processed: set = set()  # enemy ids processed this frame — prevents double drops
         _kills_before = self.kills
         _boss_kills_before = self.boss_kills
         for enemy in alive:
             if not enemy.alive:
-                self._record_kill_compendium(enemy)
-                process_enemy_death(enemy, self.player, alive, self.animations,
-                                    self.combat, self.sounds, self.lighting,
-                                    self.boss_chests, _kt, self.pickups, now,
-                                    toasts=self.toasts)
+                _eid = id(enemy)
+                if _eid not in _death_processed:
+                    _death_processed.add(_eid)
+                    self._record_kill_compendium(enemy)
+                    process_enemy_death(enemy, self.player, alive, self.animations,
+                                        self.combat, self.sounds, self.lighting,
+                                        self.boss_chests, _kt, self.pickups, now,
+                                        toasts=self.toasts)
         self.kills = _kt["kills"]
         self.boss_kills = _kt["boss_kills"]
 
@@ -1713,21 +1717,27 @@ class Game:
                             self.animations.spawn_hit_sparks(other.x, other.y, count=4)
                             chain_count += 1
                             if not other.alive:
-                                self._record_kill_compendium(other)
-                                process_enemy_death(other, self.player, alive, self.animations,
-                                                    self.combat, self.sounds, self.lighting,
-                                                    self.boss_chests, _kt, self.pickups, now,
-                                                    toasts=self.toasts)
-                                self.kills = _kt["kills"]
-                                self.boss_kills = _kt["boss_kills"]
+                                _oid = id(other)
+                                if _oid not in _death_processed:
+                                    _death_processed.add(_oid)
+                                    self._record_kill_compendium(other)
+                                    process_enemy_death(other, self.player, alive, self.animations,
+                                                        self.combat, self.sounds, self.lighting,
+                                                        self.boss_chests, _kt, self.pickups, now,
+                                                        toasts=self.toasts)
+                                    self.kills = _kt["kills"]
+                                    self.boss_kills = _kt["boss_kills"]
             if not enemy.alive:
-                self._record_kill_compendium(enemy)
-                process_enemy_death(enemy, self.player, alive, self.animations,
-                                    self.combat, self.sounds, self.lighting,
-                                    self.boss_chests, _kt, self.pickups, now,
-                                    toasts=self.toasts)
-                self.kills = _kt["kills"]
-                self.boss_kills = _kt["boss_kills"]
+                _eid2 = id(enemy)
+                if _eid2 not in _death_processed:
+                    _death_processed.add(_eid2)
+                    self._record_kill_compendium(enemy)
+                    process_enemy_death(enemy, self.player, alive, self.animations,
+                                        self.combat, self.sounds, self.lighting,
+                                        self.boss_chests, _kt, self.pickups, now,
+                                        toasts=self.toasts)
+                    self.kills = _kt["kills"]
+                    self.boss_kills = _kt["boss_kills"]
             self.sounds.play("hit")
 
         # Check if enemies hit the player — play hit sound
@@ -1805,17 +1815,19 @@ class Game:
                     self.current_zone, self._legacy_points_earned,
                     self.player.level, victory=True)
 
-        # Boss chest collision
-        p_rect = self.player.rect
-        for chest in self.boss_chests:
-            if chest.alive and p_rect.colliderect(chest.rect):
-                chest.alive = False
-                self.chest_reward.open_chest(
-                    self.player.char_class, self.player.passives, self.sounds,
-                )
-                log.info("Boss chest opened!")
-                break
-        self.boss_chests = [c for c in self.boss_chests if c.alive]
+        # Boss chest collision (skip if a reward/upgrade screen is already open)
+        if not (self.chest_reward.active or self.levelup_screen.active
+                or self.passive_swap.active or self.weapon_swap.active):
+            p_rect = self.player.rect
+            for chest in self.boss_chests:
+                if chest.alive and p_rect.colliderect(chest.rect):
+                    chest.alive = False
+                    self.chest_reward.open_chest(
+                        self.player.char_class, self.player.passives, self.sounds,
+                    )
+                    log.info("Boss chest opened!")
+                    break
+            self.boss_chests = [c for c in self.boss_chests if c.alive]
 
         self.animations.update(dt)
         self.camera.update(self.player.x, self.player.y, world_w, world_h,
@@ -2066,7 +2078,11 @@ class Game:
         if self._zone_intro_active:
             self._draw_zone_intro()
         elif self._wave_countdown_secs > 0:
-            self._draw_wave_countdown()
+            overlay_open = (
+                self.chest_reward.active or self.levelup_screen.active
+                or self.passive_swap.active or self.weapon_swap.active
+            )
+            self._draw_wave_countdown(top_only=overlay_open)
 
         if self.game_over:
             self.hud.draw_game_over(self.screen, self.spawner.wave, self.player.level,
@@ -2398,27 +2414,37 @@ class Game:
             dy = ny + name_surf.get_height() + 12
             self.screen.blit(desc_surf, (dx, dy))
 
-    def _draw_wave_countdown(self):
+    def _draw_wave_countdown(self, top_only: bool = False):
         """Show countdown seconds before next wave starts."""
         secs = self._wave_countdown_secs
         if secs <= 0:
             return
         cx = SCREEN_WIDTH // 2
-        # Big number
-        font_big = get_font("consolas", 72, True)
-        num_surf = font_big.render(str(secs), True, (255, 220, 60))
-        self.screen.blit(num_surf, (cx - num_surf.get_width() // 2,
-                                    SCREEN_HEIGHT // 2 - 70))
-        # Label
-        font_sm = get_font("consolas", 18, True)
         zone_data = get_zone(self.current_zone)
         boss_wave = zone_data.get("boss_wave", 10)
         if self.spawner.wave >= boss_wave:
             return  # portal handles progression — no countdown after final wave
         label = f"WAVE {self.spawner.wave + 1} INCOMING"
-        label_surf = font_sm.render(label, True, (200, 200, 220))
-        self.screen.blit(label_surf, (cx - label_surf.get_width() // 2,
-                                      SCREEN_HEIGHT // 2 + 20))
+        if top_only:
+            # Compact single-line banner at the top so it doesn't overlap overlays
+            font_sm = get_font("consolas", 20, True)
+            text = f"{label}  —  {secs}s"
+            surf = font_sm.render(text, True, (255, 220, 60))
+            bg = pygame.Surface((surf.get_width() + 20, surf.get_height() + 8), pygame.SRCALPHA)
+            bg.fill((0, 0, 0, 160))
+            bx = cx - bg.get_width() // 2
+            self.screen.blit(bg, (bx, 8))
+            self.screen.blit(surf, (cx - surf.get_width() // 2, 12))
+        else:
+            # Full center display
+            font_big = get_font("consolas", 72, True)
+            num_surf = font_big.render(str(secs), True, (255, 220, 60))
+            self.screen.blit(num_surf, (cx - num_surf.get_width() // 2,
+                                        SCREEN_HEIGHT // 2 - 70))
+            font_sm = get_font("consolas", 18, True)
+            label_surf = font_sm.render(label, True, (200, 200, 220))
+            self.screen.blit(label_surf, (cx - label_surf.get_width() // 2,
+                                          SCREEN_HEIGHT // 2 + 20))
 
     def _draw_pause_overlay(self):
         overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)

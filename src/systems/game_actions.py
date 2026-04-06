@@ -111,8 +111,9 @@ def process_enemy_death(enemy, player, alive, animations, combat, sounds,
 
     combat.pending_drops.append((enemy.x, enemy.y))
 
-    # -- boss chest
-    if is_boss:
+    # -- boss chest (escort-type units don't drop chests)
+    _NO_CHEST_TYPES = frozenset(("emperors_elite_guard",))
+    if is_boss and enemy.enemy_type not in _NO_CHEST_TYPES:
         chest = BossChest(enemy.x, enemy.y)
         boss_chests.append(chest)
         log.info("Boss chest spawned at (%.0f, %.0f)", enemy.x, enemy.y)

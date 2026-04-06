@@ -11,6 +11,8 @@ a = Analysis(
     datas=[
         # Include assets folder (fonts/sprites/sounds subdirs, currently placeholder)
         ('assets', 'assets'),
+        # Sound assets referenced by src/systems/sounds.py via _load_asset()
+        ('src/assets/sounds', 'src/assets/sounds'),
     ],
     hiddenimports=[
         # numpy submodules that PyInstaller sometimes misses

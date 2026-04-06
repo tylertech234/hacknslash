@@ -148,5 +148,8 @@ jobs:
           BUTLER_API_KEY: ${{ secrets.BUTLER_CREDENTIALS }}
         run: |
           ZIP=$(ls dist/*.zip | head -1)
+          # Extract version from zip filename (e.g. CyberSurvivor-Windows-v0.9.5.zip → v0.9.5)
+          VER=$(basename "$ZIP" .zip | grep -oP 'v[\d.]+')
+          echo "Detected version: $VER"
           ./butler push "$ZIP" tylertech/cyber-survivor:windows-stable \
-            --userversion-file <(echo "${GITHUB_REF_NAME:-dev}")
+            --userversion "$VER"

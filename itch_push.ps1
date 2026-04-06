@@ -15,7 +15,7 @@
 param(
     [string]$User    = "tylertech",       # itch.io username
     [string]$Game    = "cyber-survivor",  # itch.io project URL slug
-    [string]$Version = "v0.9.1",
+    [string]$Version = "",                # auto-read from settings.py if empty
 
     # Which channels to push: "windows", "html5", or "all"
     [ValidateSet("all","windows","html5")]
@@ -32,6 +32,20 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+
+# Auto-read version from src/settings.py if not explicitly provided
+if (-not $Version) {
+    $SettingsFile = Join-Path $PSScriptRoot "src/settings.py"
+    $VersionLine = Select-String -Path $SettingsFile -Pattern '^VERSION\s*=\s*"(.+)"'
+    if ($VersionLine) {
+        $Version = "v" + $VersionLine.Matches[0].Groups[1].Value
+    } else {
+        throw "Could not read VERSION from $SettingsFile"
+    }
+    # Re-derive WinZip path with the auto-detected version
+    $WinZip = "dist/CyberSurvivor-Windows-$Version.zip"
+    Write-Host "Auto-detected version: $Version" -ForegroundColor DarkCyan
+}
 
 $ButlerExe = Join-Path $ButlerDir "butler.exe"
 
