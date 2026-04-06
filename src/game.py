@@ -17,7 +17,7 @@ log = logging.getLogger("game")
 from src.settings import (
     SCREEN_WIDTH, SCREEN_HEIGHT, FPS, TITLE, BLACK,
     TILE_SIZE, MAP_WIDTH, MAP_HEIGHT,
-    ENEMY_DARKNESS_HP_BONUS, XP_PER_KILL, XP_DARKNESS_BONUS,
+    ENEMY_DARKNESS_HP_BONUS, ENEMY_DARKNESS_DMG_BONUS, XP_PER_KILL, XP_DARKNESS_BONUS,
     DROP_CHANCE, MAX_PASSIVES,
     SUPABASE_URL, SUPABASE_ANON_KEY, DATA_DIR,
     CAMERA_ZOOM,
@@ -258,8 +258,10 @@ class Game:
         self._last_damage_time = 0
         self._last_damage_pct = 0.0
         self._dmg_vig_cache = None   # (bucket, Surface)
-        # Super skill flash
-        self._super_flash_until = 0
+        # Super energy lockout — blocks energy gain for 4 s after firing
+        self._super_energy_lockout_until = 0
+        # Screenshot capture queue — (capture_at_ms, tag) pairs
+        self._pending_auto_shots: list[tuple[int, str]] = []
         # Kill streak combo feedback
         self._kill_streak = 0
         self._kill_streak_time = 0
@@ -620,12 +622,7 @@ class Game:
                             f"Auto-attack {'ON' if self.auto_attack else 'OFF'}")
                 # Screenshot — F9
                 if event.key == pygame.K_F9:
-                    _ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-                    _shots_dir = os.path.join(DATA_DIR, "screenshots")
-                    os.makedirs(_shots_dir, exist_ok=True)
-                    _path = os.path.join(_shots_dir, f"screenshot_{_ts}.png")
-                    pygame.image.save(self.screen, _path)
-                    self.toasts.show("Screenshot saved", os.path.basename(_path), (100, 220, 255))
+                    self._save_screenshot("manual")
                 # Attack — Space or Left click proxy via J key
                 if event.key in (pygame.K_SPACE, pygame.K_j) and not self._player_dying and not self.game_over:
                     if self.player.try_attack(now):
@@ -741,6 +738,20 @@ class Game:
         elif effect == "skip":
             pass  # player forfeited the upgrade
 
+    # ── Screenshots ──────────────────────────────────────────────────────────
+
+    _SCREENSHOTS_DIR = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        "screenshots")
+
+    def _save_screenshot(self, tag: str = "manual"):
+        """Save a PNG of the current frame to <project>/screenshots/."""
+        ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S_%f")[:-3]
+        os.makedirs(self._SCREENSHOTS_DIR, exist_ok=True)
+        path = os.path.join(self._SCREENSHOTS_DIR, f"{ts}_{tag}.png")
+        pygame.image.save(self.screen, path)
+        self.toasts.show("Screenshot", os.path.basename(path), (100, 220, 255))
+
     def _try_add_passive(self, key: str, display_name: str):
         """Add a passive, or open swap screen if slots are full."""
         p = self.player
@@ -794,12 +805,20 @@ class Game:
         p.energy = 0
         cls = getattr(p, "char_class", "knight")
 
-        # Flash the screen white — makes it feel like a real super
-        self._super_flash_until = now + 250
+        # Yellow burst particles at player — visual pop without blinding flash
+        self.animations.spawn_death_burst(p.x, p.y, (255, 220, 40), count=28)
+        for _ba in range(0, 360, 36):
+            _br = 42
+            self.animations.spawn_death_burst(
+                p.x + _br * math.cos(math.radians(_ba)),
+                p.y + _br * math.sin(math.radians(_ba)),
+                (255, 255, 120), count=5)
+        # Lock energy accumulation for 4 seconds so super can't chain instantly
+        self._super_energy_lockout_until = now + 4000
         # Brief invincibility so the player can't die in their own super animation
         p.invincible = True
         p.invincible_timer = now
-        p.invincible_duration = max(p.invincible_duration, 600)
+        p.invincible_duration = max(p.invincible_duration, 900)
 
         if cls == "archer":
             # STORM BARRAGE — 5 massive explosive arrows spread toward cursor
@@ -817,62 +836,111 @@ class Game:
                 length = math.hypot(dx, dy)
                 if length > 0:
                     dx, dy = dx / length, dy / length
-            damage = int(p.damage * p.damage_multiplier * 25)
+            damage = int(p.damage * p.damage_multiplier * 40)
             base_angle = math.atan2(dy, dx)
-            for offset in (-0.25, -0.12, 0.0, 0.12, 0.25):
+            for offset in (-0.30, -0.15, 0.0, 0.15, 0.30):
                 a = base_angle + offset
                 self.player_projectiles.spawn_grenades(
                     p.x, p.y, math.cos(a), math.sin(a),
-                    damage=damage, count=1, speed=20.0, lifetime=1100,
-                    splash_radius=220,
+                    damage=damage, count=1, speed=22.0, lifetime=1200,
+                    splash_radius=240, style="bolt", is_super=True,
                 )
-            self.animations.add_screen_shake(20)
+            # Burst flash at player position
+            for _ba in range(0, 360, 45):
+                _r = 50
+                self.animations.spawn_death_burst(
+                    p.x + _r * math.cos(math.radians(_ba)),
+                    p.y + _r * math.sin(math.radians(_ba)),
+                    (255, 180, 40), count=8)
+            self.animations.add_screen_shake(38)
             self.sounds.play("boss_roar")
-            self.sounds.play("confetti_boom")
+            self.sounds.play("bolt_boom")
 
         elif cls == "knight":
-            # BLADE STORM NOVA — 20 daggers in a 360° ring, fast + heavy
-            damage = int(p.damage * p.damage_multiplier * 10)
-            for i in range(20):
-                angle = math.radians(i * 18)
-                self.player_projectiles.spawn_daggers(
-                    p.x, p.y, math.cos(angle), math.sin(angle),
-                    damage=damage, count=1, speed=14.0,
-                    lifetime=1400, visual="dagger",
-                )
-            # Second ring offset by 9° slightly slower
-            damage2 = int(p.damage * p.damage_multiplier * 6)
-            for i in range(20):
-                angle = math.radians(i * 18 + 9)
-                self.player_projectiles.spawn_daggers(
-                    p.x, p.y, math.cos(angle), math.sin(angle),
-                    damage=damage2, count=1, speed=8.0,
-                    lifetime=1600, visual="dagger",
-                )
-            self.animations.add_screen_shake(22)
+            # INFERNAL CLEAVE — massive arc melee swing, blue fire DOT on all hit enemies
+            _DEAD = 0.15
+            if self._joystick and (abs(self._ctrl_aim_x) > _DEAD or abs(self._ctrl_aim_y) > _DEAD):
+                aim_l = math.hypot(self._ctrl_aim_x, self._ctrl_aim_y)
+                dx = self._ctrl_aim_x / aim_l if aim_l > 0 else 1.0
+                dy = self._ctrl_aim_y / aim_l if aim_l > 0 else 0.0
+            else:
+                mx, my = pygame.mouse.get_pos()
+                world_x = mx / CAMERA_ZOOM + self.camera.x
+                world_y = my / CAMERA_ZOOM + self.camera.y
+                dx = world_x - p.x
+                dy = world_y - p.y
+                length = math.hypot(dx, dy)
+                if length > 0:
+                    dx, dy = dx / length, dy / length
+
+            ARC_RANGE = 220.0
+            ARC_HALF_RAD = math.radians(80)   # 160° total sweep
+            base_angle = math.atan2(dy, dx)
+            damage = int(p.damage * p.damage_multiplier * 22)
+
+            hit_count = 0
+            for _e in self.spawner.get_alive_enemies():
+                if not _e.alive:
+                    continue
+                ex = _e.x - p.x
+                ey = _e.y - p.y
+                dist = math.hypot(ex, ey)
+                if dist > ARC_RANGE + _e.size:
+                    continue
+                # Angle check — is enemy within the arc cone?
+                enemy_angle = math.atan2(ey, ex)
+                angle_diff = abs(math.atan2(
+                    math.sin(enemy_angle - base_angle),
+                    math.cos(enemy_angle - base_angle)))
+                if angle_diff > ARC_HALF_RAD:
+                    continue
+                _e.take_damage(damage, ex, ey, now)
+                _e.statuses.apply("blue_fire", now)
+                self.combat._add_damage_number(_e.x, _e.y - _e.size - 10, damage, (80, 180, 255))
+                self.animations.spawn_death_burst(_e.x, _e.y, (60, 140, 255), count=14)
+                self.animations.spawn_hit_sparks(_e.x, _e.y, count=8)
+                hit_count += 1
+
+            # Sweeping arc particle trail + shockwave ring
+            self.animations.spawn_arc_sweep(p.x, p.y, dx, dy, arc_deg=160, arc_range=ARC_RANGE)
+            # Central flash burst at player
+            for _bi in range(0, 360, 30):
+                self.animations.spawn_death_burst(
+                    p.x + 30 * math.cos(math.radians(_bi)),
+                    p.y + 30 * math.sin(math.radians(_bi)),
+                    (100, 180, 255), count=6)
+            self.animations.add_screen_shake(45)
             self.sounds.play("boss_roar")
             self.sounds.play("swing")
 
         elif cls == "jester":
-            # CHAOS ERUPTION — 12 grenades + rainbow death burst
-            damage = int(p.damage * p.damage_multiplier * 10)
+            # CHAOS ERUPTION — 12 grenades + rainbow death bursts
+            damage = int(p.damage * p.damage_multiplier * 16)
             for i in range(12):
                 angle = math.radians(i * 30)
                 self.player_projectiles.spawn_grenades(
                     p.x, p.y, math.cos(angle), math.sin(angle),
-                    damage=damage, count=1, speed=9.0, lifetime=900,
-                    splash_radius=160,
+                    damage=damage, count=1, speed=10.0, lifetime=1000,
+                    splash_radius=180,
                 )
-            # Inner ring of faster fast grenades
-            damage2 = int(p.damage * p.damage_multiplier * 6)
+            # Inner ring of faster grenades
+            damage2 = int(p.damage * p.damage_multiplier * 10)
             for i in range(6):
                 angle = math.radians(i * 60 + 15)
                 self.player_projectiles.spawn_grenades(
                     p.x, p.y, math.cos(angle), math.sin(angle),
-                    damage=damage2, count=1, speed=5.0, lifetime=600,
-                    splash_radius=120,
+                    damage=damage2, count=1, speed=6.0, lifetime=700,
+                    splash_radius=140,
                 )
-            self.animations.add_screen_shake(25)
+            # Confetti death bursts in 6 directions
+            _burst_colors = [(255,80,200),(80,255,80),(255,220,0),(80,200,255),(255,120,50),(200,80,255)]
+            for _bi, _ba in enumerate(range(0, 360, 60)):
+                _r = 60
+                self.animations.spawn_death_burst(
+                    p.x + _r * math.cos(math.radians(_ba)),
+                    p.y + _r * math.sin(math.radians(_ba)),
+                    _burst_colors[_bi], count=12)
+            self.animations.add_screen_shake(42)
             self.sounds.play("boss_roar")
             self.sounds.play("confetti_boom")
 
@@ -1141,12 +1209,16 @@ class Game:
         if self.spawner.just_started_wave and self.spawner.boss_wave:
             self.sounds.play("boss_roar")
             self.sounds.start_boss_music(self.current_zone)
+            # Auto-screenshot 400 ms after boss wave starts (effects visible)
+            self._pending_auto_shots.append((now + 400, "boss_spawn"))
 
         # Stop boss music when boss wave ends (no more boss enemies alive)
         if self.sounds.boss_music_playing:
             alive_bosses = [e for e in self.spawner.get_alive_enemies() if e.is_boss]
             if not alive_bosses and not self.spawner.wave_active:
                 self.sounds.stop_boss_music()
+                # Auto-screenshot 500 ms after boss is cleared — capture the victory
+                self._pending_auto_shots.append((now + 500, "boss_cleared"))
 
         # Campfire is active only between waves
         self.campfire.set_active(not self.spawner.wave_active)
@@ -1164,13 +1236,23 @@ class Game:
         alive = self.spawner.get_alive_enemies()
         for enemy in alive:
             enemy.update(dt, now, self.player.x, self.player.y, world_w, world_h)
+            # Architect: shard split at 30% HP
+            if getattr(enemy, '_wants_split', False):
+                enemy._wants_split = False
+                for _ in range(2):
+                    ang = _rng.uniform(0, math.tau)
+                    sd = _rng.uniform(80, 160)
+                    shard = Enemy(enemy.x + math.cos(ang) * sd,
+                                  enemy.y + math.sin(ang) * sd, "rift_walker")
+                    shard.hp = int(shard.max_hp * 1.5)
+                    self.spawner.enemies.append(shard)
             # Environment collision for enemies too
             ehalf = enemy.size // 2
             enemy.x, enemy.y = self.environment.collide_entity(
                 enemy.x, enemy.y, ehalf)
             # Spawn projectile if enemy wants to shoot
             if enemy.wants_to_shoot:
-                base_dmg = int(enemy.bullet_damage * (1.0 + self.lighting.darkness * 0.5))
+                base_dmg = int(enemy.bullet_damage * (1.0 + self.lighting.darkness * ENEMY_DARKNESS_DMG_BONUS))
                 spread_n = getattr(enemy, 'shoot_spread_count', 1)
                 spread_arc = getattr(enemy, 'shoot_spread_arc', 0.0)
                 # D-lack family fires beam bursts (2 shots side by side)
@@ -1466,10 +1548,10 @@ class Game:
         for _wkey, _wdmg in self.combat.damage_log:
             self.run_stats.record_hit(_wkey, _wdmg)
             _dmg_energy += _wdmg
-        if _dmg_energy > 0:
+        if _dmg_energy > 0 and now > self._super_energy_lockout_until:
             self.player.energy = min(
                 self.player.max_energy,
-                self.player.energy + _dmg_energy // 8,   # 1 energy per 8 damage
+                self.player.energy + _dmg_energy // 20,   # 1 energy per 20 damage
             )
         self.combat.damage_log.clear()
 
@@ -1524,11 +1606,11 @@ class Game:
                 self._kill_streak = new_kills
             self._kill_streak_time = now
 
-        # Super energy — 10 per kill, 50 per boss kill
-        if new_kills > 0:
+        # Super energy — 10 per kill, 60 per boss kill
+        if new_kills > 0 and now > self._super_energy_lockout_until:
             self.player.energy = min(
                 self.player.max_energy,
-                self.player.energy + new_kills * 10 + new_boss_kills * 40
+                self.player.energy + new_kills * 10 + new_boss_kills * 60
             )
 
         # Mirror shade splitting
@@ -1567,10 +1649,14 @@ class Game:
             now, alive, world_w, world_h, self.player.x, self.player.y)
 
         # Grenade explosion effects
-        for gx, gy, _gdmg, _splash_r in grenade_explosions:
-            self.animations.spawn_confetti_explosion(gx, gy)
+        for gx, gy, _gdmg, _splash_r, gstyle in grenade_explosions:
+            if gstyle == "bolt":
+                self.animations.spawn_bolt_explosion(gx, gy)
+                self.sounds.play("bolt_boom")
+            else:
+                self.animations.spawn_confetti_explosion(gx, gy)
+                self.sounds.play("confetti_boom")
             self.animations.add_screen_shake(4)
-            self.sounds.play("confetti_boom")
 
         for enemy, dmg in thrown_hits:
             # ── Mirror Shade: reflect the hit back as an enemy projectile ──
@@ -1583,10 +1669,21 @@ class Game:
 
             # Record projectile hit in run stats (before crit display modifier)
             self.run_stats.record_hit(self.player.weapon_name, dmg)
-            # Energy from projectile damage (same rate as melee: 1 per 8 dmg)
-            self.player.energy = min(
-                self.player.max_energy,
-                self.player.energy + max(1, dmg // 8))
+            # Weapon on-hit status (fire / poison / etc.)
+            _on_hit_s = self.player.weapon.get("on_hit_status")
+            if _on_hit_s and enemy.alive:
+                enemy.statuses.apply(_on_hit_s, now)
+            # Passive: fire_strikes — 35% chance to ignite on any projectile hit
+            if "fire_strikes" in self.player.passives and enemy.alive and _rng.random() < 0.35:
+                enemy.statuses.apply("fire", now)
+            # Passive: poison_strikes — 35% chance to poison on any projectile hit
+            if "poison_strikes" in self.player.passives and enemy.alive and _rng.random() < 0.35:
+                enemy.statuses.apply("poison", now)
+            # Energy from projectile damage (1 per 20 dmg, no minimum)
+            if now > self._super_energy_lockout_until:
+                self.player.energy = min(
+                    self.player.max_energy,
+                    self.player.energy + dmg // 20)
             # Passive: crit_shots — 20% chance double damage on projectile
             if "crit_shots" in self.player.passives and _rng.random() < 0.20:
                 dmg *= 2
@@ -1653,6 +1750,9 @@ class Game:
         # Update projectiles and pickups
         prev_hp2 = self.player.hp
         self.projectiles.update(now, self.player, world_w, world_h)
+        for _bx, _by in self.projectiles.blocked_positions:
+            self.sounds.play("plink")
+            self.animations.spawn_hit_sparks(_bx, _by, count=5)
         if self.player.hp < prev_hp2:
             self.run_stats.record_damage_taken(prev_hp2 - self.player.hp)
             self.sounds.play("hit")
@@ -1782,6 +1882,8 @@ class Game:
                 self.player.x, self.player.y, (255, 255, 100), count=24)
             self.animations.add_screen_shake(4)
             self.sounds.play("levelup")
+            # Auto-screenshot 300 ms later to catch the level-up card
+            self._pending_auto_shots.append((now + 300, "levelup"))
 
     def _spawn_healing_drop(self, x: float, y: float, kind: str):
         """Spawn the appropriate healing pickup for a healing prop type."""
@@ -2024,14 +2126,6 @@ class Game:
                     self._dmg_vig_cache = (bucket, vig)
                 self.screen.blit(self._dmg_vig_cache[1], (0, 0))
 
-        # ---- Super skill flash ----
-        if now_draw < self._super_flash_until:
-            _sf_age = now_draw - (self._super_flash_until - 250)
-            _sf_alpha = max(0, int(200 * (1.0 - _sf_age / 250)))
-            _sf = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
-            _sf.fill((255, 255, 200, _sf_alpha))
-            self.screen.blit(_sf, (0, 0))
-
         # ---- Kill streak combo text ----
         streak_age = now_draw - self._kill_streak_time
         if self._kill_streak >= 2 and streak_age < 1800 and not self.game_over:
@@ -2059,6 +2153,13 @@ class Game:
 
         # ---- Toast notifications ----
         self.toasts.draw(self.screen)
+
+        # ---- Auto-screenshot queue ----
+        if self._pending_auto_shots:
+            for _shot_at, _shot_tag in list(self._pending_auto_shots):
+                if now_draw >= _shot_at:
+                    self._save_screenshot(_shot_tag)
+                    self._pending_auto_shots.remove((_shot_at, _shot_tag))
 
         # ---- Custom cursor (always drawn last) ----
         mx_c, my_c = pygame.mouse.get_pos()

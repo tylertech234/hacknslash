@@ -79,7 +79,7 @@ class Player:
 
         # Super / Energy system — fills on kills, used for class super skill
         self.energy: int = 0
-        self.max_energy: int = 100
+        self.max_energy: int = 120
         # Invincibility frames
         self.invincible = False
         self.invincible_timer = 0
@@ -109,7 +109,7 @@ class Player:
 
     def _apply_weapon_stats(self):
         """Reset weapon stats from the equipped weapon, then restore accumulated bonuses."""
-        self.attack_cooldown = max(80, self.weapon["cooldown"] - self._cooldown_bonus)
+        self.attack_cooldown = max(130, self.weapon["cooldown"] - self._cooldown_bonus)
         self.attack_duration = self.weapon["duration"]
         self.attack_range = self.weapon["range"] + self._range_bonus
 
@@ -146,9 +146,8 @@ class Player:
             self.is_dashing = True
             self.dash_timer = now
             self._dash_charges_remaining -= 1
-            # Start the cooldown clock only once all charges are spent
-            if self._dash_charges_remaining == 0:
-                self.last_dash_time = now
+            # Always record the dash time so the per-charge cooldown resets correctly
+            self.last_dash_time = now
             # Dash in movement (WASD) direction, not mouse facing direction
             self.dash_dx = self.move_dx
             self.dash_dy = self.move_dy
@@ -269,10 +268,14 @@ class Player:
         if self.invincible and now - self.invincible_timer > self.invincible_duration:
             self.invincible = False
 
-        # Refill dash charges after cooldown
+        # Refill dash charges after cooldown — one charge at a time
         if (self._dash_charges_remaining < self.dash_charges_max
                 and now - self.last_dash_time >= self.dash_cooldown):
-            self._dash_charges_remaining = self.dash_charges_max
+            self._dash_charges_remaining = min(
+                self.dash_charges_max, self._dash_charges_remaining + 1)
+            # Keep the timer running so subsequent charges each wait a full cooldown
+            if self._dash_charges_remaining < self.dash_charges_max:
+                self.last_dash_time = now
 
     # ---- draw ----
 
@@ -381,6 +384,18 @@ class Player:
         pygame.draw.line(surface, visor_color, (sx - 6, head_y - 1), (sx + 6, head_y - 1), 2)
         pygame.draw.line(surface, visor_color, (sx, head_y - 1), (sx, head_y + 4), 2)
         pygame.draw.line(surface, trim_color, (sx, head_y - 10), (sx, head_y - 5), 2)
+
+        # Shield on left arm
+        sh_x = sx - half - 9
+        sh_top = torso_top + 2
+        sh_bot = torso_bot - 6
+        shield_pts = [
+            (sh_x, sh_top), (sh_x + 7, sh_top),
+            (sh_x + 7, sh_bot), (sh_x + 3, sh_bot + 6), (sh_x, sh_bot),
+        ]
+        pygame.draw.polygon(surface, (55, 80, 130), shield_pts)
+        pygame.draw.polygon(surface, trim_color, shield_pts, 1)
+        pygame.draw.line(surface, trim_color, (sh_x + 3, sh_top + 2), (sh_x + 3, sh_bot - 2), 1)
 
     def _draw_archer(self, surface, sx, sy, now, half):
         inv = self.invincible and (now // 80) % 2 == 0

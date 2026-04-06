@@ -1,5 +1,6 @@
 import pygame
 import math
+import random
 from src.settings import ENEMY_BULLET_SPEED, ENEMY_BULLET_SIZE, ENEMY_BULLET_COLOR
 
 
@@ -63,6 +64,7 @@ class ProjectileSystem:
 
     def __init__(self):
         self.bullets: list[Projectile] = []
+        self.blocked_positions: list[tuple] = []  # (x, y) knight-blocked bullets this frame
 
     def spawn(self, x: float, y: float, target_x: float, target_y: float, damage: int,
                style: str = "circle"):
@@ -74,6 +76,7 @@ class ProjectileSystem:
         self.bullets.append(Projectile(x, y, dx / dist, dy / dist, damage, style))
 
     def update(self, now: int, player, world_w: int, world_h: int):
+        self.blocked_positions.clear()
         for b in self.bullets:
             b.update(now)
             # Out-of-bounds check
@@ -81,7 +84,11 @@ class ProjectileSystem:
                 b.alive = False
             # Hit player
             if b.alive and b.rect.colliderect(player.rect):
-                player.take_damage(b.damage, now)
+                # Knight passive shield block — 28% base chance
+                if getattr(player, 'char_class', '') == 'knight' and random.random() < 0.28:
+                    self.blocked_positions.append((b.x, b.y))
+                else:
+                    player.take_damage(b.damage, now)
                 b.alive = False
         self.bullets = [b for b in self.bullets if b.alive]
 
@@ -132,6 +139,8 @@ class ThrownDagger:
             self._draw_bolt(surface, sx, sy)
         elif self.visual == "pellet":
             self._draw_pellet(surface, sx, sy)
+        elif self.visual == "potato":
+            self._draw_potato(surface, sx, sy)
         else:
             self._draw_dagger(surface, sx, sy)
 
@@ -178,6 +187,20 @@ class ThrownDagger:
 
     def _draw_pellet(self, surface, sx, sy):
         pygame.draw.circle(surface, (255, 255, 100), (sx, sy), 3)
+
+    def _draw_potato(self, surface, sx, sy):
+        """Irregularly shaped brown projectile tumbling through the air."""
+        now = pygame.time.get_ticks()
+        spin = int(self.angle * 5) % 4  # 4-frame tumble
+        offsets = [(0, 0), (1, -1), (0, -1), (-1, 0)][spin]
+        ox, oy = offsets
+        # Main lumpy oval
+        pygame.draw.ellipse(surface, (160, 120, 60), (sx - 6 + ox, sy - 4 + oy, 12, 9))
+        pygame.draw.ellipse(surface, (120, 90, 40), (sx - 6 + ox, sy - 4 + oy, 12, 9), 1)
+        # Highlight
+        pygame.draw.ellipse(surface, (210, 175, 100), (sx - 3 + ox, sy - 3 + oy, 5, 3))
+        # Shadow dot (eye-like)
+        pygame.draw.circle(surface, (90, 60, 25), (sx + 1 + ox, sy + 1 + oy), 1)
         pygame.draw.circle(surface, (255, 255, 255), (sx, sy), 1)
         glow = pygame.Surface((8, 8), pygame.SRCALPHA)
         pygame.draw.circle(glow, (255, 255, 100, 50), (4, 4), 4)
@@ -300,7 +323,8 @@ class ConfettiGrenade:
         (100, 200, 255), (255, 150, 50), (200, 100, 255),
     ]
 
-    def __init__(self, x: float, y: float, dx: float, dy: float, damage: int):
+    def __init__(self, x: float, y: float, dx: float, dy: float, damage: int, style: str = "confetti",
+                 is_super: bool = False):
         self.x = x
         self.y = y
         self.dx = dx
@@ -314,6 +338,8 @@ class ConfettiGrenade:
         self.size = 5
         self.splash_radius = 60  # explosion hits enemies in this radius
         self.angle = math.atan2(dy, dx)
+        self.style = style
+        self.is_super = is_super
 
     def update(self, now: int):
         if not self.alive:
@@ -335,24 +361,62 @@ class ConfettiGrenade:
             return
         sx = int(self.x - camera_x)
         sy = int(self.y - camera_y)
-        # Round grenade body
-        pygame.draw.circle(surface, (80, 80, 80), (sx, sy), 6)
-        pygame.draw.circle(surface, (255, 100, 200), (sx, sy), 6, 2)
-        # Confetti pattern
-        for i in range(3):
-            a = self.angle + i * 2.1
-            cx = sx + int(math.cos(a) * 3)
-            cy = sy + int(math.sin(a) * 3)
-            pygame.draw.circle(surface, self.CONFETTI_COLORS[i], (cx, cy), 1)
-        # Fuse spark
-        spark_x = sx + int(math.cos(self.angle) * 8)
-        spark_y = sy + int(math.sin(self.angle) * 8) - 3
-        ss = pygame.Surface((4, 4), pygame.SRCALPHA)
-        pygame.draw.circle(ss, (255, 255, 100, 200), (2, 2), 2)
-        surface.blit(ss, (spark_x - 2, spark_y - 2))
-
-
-import random as _rng
+        if self.style == "bolt":
+            # Glowing energy bolt — bright orange-white core with pulsing halo
+            now = pygame.time.get_ticks()
+            pulse = 0.7 + 0.3 * math.sin(now * 0.025)
+            if self.is_super:
+                # Large super bolt: broad yellow aura + electric arc lines
+                halo_r = int((26 + 10 * pulse))
+                halo_s = pygame.Surface((halo_r * 2 + 6, halo_r * 2 + 6), pygame.SRCALPHA)
+                pygame.draw.circle(halo_s, (255, 240, 60, 90), (halo_r + 3, halo_r + 3), halo_r)
+                pygame.draw.circle(halo_s, (255, 200, 20, 50), (halo_r + 3, halo_r + 3), halo_r + 4)
+                surface.blit(halo_s, (sx - halo_r - 3, sy - halo_r - 3))
+                pygame.draw.circle(surface, (255, 230, 60), (sx, sy), 9)
+                pygame.draw.circle(surface, (255, 255, 180), (sx, sy), 5)
+                pygame.draw.circle(surface, (255, 255, 255), (sx, sy), 2)
+                # Electric arc lines radiating outward
+                arc_phase = now * 0.030
+                num_arcs = 6
+                for ai in range(num_arcs):
+                    arc_a = arc_phase + ai * (math.pi * 2 / num_arcs)
+                    arc_len = 18 + int(10 * math.sin(arc_phase * 1.7 + ai))
+                    ex = sx + int(math.cos(arc_a) * arc_len)
+                    ey = sy + int(math.sin(arc_a) * arc_len)
+                    # Zigzag midpoint
+                    mx2 = (sx + ex) // 2 + int(5 * math.sin(arc_phase * 3 + ai))
+                    my2 = (sy + ey) // 2 + int(5 * math.cos(arc_phase * 3 + ai))
+                    pygame.draw.line(surface, (255, 255, 160), (sx, sy), (mx2, my2), 2)
+                    pygame.draw.line(surface, (200, 240, 255), (mx2, my2), (ex, ey), 1)
+            else:
+                halo_r = int(10 * pulse)
+                halo_s = pygame.Surface((halo_r * 2 + 4, halo_r * 2 + 4), pygame.SRCALPHA)
+                pygame.draw.circle(halo_s, (255, 180, 60, 80), (halo_r + 2, halo_r + 2), halo_r)
+                surface.blit(halo_s, (sx - halo_r - 2, sy - halo_r - 2))
+                pygame.draw.circle(surface, (255, 220, 100), (sx, sy), 5)
+                pygame.draw.circle(surface, (255, 255, 220), (sx, sy), 3)
+                # Trailing spark trail in direction of movement
+                trail_x = sx - int(math.cos(self.angle) * 8)
+                trail_y = sy - int(math.sin(self.angle) * 8)
+                ts = pygame.Surface((6, 6), pygame.SRCALPHA)
+                pygame.draw.circle(ts, (255, 140, 40, 140), (3, 3), 3)
+                surface.blit(ts, (trail_x - 3, trail_y - 3))
+        else:
+            # Round grenade body
+            pygame.draw.circle(surface, (80, 80, 80), (sx, sy), 6)
+            pygame.draw.circle(surface, (255, 100, 200), (sx, sy), 6, 2)
+            # Confetti pattern
+            for i in range(3):
+                a = self.angle + i * 2.1
+                cx = sx + int(math.cos(a) * 3)
+                cy = sy + int(math.sin(a) * 3)
+                pygame.draw.circle(surface, self.CONFETTI_COLORS[i], (cx, cy), 1)
+            # Fuse spark
+            spark_x = sx + int(math.cos(self.angle) * 8)
+            spark_y = sy + int(math.sin(self.angle) * 8) - 3
+            ss = pygame.Surface((4, 4), pygame.SRCALPHA)
+            pygame.draw.circle(ss, (255, 255, 100, 200), (2, 2), 2)
+            surface.blit(ss, (spark_x - 2, spark_y - 2))
 
 
 class PlayerProjectileSystem:
@@ -407,15 +471,17 @@ class PlayerProjectileSystem:
 
     def spawn_grenades(self, x: float, y: float, facing_x: float, facing_y: float,
                        damage: int, count: int = 1, speed: float = 5.5,
-                       lifetime: int = 600, splash_radius: int = 60):
-        """Spawn confetti grenades."""
+                       lifetime: int = 600, splash_radius: int = 60, style: str = "confetti",
+                       is_super: bool = False):
+        """Spawn thrown projectiles that explode on impact or timeout.
+        style='confetti' for jester grenades, style='bolt' for energy bolts."""
         base_angle = math.atan2(facing_y, facing_x)
         for i in range(count):
             offset = (i - (count - 1) / 2) * 0.2
             a = base_angle + offset
             dx = math.cos(a)
             dy = math.sin(a)
-            g = ConfettiGrenade(x, y, dx, dy, damage)
+            g = ConfettiGrenade(x, y, dx, dy, damage, style=style, is_super=is_super)
             g.speed = speed
             g.lifetime = lifetime
             g.splash_radius = splash_radius
@@ -480,7 +546,7 @@ class PlayerProjectileSystem:
                 g.exploded = True
             if not g.alive:
                 if g.exploded:
-                    grenade_explosions.append((g.x, g.y, g.damage, g.splash_radius))
+                    grenade_explosions.append((g.x, g.y, g.damage, g.splash_radius, g.style))
                 continue
             g_rect = pygame.Rect(g.x - g.size, g.y - g.size, g.size * 2, g.size * 2)
             for enemy in enemies:
@@ -489,12 +555,12 @@ class PlayerProjectileSystem:
                 if g_rect.colliderect(enemy.rect):
                     g.exploded = True
                     g.alive = False
-                    grenade_explosions.append((g.x, g.y, g.damage, g.splash_radius))
+                    grenade_explosions.append((g.x, g.y, g.damage, g.splash_radius, g.style))
                     break
         self.grenades = [g for g in self.grenades if g.alive]
 
         # Process grenade splash damage
-        for gx, gy, gdmg, splash_r in grenade_explosions:
+        for gx, gy, gdmg, splash_r, _gstyle in grenade_explosions:
             for enemy in enemies:
                 if not enemy.alive:
                     continue

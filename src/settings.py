@@ -12,10 +12,27 @@ VERSION = "0.9.5"
 
 # -- User data directory (%APPDATA%/CyberSurvivor on Windows) --
 import os as _os
-DATA_DIR = _os.path.join(_os.environ.get("APPDATA", ""), "CyberSurvivor") \
-    if _os.name == "nt" \
-    else _os.path.join(_os.path.expanduser("~"), ".cyber_survivor")
-_os.makedirs(DATA_DIR, exist_ok=True)
+
+def _resolve_data_dir() -> str:
+    if _os.name == "nt":
+        # Prefer APPDATA; fall back to LOCALAPPDATA then expanduser so we
+        # never silently resolve to a relative path when the env var is unset.
+        appdata = (_os.environ.get("APPDATA")
+                   or _os.environ.get("LOCALAPPDATA")
+                   or _os.path.join(_os.path.expanduser("~"), "AppData", "Roaming"))
+        return _os.path.join(appdata, "CyberSurvivor")
+    return _os.path.join(_os.path.expanduser("~"), ".cyber_survivor")
+
+DATA_DIR = _resolve_data_dir()
+try:
+    _os.makedirs(DATA_DIR, exist_ok=True)
+except OSError:
+    # Fallback: if the preferred location isn't writable (e.g. read-only
+    # filesystem or missing permissions) use a writable temp directory so
+    # the game can still start; saves won't persist across sessions.
+    import tempfile as _tempfile
+    DATA_DIR = _os.path.join(_tempfile.gettempdir(), "CyberSurvivor")
+    _os.makedirs(DATA_DIR, exist_ok=True)
 
 # -- Colors --
 BLACK = (0, 0, 0)
@@ -28,7 +45,7 @@ DARK_GRAY = (40, 40, 40)
 LIGHT_GRAY = (180, 180, 180)
 
 # -- Passives --
-MAX_PASSIVES = 4
+MAX_PASSIVES = 5
 
 # icon letter + color for HUD display  (key → (icon, color))
 PASSIVE_INFO = {
@@ -63,7 +80,7 @@ PLAYER_MAX_SPEED = 9                # hard cap — prevents melee from feeling w
 PLAYER_MAX_RANGE = 135              # hard cap on attack range
 PLAYER_DASH_SPEED = 18
 PLAYER_DASH_DURATION = 150          # ms
-PLAYER_DASH_COOLDOWN = 800          # ms
+PLAYER_DASH_COOLDOWN = 1000          # ms
 
 # -- Enemies --
 ENEMY_SPEED = 2.8
@@ -110,7 +127,7 @@ PLAYER_LIGHT_RADIUS_MAX = 180       # px – starting personal light radius
 PLAYER_LIGHT_RADIUS_MIN = 50        # px – minimum light radius
 LIGHT_SHRINK_RATE = 0.015           # px lost per frame away from campfire
 LIGHT_RESTORE_RATE = 0.6            # px gained per frame near campfire
-DARKNESS_GROW_RATE = 0.0004         # darkness per frame away from campfire (0→1)
+DARKNESS_GROW_RATE = 0.0002         # darkness per frame away from campfire (0→1)
 DARKNESS_DECAY_RATE = 0.003         # darkness lost per frame near campfire
 
 # -- Backend (Supabase) --
@@ -121,10 +138,10 @@ try:
 except ImportError:
     SUPABASE_URL = ""
     SUPABASE_ANON_KEY = ""
-DARKNESS_MAX = 0.85                 # max darkness alpha (0..1)
-XP_DARKNESS_BONUS = 2.0             # max XP multiplier at full darkness
+DARKNESS_MAX = 0.65                 # max darkness alpha (0..1) — capped at old 2.3x visual level
+XP_DARKNESS_BONUS = 1.54            # at DARKNESS_MAX (0.65) gives exactly 2x XP
 ENEMY_DARKNESS_HP_BONUS = 0.6       # extra HP fraction at full darkness
-ENEMY_DARKNESS_DMG_BONUS = 0.5      # extra damage fraction at full darkness
+ENEMY_DARKNESS_DMG_BONUS = 1.54     # at DARKNESS_MAX (0.65) gives exactly 2x enemy damage
 
 # -- Map --
 TILE_SIZE = 64

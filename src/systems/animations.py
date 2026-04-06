@@ -55,6 +55,7 @@ class DeathAnimation:
         "drone":         (280, 20,  "burst_ring"),
         "cultist":       (400, 30,  "dissolve"),
         "shambler":      (500, 40,  "splat"),
+        "bulwark":       (450, 38,  "shatter"),
         "street_preacher": (750, 50,  "boss_explosion"),
         "eldritch_horror":(1200,78, "big_boss_explosion"),
         "void_wisp":     (250, 18,  "dissolve"),
@@ -270,6 +271,44 @@ class AnimationSystem:
             size = random.uniform(2, 5)
             self.particles.append(
                 Particle(world_x, world_y, dx, dy, life, c, size, gravity=0.15))
+
+    def spawn_bolt_explosion(self, world_x: float, world_y: float):
+        """Bright orange-white energy burst for explosive bolt detonation."""
+        for _ in range(28):
+            angle = random.uniform(0, math.tau)
+            speed = random.uniform(3.0, 9.0)
+            dx = math.cos(angle) * speed
+            dy = math.sin(angle) * speed
+            life = random.randint(12, 28)
+            c = random.choice([
+                (255, 255, 220), (255, 220, 100), (255, 160, 40),
+                (255, 100, 20), (255, 255, 255)])
+            size = random.uniform(2, 6)
+            self.particles.append(
+                Particle(world_x, world_y, dx, dy, life, c, size, gravity=0.05))
+
+    def spawn_arc_sweep(self, world_x: float, world_y: float,
+                        aim_dx: float, aim_dy: float,
+                        arc_deg: float = 160.0, arc_range: float = 220.0):
+        """Blue-white sweeping blade arc for knight super skill."""
+        base_angle = math.atan2(aim_dy, aim_dx)
+        half = math.radians(arc_deg / 2)
+        # Particles spread along the arc at multiple distances
+        for step in range(60):
+            sweep_angle = base_angle - half + (step / 59) * 2 * half
+            dist = random.uniform(arc_range * 0.3, arc_range)
+            wx = world_x + math.cos(sweep_angle) * dist
+            wy = world_y + math.sin(sweep_angle) * dist
+            # Radial outward velocity
+            speed = random.uniform(2.5, 7.0)
+            pdx = math.cos(sweep_angle) * speed
+            pdy = math.sin(sweep_angle) * speed
+            life = random.randint(18, 38)
+            c = random.choice([
+                (80, 160, 255), (140, 200, 255), (200, 230, 255),
+                (255, 255, 255), (60, 120, 255), (180, 220, 255)])
+            size = random.uniform(2.5, 6.5)
+            self.particles.append(Particle(wx, wy, pdx, pdy, life, c, size, gravity=0.0))
 
     def spawn_dash_trail(self, world_x: float, world_y: float, dash_dx: float, dash_dy: float):
         """2-3 wind streak particles behind the player during a dash."""

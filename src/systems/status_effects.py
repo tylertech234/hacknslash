@@ -12,6 +12,14 @@ STATUS_DEFS = {
         "tick_damage": 4,
         "icon": "F",
     },
+    "blue_fire": {
+        "name": "Blue Fire",
+        "color": (80, 160, 255),
+        "duration": 4000,
+        "tick_interval": 400,
+        "tick_damage": 8,
+        "icon": "B",
+    },
     "bleed": {
         "name": "Bleed",
         "color": (200, 30, 30),
@@ -151,13 +159,29 @@ class StatusManager:
         for e in self.effects:
             color = e.defn["color"]
             if e.key == "fire":
-                # Small flame particles rising — use direct draw (no SRCALPHA alloc)
-                for i in range(3):
-                    angle = (now * 0.005 + i * 2.1) % math.tau
-                    px = cx + int(math.cos(angle) * size * 0.4)
-                    py = cy + int(math.sin(angle) * size * 0.3) - int((now * 0.02 + i * 7) % 12)
-                    r = max(1, 3 - int((now * 0.01 + i * 5) % 3))
-                    pygame.draw.circle(surface, color, (px, py), r)
+                # Animated orange flames rising around enemy
+                for i in range(5):
+                    phase = now * 0.018 + i * 1.26
+                    column_x = cx + int(math.cos(phase * 0.7) * size * 0.45)
+                    rise = int((now * 0.028 + i * 8) % (size + 8))
+                    py = cy + size // 3 - rise
+                    rad = max(1, int(4 - rise * 3 / (size + 8)))
+                    ic = int(80 + 140 * (1.0 - rise / (size + 8)))
+                    pygame.draw.circle(surface, (255, ic, 0), (column_x, py), rad)
+                    if rise < size // 3:
+                        pygame.draw.circle(surface, (255, 220, 80), (column_x, py), max(1, rad - 1))
+            elif e.key == "blue_fire":
+                # Intense blue-white plasma flames — knight super
+                for i in range(6):
+                    phase = now * 0.022 + i * 1.05
+                    cx2 = cx + int(math.cos(phase * 0.65) * size * 0.48)
+                    rise = int((now * 0.032 + i * 7) % (size + 10))
+                    py2 = cy + size // 3 - rise
+                    rad = max(1, int(5 - rise * 4 / (size + 10)))
+                    gc = int(120 + 110 * (1.0 - rise / (size + 10)))
+                    pygame.draw.circle(surface, (30, gc, 255), (cx2, py2), rad)
+                    if rise < size // 4:
+                        pygame.draw.circle(surface, (200, 230, 255), (cx2, py2), max(1, rad - 1))
             elif e.key == "bleed":
                 # Dripping red dots
                 for i in range(2):
@@ -166,12 +190,20 @@ class StatusManager:
                     py = cy + drip_y
                     pygame.draw.circle(surface, color, (px, py), 2)
             elif e.key == "poison":
-                # Green bubbles
-                for i in range(2):
-                    angle = (now * 0.003 + i * 3.14) % math.tau
-                    px = cx + int(math.cos(angle) * size * 0.5)
-                    py = cy - int((now * 0.015 + i * 20) % 16)
-                    pygame.draw.circle(surface, (*color, 140), (px, py), 2)
+                # Green toxic bubbles rising + pulsing glow ring
+                for i in range(4):
+                    angle = (now * 0.004 + i * 1.57) % math.tau
+                    orbit_r = size * 0.45 + math.sin(now * 0.006 + i) * 3
+                    px = cx + int(math.cos(angle) * orbit_r)
+                    rise = int((now * 0.02 + i * 14) % (size + 6))
+                    py = cy + size // 4 - rise
+                    bub_r = max(1, 3 - rise // max(1, size // 3))
+                    pygame.draw.circle(surface, (60, 200, 40), (px, py), bub_r)
+                    pygame.draw.circle(surface, (140, 255, 80), (px, py), max(1, bub_r - 1))
+                # Pulsing outer ring (draw with two overlapping circles to imply glow)
+                ring_r = size // 2 + int(3 * abs(math.sin(now * 0.007)))
+                pygame.draw.circle(surface, (80, 200, 40), (cx, cy), ring_r + 2, 2)
+                pygame.draw.circle(surface, (40, 120, 20), (cx, cy), ring_r, 1)
             elif e.key == "slow":
                 # Blue frost crystals
                 for i in range(3):

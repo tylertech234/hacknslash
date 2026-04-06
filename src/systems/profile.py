@@ -25,8 +25,12 @@ log = logging.getLogger("profile")
 
 from src.settings import DATA_DIR
 
-_PROJECT_ROOT = DATA_DIR
-_ROOT_POINTER = os.path.join(_PROJECT_ROOT, "profile.json")
+_USER_DATA_DIR = DATA_DIR
+_ROOT_POINTER = os.path.join(_USER_DATA_DIR, "profile.json")
+
+# The directory that old versions of the game (pre-AppData migration) wrote
+# saves into — the project/install root, i.e. the folder containing src/.
+_LEGACY_INSTALL_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
 # ── Storage backends ───────────────────────────────────────────────────────────
@@ -176,7 +180,7 @@ def _load_desktop_profile() -> PlayerProfile:
         _migrate_root_saves(pid)
 
     # 2. Per-player storage inside profiles/{pid}/
-    profile_dir = os.path.join(_PROJECT_ROOT, "profiles", pid)
+    profile_dir = os.path.join(_USER_DATA_DIR, "profiles", pid)
     storage = FileStorage(profile_dir)
 
     # 3. Load profile metadata from per-player directory
@@ -202,17 +206,31 @@ def _write_root_pointer(player_id: str, display_name: str, consent) -> None:
 
 
 def _migrate_root_saves(new_pid: str) -> None:
-    """Move any existing root-level saves into the new per-player directory."""
-    dest_dir = os.path.join(_PROJECT_ROOT, "profiles", new_pid)
+    """Move any existing root-level saves into the new per-player directory.
+
+    Checks two locations for legacy saves:
+    1. The install/project root (data lived here before v0.9.x AppData migration).
+    2. The AppData root (saves that landed there from an intermediate build).
+    """
+    dest_dir = os.path.join(_USER_DATA_DIR, "profiles", new_pid)
+    search_roots = []
+    # Avoid duplicate work if both paths happen to resolve to the same dir
+    seen = set()
+    for root in (_LEGACY_INSTALL_DIR, _USER_DATA_DIR):
+        if root not in seen:
+            search_roots.append(root)
+            seen.add(root)
     for fname in ("legacy_save.json", "compendium_save.json"):
-        src = os.path.join(_PROJECT_ROOT, fname)
-        if os.path.exists(src):
-            try:
-                os.makedirs(dest_dir, exist_ok=True)
-                dst = os.path.join(dest_dir, fname)
-                if not os.path.exists(dst):  # never overwrite a newer file
-                    import shutil
-                    shutil.move(src, dst)
-                    log.info("Migrated %s → profiles/%s/%s", fname, new_pid, fname)
-            except OSError as e:
-                log.warning("Migration of %s failed: %s", fname, e)
+        for search_root in search_roots:
+            src = os.path.join(search_root, fname)
+            if os.path.exists(src):
+                try:
+                    os.makedirs(dest_dir, exist_ok=True)
+                    dst = os.path.join(dest_dir, fname)
+                    if not os.path.exists(dst):  # never overwrite a newer file
+                        import shutil
+                        shutil.move(src, dst)
+                        log.info("Migrated %s → profiles/%s/%s", fname, new_pid, fname)
+                except OSError as e:
+                    log.warning("Migration of %s failed: %s", fname, e)
+                break  # found it in this root; don't keep searching

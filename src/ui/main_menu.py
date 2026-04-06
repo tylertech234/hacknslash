@@ -237,6 +237,18 @@ class MainMenuScreen:
         sub = self.font_sub.render("cyber. survive. repeat.", True, (100, 120, 160))
         surface.blit(sub, (SCREEN_WIDTH // 2 - sub.get_width() // 2, 210))
 
+        # Early Access badge
+        pulse = 0.85 + 0.15 * math.sin(now * 0.003)
+        badge_surf = self.font_small.render("\u2605  EARLY ACCESS  \u2605", True, (18, 12, 4))
+        bw = badge_surf.get_width() + 22
+        bh = badge_surf.get_height() + 8
+        bx = SCREEN_WIDTH // 2 - bw // 2
+        by = 240
+        badge_color = (int(215 * pulse), int(155 * pulse), int(25 * pulse))
+        pygame.draw.rect(surface, badge_color, (bx, by, bw, bh), border_radius=5)
+        pygame.draw.rect(surface, (255, 215, 70), (bx, by, bw, bh), 1, border_radius=5)
+        surface.blit(badge_surf, (bx + 11, by + 4))
+
         if self.settings_open:
             self._draw_settings(surface, now)
         else:
@@ -265,6 +277,12 @@ class MainMenuScreen:
                 surface.blit(bar, (x - 20, y - 4))
 
             surface.blit(text, (x, y))
+
+        # Early Access disclaimer
+        disc = self.font_small.render(
+            "Early Access: breaking changes & leaderboard resets may occur  \u2014  thank you for your support!",
+            True, (95, 85, 65))
+        surface.blit(disc, (SCREEN_WIDTH // 2 - disc.get_width() // 2, 562))
 
         # Controls hint
         hint = self.font_small.render("W/S to navigate  |  E/Enter to select", True, (70, 70, 90))

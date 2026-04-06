@@ -144,12 +144,15 @@ class SoundManager:
         self.sounds["throw"] = self._make_throw()
         self.sounds["chicken"] = _load_asset("chicken", volume=0.31) or self._make_chicken()
         self.sounds["confetti_boom"] = self._make_confetti_boom()
+        self.sounds["bolt_boom"] = self._make_bolt_boom()
         self.sounds["parry"] = self._make_parry()
         self.sounds["wheel_tick"] = self._make_wheel_tick()
         self.sounds["wheel_stop"] = self._make_wheel_stop()
         self.sounds["chest_open"] = self._make_chest_open()
         self.sounds["chest_fanfare"] = self._make_chest_fanfare()
         self.sounds["shield_block"] = self._make_shield_block()
+        self.sounds["plink"] = self._make_plink()
+        self.sounds["thump"] = self._make_thump()
         self.sounds["enemy_death"] = self._make_enemy_death()
         self.sounds["charge_whoosh"] = self._make_charge_whoosh()
         self.sounds["dog_bark"] = self._make_dog_bark()
@@ -177,6 +180,7 @@ class SoundManager:
             "throw":         0.30,
             "chicken":       0.31,
             "confetti_boom": 0.35,
+            "bolt_boom":     0.52,
             "parry":         0.40,
             "wheel_tick":    0.18,
             "wheel_stop":    0.40,
@@ -612,6 +616,28 @@ class SoundManager:
             buf.append(max(-32768, min(32767, sample)))
         return pygame.mixer.Sound(buffer=buf)
 
+    def _make_bolt_boom(self) -> pygame.mixer.Sound:
+        """Heavy bass thump with a sharp energy crack — explosive bolt detonation."""
+        rate = 22050
+        n = int(rate * 0.35)
+        buf = array.array("h")
+        for i in range(n):
+            t = i / rate
+            pos = i / n
+            # Sharp attack envelope — punchy front, fast decay
+            env = (1.0 - pos) ** 1.8 * min(1.0, pos * 40)
+            # Sub-bass thump — drops from 80Hz to 30Hz
+            bass = math.sin(2 * math.pi * (80 - 50 * pos) * t) * 0.5
+            bass2 = math.sin(2 * math.pi * 40 * t) * 0.25 * max(0, 1 - pos * 3)
+            # Sharp transient crack (very brief noise burst)
+            noise = (((i * 13 + 7) * 1103515245 + 12345) >> 16) & 0x7FFF
+            crack = (noise / 16384.0 - 1.0) * 0.5 * max(0, 1 - pos * 12)
+            # Short bright ring — energy discharge
+            ring = math.sin(2 * math.pi * 1200 * t) * 0.08 * max(0, 1 - pos * 6)
+            sample = int((bass + bass2 + crack + ring) * env * 32767)
+            buf.append(max(-32768, min(32767, sample)))
+        return pygame.mixer.Sound(buffer=buf)
+
     def _make_parry(self) -> pygame.mixer.Sound:
         """Satisfying metallic clang with bright ring-out."""
         rate = 22050
@@ -762,6 +788,40 @@ class SoundManager:
             noise = (((i * 19 + 11) * 1103515245 + 12345) >> 16) & 0x7FFF
             n_val = (noise / 16384.0 - 1.0) * 0.1 * max(0, 1 - pos * 4)
             sample = int((thud + ring + n_val) * env * 32767)
+            buf.append(max(-32768, min(32767, sample)))
+        return pygame.mixer.Sound(buffer=buf)
+
+    def _make_plink(self) -> pygame.mixer.Sound:
+        """Light metallic shield ping — short high-frequency ring."""
+        rate = 22050
+        n = int(rate * 0.12)
+        buf = array.array("h")
+        for i in range(n):
+            t = i / rate
+            pos = i / n
+            env = (1.0 - pos) ** 2.5
+            tone = math.sin(2 * math.pi * 3400 * t) * 0.4
+            tone += math.sin(2 * math.pi * 5200 * t) * 0.2
+            tone += math.sin(2 * math.pi * 8000 * t) * 0.08
+            sample = int(tone * env * 32767 * 0.55)
+            buf.append(max(-32768, min(32767, sample)))
+        return pygame.mixer.Sound(buffer=buf)
+
+    def _make_thump(self) -> pygame.mixer.Sound:
+        """Hollow spud-gun launch — low wobbly thwump."""
+        rate = 22050
+        n = int(rate * 0.18)
+        buf = array.array("h")
+        for i in range(n):
+            t = i / rate
+            pos = i / n
+            env = (1.0 - pos) ** 1.8 * min(1.0, pos * 20)
+            freq = 180 - pos * 80
+            tone = math.sin(2 * math.pi * freq * t) * 0.5
+            tone += math.sin(2 * math.pi * (freq * 2.1) * t) * 0.15
+            noise = (((i * 17 + 7) * 1103515245 + 12345) >> 16) & 0x7FFF
+            n_val = (noise / 16384.0 - 1.0) * 0.12 * max(0, 1 - pos * 3)
+            sample = int((tone + n_val) * env * 32767 * 0.6)
             buf.append(max(-32768, min(32767, sample)))
         return pygame.mixer.Sound(buffer=buf)
 

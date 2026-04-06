@@ -23,6 +23,8 @@ CHEST_UPGRADES = [
     {"name": "Chain Lightning",    "icon": "Z", "color": (100, 230, 255), "effect": "passive",  "value": "chain_lightning"},
     {"name": "Second Wind",        "icon": "L", "color": (255, 100, 100), "effect": "passive",  "value": "second_wind"},
     {"name": "Explosive Rounds",   "icon": "E", "color": (255, 150, 0),   "effect": "passive",  "value": "explosive_kills"},
+    {"name": "Burning Strikes",    "icon": "F", "color": (255, 110, 20),  "effect": "passive",  "value": "fire_strikes"},
+    {"name": "Toxic Strikes",      "icon": "P", "color": (80, 210, 50),   "effect": "passive",  "value": "poison_strikes"},
 ]
 
 

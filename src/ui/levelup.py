@@ -26,8 +26,12 @@ LEVEL_UPGRADES = [
     {"name": "Explosive Kills", "icon": "E", "color": (255, 150, 0),   "effect": "passive", "value": "explosive_kills", "desc": "25% chance for enemies to explode on death"},
     {"name": "Magnetic Field",  "icon": "F", "color": (150, 150, 255), "effect": "passive", "value": "magnetic_field",  "desc": "ALL pickups fly to you from much further away"},
     {"name": "Adrenaline Rush", "icon": "A", "color": (0, 255, 100),   "effect": "passive", "value": "adrenaline",      "desc": "+30% speed for 3s after each kill"},
-    {"name": "Rapid Dash",      "icon": ">", "color": (100, 220, 255), "effect": "dash_charges", "value": 1, "desc": "+1 dash charge before cooldown (stack up to 4 total)"},
-    {"name": "Parry Deflect",   "icon": "P", "color": (200, 255, 180), "effect": "passive", "value": "parry_deflect", "class_restrict": "archer", "desc": "Parried bullets fire back at nearest enemy (2x damage). Ranger only."},
+    {"name": "Rapid Dash",      "icon": ">", "color": (100, 220, 255), "effect": "dash_charges", "value": 1, "desc": "+1 dash charge before cooldown (max 4 total)"},
+    {"name": "Armor Plating",   "icon": "M", "color": (120, 180, 255), "effect": "passive", "value": "armor_plating",   "desc": "Take 15% less damage from all sources"},
+    {"name": "Critical Shots",   "icon": "!", "color": (255, 200, 50),  "effect": "passive", "value": "crit_shots",     "class_restrict": ["archer", "jester"], "desc": "20% chance for double damage on projectiles. Not available to Knight."},
+    {"name": "Melee Lifesteal",   "icon": "K", "color": (255, 80, 80),   "effect": "passive", "value": "melee_lifesteal", "class_restrict": ["knight", "jester"], "desc": "Heal 2 HP on melee kills. Not available to Ranger."},
+    {"name": "Confetti Burst",   "icon": "E", "color": (255, 100, 255), "effect": "passive", "value": "confetti_burst", "class_restrict": "jester", "desc": "Kills have 20% chance to stun nearby enemies"},
+    {"name": "Parry Deflect",   "icon": "P", "color": (200, 255, 180), "effect": "passive", "value": "parry_deflect", "class_restrict": "knight", "desc": "Parried bullets fire back at nearest enemy (2x damage). Knight only."},
 ]
 
 
@@ -40,7 +44,7 @@ WEAPON_UPGRADES: dict[str, list[dict]] = {
         {"name": "Flame Slash",    "icon": "D", "color": (255, 120, 30),  "effect": "damage",   "value": 12, "desc": "+12 damage — burning sword strikes"},
         {"name": "Strike Tempo",   "icon": "C", "color": (255, 180, 80),  "effect": "cooldown", "value": 70, "desc": "-70ms cooldown — faster swing rhythm"},
     ],
-    "axe": [
+    "battle_axe": [
         {"name": "Cleaving Arc",   "icon": "R", "color": (200, 80, 50),   "effect": "range",    "value": 18, "desc": "+18 range — wider axe arc"},
         {"name": "Executioner",    "icon": "D", "color": (220, 60, 40),   "effect": "damage",   "value": 14, "desc": "+14 damage — decapitating blow"},
     ],
@@ -48,10 +52,7 @@ WEAPON_UPGRADES: dict[str, list[dict]] = {
         {"name": "Chain Momentum", "icon": "D", "color": (220, 190, 90),  "effect": "damage",   "value": 12, "desc": "+12 damage — spiked ball gathers momentum"},
         {"name": "Whip Extension", "icon": "R", "color": (200, 175, 120), "effect": "range",    "value": 16, "desc": "+16 range — longer chain, wider arc"},
     ],
-    "hammer": [
-        {"name": "Shockwave",      "icon": "D", "color": (255, 220, 50),  "effect": "damage",   "value": 16, "desc": "+16 damage — hammer shockwave"},
-        {"name": "Tectonic Force", "icon": "R", "color": (200, 150, 50),  "effect": "range",    "value": 20, "desc": "+20 range — ground-crack radius"},
-    ],
+
     "plasma_blade": [
         {"name": "Plasma Overcharge","icon":"C", "color": (0, 255, 200),  "effect": "cooldown", "value": 80, "desc": "-80ms cooldown — rapid plasma cuts"},
         {"name": "Thermal Edge",   "icon": "D", "color": (0, 200, 255),   "effect": "damage",   "value": 12, "desc": "+12 damage — superheated edge"},
@@ -122,7 +123,10 @@ WEAPON_UPGRADES: dict[str, list[dict]] = {
         {"name": "Spring Loaded",  "icon": "C", "color": (200, 80, 255),  "effect": "cooldown", "value": 70, "desc": "-70ms cooldown — faster spring"},
         {"name": "Pop Goes Boom",  "icon": "D", "color": (180, 60, 220),  "effect": "damage",   "value": 12, "desc": "+12 damage — surprise explosion"},
     ],
-}
+    "spud_gun": [
+        {"name": "Starch Rounds",  "icon": "D", "color": (180, 140, 60),  "effect": "damage",   "value": 11, "desc": "+11 damage \u2014 heavyweight potatoes"},
+        {"name": "Spud Salvo",     "icon": "C", "color": (160, 120, 50),  "effect": "cooldown", "value": 65, "desc": "-65ms cooldown \u2014 rapid-fire spuds"},
+    ],}
 
 
 class LevelUpScreen:
@@ -156,8 +160,11 @@ class LevelUpScreen:
 
         # Add stat + passive upgrades (filter out already-owned passives, maxed tiers, and class-restricted upgrades)
         for u in LEVEL_UPGRADES:
-            if u.get("class_restrict") and u["class_restrict"] != player_class:
-                continue
+            cr = u.get("class_restrict")
+            if cr:
+                allowed = cr if isinstance(cr, list) else [cr]
+                if player_class not in allowed:
+                    continue
             if u["effect"] == "passive" and u["value"] in owned:
                 continue
             if u["effect"] == "glass_cannon" and "glass_cannon" in owned:
@@ -236,8 +243,57 @@ class LevelUpScreen:
                     "desc": w["desc"],
                 })
 
-        # Pick 3
-        self.choices = random.sample(pool, min(3, len(pool)))
+        # ── Weighted 3-choice selection ──────────────────────────────────────
+        # Separate pool into categories for intentional representation.
+        # When passive slots are full: passives can still appear but at low chance
+        # so the player can swap one in — they just won't dominate all 3 slots.
+        stat_pool    = [e for e in pool
+                        if e.get("type") == "stat" and e.get("effect") != "passive"]
+        passive_pool = [e for e in pool if e.get("effect") == "passive"]
+        weapon_pool  = [e for e in pool
+                        if e.get("type") in ("weapon", "weapon_upgrade")]
+
+        # Passive chance: 55% when slots available, 18% when full (rare swap offer)
+        passive_chance = 0.18 if self._passives_full else 0.55
+
+        chosen: list[dict] = []
+        chosen_ids: set[int] = set()
+
+        def _take(src: list) -> bool:
+            """Pick a random unused entry from src. Returns True on success."""
+            candidates = [e for e in src if id(e) not in chosen_ids]
+            if not candidates:
+                return False
+            pick = random.choice(candidates)
+            chosen_ids.add(id(pick))
+            chosen.append(pick)
+            return True
+
+        # Slot 1 — weapon upgrade or stat (weapons weighted 60 : 40)
+        if weapon_pool and random.random() < 0.60:
+            _take(weapon_pool) or _take(stat_pool)
+        else:
+            _take(stat_pool) or _take(weapon_pool)
+
+        # Slot 2 — passive (at passive_chance) or stat/weapon otherwise
+        if passive_pool and random.random() < passive_chance:
+            _take(passive_pool) or _take(stat_pool) or _take(weapon_pool)
+        else:
+            _take(stat_pool) or _take(weapon_pool) or _take(passive_pool)
+
+        # Slot 3 — fill from remaining; when full, only allow a passive if neither
+        # of the first two slots already has one (cap at 1 passive per screen when full)
+        already_has_passive = any(c.get("effect") == "passive" for c in chosen)
+        remaining = [e for e in pool
+                     if id(e) not in chosen_ids
+                     and (e.get("effect") != "passive"
+                          or not self._passives_full
+                          or not already_has_passive)]
+        if remaining:
+            chosen.append(random.choice(remaining))
+
+        random.shuffle(chosen)
+        self.choices = chosen
 
     def handle_event(self, event: pygame.event.Event) -> dict | None:
         """Returns the chosen upgrade dict, or None if still choosing."""
@@ -336,19 +392,21 @@ class LevelUpScreen:
             icon = self.font_big.render(choice["icon"], True, icon_color)
             surface.blit(icon, (cx + 50, cy + 18))
 
-            # Name
+            # Name — centered in the right text area (cx+90 .. cx+card_w-10)
+            text_x = cx + 90
+            text_w = card_w - 100
             name = self.font.render(choice["name"], True, WHITE)
-            surface.blit(name, (cx + 95, cy + 18))
+            name_x = text_x + (text_w - name.get_width()) // 2
+            surface.blit(name, (max(text_x, name_x), cy + 18))
 
-            # Description — word-wrap to fit card width
+            # Description — pixel-width word-wrap, each line centered
             desc = choice.get("desc", "")
             if desc:
-                # Break into lines of ~34 chars so they fit the ~255px available space
                 words = desc.split()
                 lines, line_buf = [], []
                 for word in words:
                     test = " ".join(line_buf + [word])
-                    if len(test) > 34 and line_buf:
+                    if self.font_small.size(test)[0] > text_w and line_buf:
                         lines.append(" ".join(line_buf))
                         line_buf = [word]
                     else:
@@ -357,7 +415,8 @@ class LevelUpScreen:
                     lines.append(" ".join(line_buf))
                 for li, line_text in enumerate(lines[:2]):
                     dl = self.font_small.render(line_text, True, (160, 160, 160))
-                    surface.blit(dl, (cx + 95, cy + 46 + li * 16))
+                    dl_x = text_x + (text_w - dl.get_width()) // 2
+                    surface.blit(dl, (max(text_x, dl_x), cy + 46 + li * 16))
 
             # Type tag
             ctype = choice.get("type", "stat")
@@ -376,8 +435,8 @@ class LevelUpScreen:
             # Passives full warning on passive choices
             if self._passives_full and choice.get("effect") == "passive":
                 warn_color = (255, 180, 50)
-                warn_text = self.font_small.render("\u26a0 SLOTS FULL — SWAP", True, warn_color)
-                wx = cx + 95
+                warn_text = self.font_small.render("\u26a0 SLOTS FULL \u2014 SWAP", True, warn_color)
+                wx = text_x + (text_w - warn_text.get_width()) // 2
                 wy = cy + 80
                 pygame.draw.rect(surface, (60, 40, 10), (wx - 3, wy - 1, warn_text.get_width() + 6, warn_text.get_height() + 2), border_radius=3)
                 surface.blit(warn_text, (wx, wy))

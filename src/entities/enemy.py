@@ -112,6 +112,12 @@ ENEMY_TYPES = {
         "shoot_cooldown": 9999, "bullet_damage": 0,
         "xp_value": 55, "status_on_hit": "poison",
     },
+    "bulwark": {
+        "hp": 520, "speed": 1.6, "size": 40,
+        "damage": 30, "shoot_range": 0,
+        "shoot_cooldown": 9999, "bullet_damage": 0,
+        "xp_value": 65, "status_on_hit": "slow",
+    },
     "street_preacher": {
         "hp": 6750, "speed": 1.4, "size": 52,
         "damage": 26, "shoot_range": 320,
@@ -164,16 +170,16 @@ ENEMY_TYPES = {
         "xp_value": 48, "status_on_hit": "poison",
     },
     "architect": {
-        "hp": 16800, "speed": 1.2, "size": 56,
-        "damage": 30, "shoot_range": 340,
-        "shoot_cooldown": 800, "bullet_damage": 24,
+        "hp": 22000, "speed": 1.4, "size": 72,
+        "damage": 30, "shoot_range": 380,
+        "shoot_cooldown": 700, "bullet_damage": 26,
         "xp_value": 400, "status_on_hit": "slow",
         "special": "void_rift",
     },
     "nexus": {
-        "hp": 84000, "speed": 0.9, "size": 120,
-        "damage": 70, "shoot_range": 480,
-        "shoot_cooldown": 380, "bullet_damage": 42,
+        "hp": 140000, "speed": 1.1, "size": 140,
+        "damage": 80, "shoot_range": 520,
+        "shoot_cooldown": 320, "bullet_damage": 48,
         "xp_value": 2000, "status_on_hit": "insanity",
         "special": "null_burst",
     },
@@ -308,7 +314,7 @@ class Enemy:
             "street_preacher": (3, 0.50),   # 3 fire shots
             "eldritch_horror": (7, 0.70),   # 7-shot tentacle fan
             "architect":       (3, 0.40),   # 3 void bolts
-            "nexus":           (9, 0.80),   # 9-shot spiral ring
+            "nexus":           (11, 0.85),  # 11-shot spiral ring
         }
         if enemy_type in _boss_spread:
             self.shoot_spread_count, self.shoot_spread_arc = _boss_spread[enemy_type]
@@ -335,7 +341,8 @@ class Enemy:
         # Corpse linger — stays visible this many ms after death
         self._corpse_until = 0
         self._death_time = 0
-        self._corpse_surf = None  # cached at death
+        self._corpse_surf = None   # body ellipse, cached at death
+        self._spark_surf = None    # spark-dot overlay (fades out in first 33%)
 
         # Animation
         self.anim_offset = random.uniform(0, math.tau)
@@ -388,6 +395,23 @@ class Enemy:
         self._rat_jitter_timer = 0
         # Cyber raccoon: dodge dash on being hit
         self._raccoon_dodge_timer = -2000
+        # Bulwark: shield-charge-stun state machine
+        self._bulwark_state = "guarding"
+        self._bulwark_charge_cooldown = 3000
+        self._bulwark_last_charge = -2000
+        self._bulwark_charge_start = 0
+        self._bulwark_charge_dx = 0.0
+        self._bulwark_charge_dy = 0.0
+        self._bulwark_stun_until = 0
+        # Architect: phase teleport + shard split
+        self._architect_teleport_cooldown = 3200
+        self._architect_last_teleport = -4000
+        self._architect_split_done = False
+        self._wants_split = False
+        # Nexus: cycles through all boss specials
+        _nexus_pool = ["null_burst", "eldritch_pull", "void_rift", "bleed_storm", "fire_ring"]
+        self._nexus_cycle_pool = _nexus_pool if enemy_type == "nexus" else []
+        self._nexus_cycle_idx = 0
 
     _BOSS_TYPES = frozenset(("iron_sentinel", "supreme_d_lek", "street_preacher",
                              "eldritch_horror", "architect", "nexus",
@@ -426,6 +450,19 @@ class Enemy:
         # Void wisp: phase through attacks
         if self._phase_chance > 0 and random.random() < self._phase_chance:
             return
+        # Bulwark: frontal shield blocks all damage while guarding; double damage when stunned
+        if self.enemy_type == "bulwark":
+            if self._bulwark_state == "guarding" and (knockback_x != 0 or knockback_y != 0):
+                import math as _m
+                hit_angle = _m.atan2(knockback_y, knockback_x)
+                face_angle = _m.atan2(self.face_y, self.face_x)
+                diff = abs(hit_angle - face_angle)
+                if diff > _m.pi:
+                    diff = 2 * _m.pi - diff
+                if diff > _m.pi * 0.5:  # hit from the front — blocked
+                    return
+            elif self._bulwark_state == "stunned":
+                amount = amount * 2  # stunned = 2× damage window
         # Shielder: frontal shield reduces damage by 70%
         if self.enemy_type == "shielder" and (knockback_x != 0 or knockback_y != 0):
             import math as _m
@@ -503,8 +540,11 @@ class Enemy:
                     self.last_shoot_time = now
                     self.gun_flash_timer = now
             else:
-                self.x += (dx / dist) * effective_speed
-                self.y += (dy / dist) * effective_speed
+                # Bulwark handles its own movement in its state machine below
+                if not (self.enemy_type == "bulwark" and
+                        self._bulwark_state in ("charging", "stunned")):
+                    self.x += (dx / dist) * effective_speed
+                    self.y += (dy / dist) * effective_speed
 
         # ── Per-type tactical movement ──
 
@@ -610,6 +650,23 @@ class Enemy:
                 self.x = player_x + math.cos(angle) * td
                 self.y = player_y + math.sin(angle) * td
 
+        # Architect: phase-teleport at distance when below 60% HP; split at 30%
+        if self.enemy_type == "architect":
+            hp_frac = self.hp / self.max_hp if self.max_hp > 0 else 1.0
+            cooldown = 2000 if hp_frac < 0.30 else 3200
+            if hp_frac < 0.60 and now - self._architect_last_teleport > cooldown:
+                self._architect_last_teleport = now
+                # Teleport to a position across the arena (far from current pos)
+                angle = math.atan2(player_y - self.y, player_x - self.x)
+                angle += math.pi + random.uniform(-0.8, 0.8)  # roughly opposite side
+                td = random.uniform(240, 380)
+                self.x = player_x + math.cos(angle) * td
+                self.y = player_y + math.sin(angle) * td
+                self.hit_flash = now  # white flash on teleport
+            if hp_frac < 0.30 and not self._architect_split_done:
+                self._architect_split_done = True
+                self._wants_split = True
+
         # D-Lek: tactical blink to optimal firing range when player closes in
         if self.enemy_type == "d_lek" and now - self._last_teleport > 7000:
             if dist < 100:  # player too close — blink away to shooting range
@@ -676,6 +733,30 @@ class Enemy:
                     self._dog_leap_state = "chase"
                     self._dog_last_leap = now
 
+        # Bulwark: shield-charge-stun state machine
+        if self.enemy_type == "bulwark":
+            if self._bulwark_state == "guarding":
+                # Slow approach with shield raised toward player — handled by default move logic
+                # Start a charge when player is in range and cooldown has passed
+                if dist < 220 and now - self._bulwark_last_charge > self._bulwark_charge_cooldown:
+                    self._bulwark_state = "charging"
+                    self._bulwark_charge_start = now
+                    self._bulwark_last_charge = now
+                    if dist > 0:
+                        self._bulwark_charge_dx = dx / dist
+                        self._bulwark_charge_dy = dy / dist
+            elif self._bulwark_state == "charging":
+                # Rapid dash for 380ms
+                self.x += self._bulwark_charge_dx * 9.0 * speed_mult
+                self.y += self._bulwark_charge_dy * 9.0 * speed_mult
+                if now - self._bulwark_charge_start > 380:
+                    self._bulwark_state = "stunned"
+                    self._bulwark_stun_until = now + 1600
+            elif self._bulwark_state == "stunned":
+                # Cannot move — vulnerable window (already handled in take_damage)
+                if now > self._bulwark_stun_until:
+                    self._bulwark_state = "guarding"
+                    self._bulwark_charge_cooldown = 2800 + random.randint(0, 600)
         # Boss special attacks
         if self._special and self.is_boss and not self._special_active and not self._special2_active:
             if now - self._last_special > self._special_cooldown and dist < self._special_trigger_range:
@@ -708,6 +789,24 @@ class Enemy:
             elapsed = now - self._special_timer
             if elapsed > self._special_duration:
                 self._special_active = False
+                # Nexus: advance to the next special in the rotation
+                if self._nexus_cycle_pool:
+                    self._nexus_cycle_idx = (self._nexus_cycle_idx + 1) % len(self._nexus_cycle_pool)
+                    next_sp = self._nexus_cycle_pool[self._nexus_cycle_idx]
+                    self._special = next_sp
+                    _sp_cycle_params = {
+                        "null_burst":    {"cooldown": 3500, "duration": 700,  "range": 400, "aoe_mult": 4.0},
+                        "eldritch_pull": {"cooldown": 5000, "duration": 1500, "range": 500, "aoe_mult": 3.0},
+                        "void_rift":     {"cooldown": 4000, "duration": 1000, "range": 400, "aoe_mult": 2.5},
+                        "bleed_storm":   {"cooldown": 4500, "duration": 800,  "range": 600, "aoe_mult": 1.0},
+                        "fire_ring":     {"cooldown": 4500, "duration": 1400, "range": 450, "aoe_mult": 2.0},
+                    }
+                    _sp = _sp_cycle_params.get(next_sp, {})
+                    phase_mult = 0.6 if self._phase2_active else 1.0
+                    self._special_cooldown   = int(_sp.get("cooldown", 4000)   * phase_mult)
+                    self._special_duration   = _sp.get("duration", 700)
+                    self._special_trigger_range = _sp.get("range", 400)
+                    self._special_aoe_mult   = _sp.get("aoe_mult", 3.0)
 
         if self._special2_active:
             elapsed2 = now - self._special2_timer
@@ -796,17 +895,27 @@ class Enemy:
                 half = self.size // 2
                 cw = max(4, int(self.size * 1.2))
                 ch = max(3, int(self.size * 0.35))
-                # Build corpse surface once, reuse with fading alpha
+                # Build corpse surface once, reuse with fading alpha.
+                # Spark dots are on a separate surface so they can fade out
+                # in the first 33% of the corpse lifetime independently.
                 if self._corpse_surf is None:
                     csurf = pygame.Surface((cw, ch + 6), pygame.SRCALPHA)
                     pygame.draw.ellipse(csurf, (40, 20, 20, 220), (0, 0, cw, ch))
                     pygame.draw.ellipse(csurf, (80, 30, 30, 110), (0, 0, cw, ch), 2)
+                    self._corpse_surf = csurf
+                    ssurf = pygame.Surface((cw, ch + 6), pygame.SRCALPHA)
                     for i in range(3):
                         dot_x = cw // 2 + int((i - 1) * cw * 0.25)
-                        pygame.draw.circle(csurf, (200, 20, 20, 200), (dot_x, ch // 2), 2)
-                    self._corpse_surf = csurf
+                        pygame.draw.circle(ssurf, (200, 20, 20, 200), (dot_x, ch // 2), 2)
+                    self._spark_surf = ssurf
+                blit_pos = (sx - cw // 2, sy - ch // 2 + half // 2)
                 self._corpse_surf.set_alpha(alpha)
-                surface.blit(self._corpse_surf, (sx - cw // 2, sy - ch // 2 + half // 2))
+                surface.blit(self._corpse_surf, blit_pos)
+                # Sparks fade out in the first 33% of corpse lifetime
+                spark_a = int(200 * max(0.0, 1.0 - t / 0.33))
+                if self._spark_surf is not None and spark_a > 0:
+                    self._spark_surf.set_alpha(spark_a)
+                    surface.blit(self._spark_surf, blit_pos)
             return
         sx = int(self.x - camera_x)
         sy = int(self.y - camera_y)
@@ -874,6 +983,8 @@ class Enemy:
             self._draw_cultist(surface, sx, sy, now)
         elif self.enemy_type == "shambler":
             self._draw_shambler(surface, sx, sy, now)
+        elif self.enemy_type == "bulwark":
+            self._draw_bulwark(surface, sx, sy, now)
         elif self.enemy_type == "street_preacher":
             self._draw_preacher(surface, sx, sy, now)
         elif self.enemy_type == "eldritch_horror":
@@ -1022,6 +1133,39 @@ class Enemy:
                             pygame.draw.circle(r_surf, (0, 180, 255, a), (_mr2, _mr2), ring_r, 3)
                             surface.blit(r_surf, (sx - _mr2, sy - _mr2))
 
+            elif self._special == "eldritch_pull":
+                # Gravity pull vortex — purple spiraling ring contracting inward
+                ring_r = int(max_ring * (1.0 - progress))
+                a = int(140 * (1.0 - progress))
+                if ring_r > 2 and a > 0:
+                    _mr2 = max_ring + 2
+                    pull_s = self._get_surf(_mr2 * 2, _mr2 * 2)
+                    pygame.draw.circle(pull_s, (160, 40, 220, a), (_mr2, _mr2), ring_r, 5)
+                    pygame.draw.circle(pull_s, (220, 80, 255, a // 2), (_mr2, _mr2), max(1, ring_r - 8), 2)
+                    surface.blit(pull_s, (sx - _mr2, sy - _mr2))
+
+            elif self._special == "fire_ring":
+                # Ring of fire erupting from boss
+                ring_r = int(max_ring * min(1.0, progress * 1.4))
+                a = int(160 * max(0, 1.0 - progress * 0.7))
+                if ring_r > 0 and a > 0:
+                    _mr2 = max_ring + 2
+                    f_surf = self._get_surf(_mr2 * 2, _mr2 * 2)
+                    pygame.draw.circle(f_surf, (255, 80, 0, a), (_mr2, _mr2), ring_r, 8)
+                    pygame.draw.circle(f_surf, (255, 200, 50, a // 2), (_mr2, _mr2), max(1, ring_r - 10), 3)
+                    surface.blit(f_surf, (sx - _mr2, sy - _mr2))
+
+            elif self._special == "bleed_storm":
+                # Wide crimson pulse radiating outward
+                ring_r = int(max_ring * progress)
+                a = int(120 * (1.0 - progress))
+                if ring_r > 0 and a > 0:
+                    _mr2 = max_ring + 2
+                    b_surf = self._get_surf(_mr2 * 2, _mr2 * 2)
+                    pygame.draw.circle(b_surf, (200, 20, 40, a), (_mr2, _mr2), ring_r, 6)
+                    pygame.draw.circle(b_surf, (255, 60, 60, a // 3), (_mr2, _mr2), ring_r)
+                    surface.blit(b_surf, (sx - _mr2, sy - _mr2))
+
     # ═══════════════════════════════════════════ DALEK drawing
     # ═══════════════════════════════════════════ CYBER RAT drawing
     def _draw_cyber_rat(self, surface, sx, sy, now):
@@ -1167,10 +1311,6 @@ class Enemy:
                              (sx + lx_off, leg_base_y), (sx + lx_off, foot_y), 3)
             pygame.draw.circle(surface, joint_color, (sx + lx_off, leg_base_y + 4), 3)
             pygame.draw.circle(surface, (60, 50, 40), (sx + lx_off, foot_y), 3)
-
-        # ELITE label
-        label = get_font("consolas", 10, True).render("SUB-BOSS", True, (255, 140, 20))
-        surface.blit(label, (sx - label.get_width() // 2, sy - half - 22))
 
     # ═══════════════════════════════════════════ EMPEROR'S ELITE GUARD drawing
     def _draw_emperors_elite_guard(self, surface, sx, sy, now):
@@ -1380,10 +1520,6 @@ class Enemy:
         pygame.draw.circle(surface, (255, 80, 0), (eye_ex, eye_ey), 5)
         pygame.draw.circle(surface, (255, 200, 50), (eye_ex, eye_ey), 3)
 
-        # "MINI BOSS" label
-        label = get_font("consolas", 10, True).render("ELITE", True, (255, 200, 50))
-        surface.blit(label, (sx - label.get_width() // 2, sy - half - 22))
-
     # ═══════════════════════════════════════════ BIG BOSS drawing
     def _draw_big_boss(self, surface, sx, sy, now):
         """D-Lek Emperor — gold/bronze imperial Dalek design with glowing core."""
@@ -1556,10 +1692,6 @@ class Enemy:
                          (eye_stalk_base_x, eye_stalk_base_y), (eye_x, eye_y), 3)
         pygame.draw.line(surface, gold,
                          (eye_stalk_base_x, eye_stalk_base_y), (eye_x, eye_y), 1)
-
-        # "BOSS" label
-        label = get_font("consolas", 12, True).render("BOSS", True, (255, 60, 60))
-        surface.blit(label, (sx - label.get_width() // 2, sy - half - 26))
 
     # ═══════════════════════════════════════════ CHARGER drawing
     def _draw_charger(self, surface, sx, sy, now):
@@ -1920,6 +2052,70 @@ class Enemy:
         pygame.draw.circle(surface, (160, 160, 80), (sx - 5, int(sy - 4 + bob)), 3)
         pygame.draw.circle(surface, (160, 160, 80), (sx + 5, int(sy - 4 + bob)), 3)
 
+    # ═══════════════════════════════════════════ BULWARK drawing (Zone 2-3)
+    def _draw_bulwark(self, surface, sx, sy, now):
+        is_hit = now - self.hit_flash < 100
+        half = self.size // 2
+        state = self._bulwark_state
+
+        # Body — heavy armored hexagon
+        pts = []
+        for i in range(6):
+            angle = i * math.pi / 3 + math.pi / 6
+            pts.append((sx + int(math.cos(angle) * (half - 2)),
+                        sy + int(math.sin(angle) * (half - 2))))
+        if state == "stunned":
+            body_color = (255, 60, 60) if not is_hit else (255, 255, 200)
+            pulse = 0.6 + 0.4 * math.sin(now * 0.018)
+            stun_s = self._get_surf((half + 8) * 2, (half + 8) * 2)
+            pygame.draw.circle(stun_s, (255, 80, 50, int(80 * pulse)),
+                               (half + 8, half + 8), half + 6, 4)
+            surface.blit(stun_s, (sx - half - 8, sy - half - 8))
+        elif state == "charging":
+            body_color = (255, 140, 40) if not is_hit else (255, 255, 255)
+        else:
+            body_color = (80, 100, 120) if not is_hit else (255, 255, 255)
+        pygame.draw.polygon(surface, body_color, pts)
+        pygame.draw.polygon(surface, (140, 170, 200), pts, 2)
+
+        # Armor plates — cross pattern over body
+        plate_color = (50, 70, 90) if not is_hit else (220, 240, 255)
+        pygame.draw.line(surface, plate_color,
+                         (sx - half + 6, sy), (sx + half - 6, sy), 5)
+        pygame.draw.line(surface, plate_color,
+                         (sx, sy - half + 6), (sx, sy + half - 6), 5)
+
+        # Red LED eye
+        pygame.draw.circle(surface, (255, 40, 40) if state != "stunned" else (80, 80, 80),
+                           (sx, sy), 5)
+        pygame.draw.circle(surface, (255, 130, 130), (sx, sy), 2)
+
+        # Frontal shield — large flat slab facing the player (face_x, face_y direction)
+        if state in ("guarding", "charging"):
+            shield_dist = half - 2
+            sh_cx = sx + int(self.face_x * shield_dist)
+            sh_cy = sy + int(self.face_y * shield_dist)
+            perp_x, perp_y = -self.face_y, self.face_x
+            half_w = half - 4
+            sh_thick = 8 if state == "charging" else 10
+            sh_pts = [
+                (sh_cx + int(perp_x * half_w), sh_cy + int(perp_y * half_w)),
+                (sh_cx - int(perp_x * half_w), sh_cy - int(perp_y * half_w)),
+                (sh_cx - int(perp_x * half_w) + int(self.face_x * sh_thick),
+                 sh_cy - int(perp_y * half_w) + int(self.face_y * sh_thick)),
+                (sh_cx + int(perp_x * half_w) + int(self.face_x * sh_thick),
+                 sh_cy + int(perp_y * half_w) + int(self.face_y * sh_thick)),
+            ]
+            shield_col = (200, 220, 255) if state == "guarding" else (255, 180, 60)
+            pygame.draw.polygon(surface, shield_col, sh_pts)
+            pygame.draw.polygon(surface, (255, 255, 255), sh_pts, 2)
+
+        # Charging trail effect
+        if state == "charging":
+            trail_s = self._get_surf((half + 6) * 2, (half + 6) * 2)
+            pygame.draw.circle(trail_s, (255, 120, 30, 60), (half + 6, half + 6), half + 4)
+            surface.blit(trail_s, (sx - half - 6, sy - half - 6))
+
     # ═══════════════════════════════════════════ PREACHER drawing (Zone 2 mini boss)
     def _draw_preacher(self, surface, sx, sy, now):
         is_hit = now - self.hit_flash < 100
@@ -1961,10 +2157,6 @@ class Enemy:
         eye_color = (255, 180, 50) if not is_hit else (255, 255, 200)
         pygame.draw.circle(surface, eye_color, (sx - 4, int(sy - 16 + bob)), 3)
         pygame.draw.circle(surface, eye_color, (sx + 4, int(sy - 16 + bob)), 3)
-        # ELITE label
-        label = get_font("consolas", 10, True).render("ELITE", True, (200, 100, 255))
-        surface.blit(label, (sx - label.get_width() // 2, sy - half - 24))
-
     # ═══════════════════════════════════════════ ELDRITCH HORROR drawing (Zone 2 boss)
     def _draw_eldritch_horror(self, surface, sx, sy, now):
         is_hit = now - self.hit_flash < 100
@@ -2018,10 +2210,6 @@ class Enemy:
             fx = sx + int(self.face_x * half)
             fy = sy + int(self.face_y * half)
             pygame.draw.circle(surface, (140, 60, 200), (fx, fy), 10)
-
-        # BOSS label
-        label = get_font("consolas", 12, True).render("BOSS", True, (180, 80, 220))
-        surface.blit(label, (sx - label.get_width() // 2, sy - half - 26))
 
     # ═══════════════════════════════════════════ VOID WISP drawing
     def _draw_void_wisp(self, surface, sx, sy, now):
@@ -2245,10 +2433,6 @@ class Enemy:
             fy = sy + int(self.face_y * half)
             pygame.draw.circle(surface, (100, 220, 255), (fx, fy), 8)
 
-        # ELITE label
-        label = get_font("consolas", 10, True).render("ELITE", True, (100, 200, 255))
-        surface.blit(label, (sx - label.get_width() // 2, sy - half - 24))
-
     # ═══════════════════════════════════════════ NEXUS drawing (Zone 3 final boss)
     def _draw_nexus(self, surface, sx, sy, now):
         is_hit = now - self.hit_flash < 100
@@ -2352,17 +2536,6 @@ class Enemy:
             pygame.draw.circle(gs2, (220, 80, 255, 220), (14, 14), 14)
             surface.blit(gs2, (fx - 14, fy - 14))
             pygame.draw.circle(surface, (255, 200, 255), (fx, fy), 6)
-
-        # ── FINAL BOSS label ─────────────────────────────────────────────────
-        label = get_font("consolas", 13, True).render("FINAL BOSS", True, (255, 60, 180))
-        surface.blit(label, (sx - label.get_width() // 2, sy - half - 32))
-        # Pulsing subtitle
-        sub_a = int(160 + 95 * pulse2)
-        sub_s = get_font("consolas", 9, False).render("THE NEXUS", True, (180, 80, 255))
-        sub_surf = pygame.Surface(sub_s.get_size(), pygame.SRCALPHA)
-        sub_surf.blit(sub_s, (0, 0))
-        sub_surf.set_alpha(sub_a)
-        surface.blit(sub_surf, (sx - sub_surf.get_width() // 2, sy - half - 18))
 
     def _draw_dying_phase(self, surface: pygame.Surface, sx: int, sy: int,
                           elapsed: int, now: int):

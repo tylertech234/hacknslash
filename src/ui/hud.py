@@ -15,6 +15,7 @@ class HUD:
         self.font = pygame.font.SysFont("consolas", 20)
         self.font_big = pygame.font.SysFont("consolas", 36)
         self.font_small = pygame.font.SysFont("consolas", 14)
+        self._vig_surf: pygame.Surface | None = None
 
     def draw(self, surface: pygame.Surface, player, wave: int, enemy_count: int,
              darkness: float = 0.0, boss_wave: bool = False, boss_enemies: list = None):
@@ -88,75 +89,97 @@ class HUD:
         surface.blit(num_surf, (bar_x + bar_w // 2 - num_surf.get_width() // 2, bar_y - 14))
 
     def _draw_energy_bar(self, surface: pygame.Surface, player):
-        """Horizontal energy bar under the HP bar. Gold border, fireworks when full."""
+        """Super energy bar — solid fill, amber→gold, electric arcs when ready."""
         bar_x, bar_y = 20, 48
-        bar_w, bar_h = 220, 16
+        bar_w, bar_h = 220, 18
         energy = getattr(player, "energy", 0)
-        max_energy = getattr(player, "max_energy", 100)
+        max_energy = getattr(player, "max_energy", 120)
         ratio = min(1.0, energy / max_energy) if max_energy > 0 else 0
         now = pygame.time.get_ticks()
         ready = energy >= max_energy
-        flash_on = ready and (now // 80) % 2 == 0   # faster flash
 
-        # Subtle golden edge vignette when super is ready
+        # ── Edge vignette when super is ready — alternates gold/blue ─────────
         if ready:
-            edge_pulse = int(28 + 18 * math.sin(now * 0.006))
-            vig = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
-            for t in range(14):
-                a = max(0, edge_pulse - t * 3)
-                pygame.draw.rect(vig, (255, 200, 0, a),
+            pulse_a = int(22 + 14 * abs(math.sin(now * 0.005)))
+            if not hasattr(self, '_vig_surf') or self._vig_surf is None:
+                self._vig_surf = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+            self._vig_surf.fill((0, 0, 0, 0))
+            flash_blue = (now // 120) % 2 == 0
+            for t in range(12):
+                a = max(0, pulse_a - t * 3)
+                col = (80, 200, 255, a) if flash_blue else (255, 210, 0, a)
+                pygame.draw.rect(self._vig_surf, col,
                                  (t, t, SCREEN_WIDTH - t * 2, SCREEN_HEIGHT - t * 2), 1)
-            surface.blit(vig, (0, 0))
+            surface.blit(self._vig_surf, (0, 0))
+        else:
+            self._vig_surf = None
 
-        # Background
-        pygame.draw.rect(surface, (25, 18, 0), (bar_x, bar_y, bar_w, bar_h))
+        # ── Background ────────────────────────────────────────────────────────
+        pygame.draw.rect(surface, (25, 14, 0), (bar_x - 1, bar_y - 1, bar_w + 2, bar_h + 2),
+                         border_radius=4)
+        pygame.draw.rect(surface, (28, 16, 0), (bar_x, bar_y, bar_w, bar_h), border_radius=3)
 
-        # Fill
+        # ── Filled portion ────────────────────────────────────────────────────
         fill_w = int(bar_w * ratio)
         if fill_w > 0:
             if ready:
-                fill_c = (255, 255, 100) if flash_on else (255, 200, 0)
+                pulse = 0.5 + 0.5 * abs(math.sin(now * 0.010))
+                r, g, b = 255, int(215 + 40 * pulse), int(60 * pulse)
+            elif ratio > 0.7:
+                r, g, b = 255, int(150 + 100 * ratio), 0
             else:
-                r = min(255, 160 + int(95 * ratio))
-                g = min(255, 80 + int(100 * ratio))
-                fill_c = (r, g, 0)
-            pygame.draw.rect(surface, fill_c, (bar_x, bar_y, fill_w, bar_h))
+                r, g, b = int(180 + 75 * ratio), int(80 + 80 * ratio), 0
+            pygame.draw.rect(surface, (r, g, b), (bar_x, bar_y, fill_w, bar_h), border_radius=3)
+            # Highlight stripe on top
+            hl = pygame.Surface((fill_w, 4), pygame.SRCALPHA)
+            hl.fill((255, 255, 255, 50))
+            surface.blit(hl, (bar_x, bar_y + 1))
 
-        # Border
-        if ready:
-            pulse = int(55 * abs(math.sin(now * 0.010)))
-            border_c = (255, min(255, 200 + pulse), 0)
-            # Thick glowing border
-            pygame.draw.rect(surface, border_c, (bar_x - 2, bar_y - 2, bar_w + 4, bar_h + 4), 3)
-            pygame.draw.rect(surface, (255, 255, 255), (bar_x, bar_y, bar_w, bar_h), 1)
-        else:
-            pygame.draw.rect(surface, (160, 110, 10), (bar_x, bar_y, bar_w, bar_h), 1)
+        # ── Border ────────────────────────────────────────────────────────────
+        border_col = (255, 220, 0) if ready else (90, 55, 8)
+        pygame.draw.rect(surface, border_col, (bar_x, bar_y, bar_w, bar_h), 2, border_radius=3)
 
-        # Tall flame ripple above bar when full
+        # ── Electric arcs when ready ──────────────────────────────────────────
         if ready:
-            _flame_h = 20
-            flame_surf = pygame.Surface((bar_w, _flame_h), pygame.SRCALPHA)
-            for i in range(0, bar_w, 4):
-                flicker = math.sin(now * 0.011 + i * 0.35)
-                fh = int(5 + 9 * abs(flicker))
-                g_c = int(60 + 160 * abs(flicker))
-                for row in range(fh):
-                    alpha = int(255 * (1.0 - row / (fh + 1)))
-                    pygame.draw.rect(flame_surf, (255, g_c, 0, alpha), (i, row, 4, 1))
-            surface.blit(flame_surf, (bar_x, bar_y - _flame_h + 4))
+            for arc_i in range(2):
+                phase = now * 0.020 + arc_i * 3.9
+                pts = []
+                steps = 24
+                for s in range(steps + 1):
+                    ax = bar_x + int(bar_w * s / steps)
+                    amp = 5 + 3 * arc_i
+                    ay = bar_y - 3 - arc_i * 5 + int(amp * math.sin(phase + s * 0.65))
+                    pts.append((ax, ay))
+                if len(pts) > 1:
+                    arc_col = (160, 220, 255) if arc_i == 0 else (255, 255, 255)
+                    pygame.draw.lines(surface, arc_col, False, pts, 1)
+            # Bright spark nodes along the arc
+            for i in range(0, bar_w + 1, 30):
+                phase2 = now * 0.022 + i * 0.14
+                spy = bar_y - 4 + int(5 * math.sin(phase2))
+                a2 = 180 + int(75 * abs(math.sin(phase2)))
+                ss = pygame.Surface((6, 6), pygame.SRCALPHA)
+                pygame.draw.circle(ss, (255, 255, 200, a2), (3, 3), 2)
+                surface.blit(ss, (bar_x + i - 3, spy - 3))
 
-        # Label — big bold flashing when ready
+        # ── Label ─────────────────────────────────────────────────────────────
         if ready:
-            lbl_color = (255, 255, 255) if flash_on else (255, 220, 0)
+            flash_on = (now // 70) % 2 == 0
+            lbl_color = (255, 255, 255) if flash_on else (255, 215, 0)
             lbl = self.font.render("⚡ SUPER READY ⚡", True, lbl_color)
-            # Shadow
-            shadow = self.font.render("⚡ SUPER READY ⚡", True, (80, 40, 0))
-            lx = bar_x + bar_w // 2 - lbl.get_width() // 2
-            surface.blit(shadow, (lx + 2, bar_y + 2))
-            surface.blit(lbl, (lx, bar_y))
+            shadow = self.font.render("⚡ SUPER READY ⚡", True, (70, 35, 0))
+            scale = 1.0 + 0.06 * abs(math.sin(now * 0.008))
+            scaled_w = max(lbl.get_width(), int(lbl.get_width() * scale))
+            scaled_h = max(lbl.get_height(), int(lbl.get_height() * scale))
+            lbl_scaled = pygame.transform.scale(lbl, (scaled_w, scaled_h))
+            shadow_scaled = pygame.transform.scale(shadow, (scaled_w, scaled_h))
+            lx = bar_x + bar_w // 2 - scaled_w // 2
+            surface.blit(shadow_scaled, (lx + 2, bar_y + 2))
+            surface.blit(lbl_scaled, (lx, bar_y))
         else:
-            e_lbl = self.font_small.render(f"ENERGY  {energy}/{max_energy}", True, (140, 100, 10))
-            surface.blit(e_lbl, (bar_x + 4, bar_y + 1))
+            pct = int(ratio * 100)
+            e_lbl = self.font_small.render(f"SUPER  {pct}%", True, (150, 105, 15))
+            surface.blit(e_lbl, (bar_x + 4, bar_y + 2))
 
 
     def _draw_info(self, surface: pygame.Surface, player, wave: int, enemy_count: int,
