@@ -1238,16 +1238,12 @@ class Game:
         if self.spawner.just_started_wave and self.spawner.boss_wave:
             self.sounds.play("boss_roar")
             self.sounds.start_boss_music(self.current_zone)
-            # Auto-screenshot 400 ms after boss wave starts (effects visible)
-            self._pending_auto_shots.append((now + 400, "boss_spawn"))
 
         # Stop boss music when boss wave ends (no more boss enemies alive)
         if self.sounds.boss_music_playing:
             alive_bosses = [e for e in self.spawner.get_alive_enemies() if e.is_boss]
             if not alive_bosses and not self.spawner.wave_active:
                 self.sounds.stop_boss_music()
-                # Auto-screenshot 500 ms after boss is cleared — capture the victory
-                self._pending_auto_shots.append((now + 500, "boss_cleared"))
 
         # Campfire is active only between waves
         self.campfire.set_active(not self.spawner.wave_active)
@@ -1961,8 +1957,6 @@ class Game:
                 self.player.x, self.player.y, (255, 255, 100), count=24)
             self.animations.add_screen_shake(4)
             self.sounds.play("levelup")
-            # Auto-screenshot 300 ms later to catch the level-up card
-            self._pending_auto_shots.append((now + 300, "levelup"))
 
     def _spawn_healing_drop(self, x: float, y: float, kind: str):
         """Spawn the appropriate healing pickup for a healing prop type."""
