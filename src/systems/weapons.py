@@ -18,7 +18,7 @@ WEAPONS = {
         "desc": "Balanced blade. Reliable swing.",
         "class": "knight",
     },
-    "axe": {
+    "battle_axe": {
         "name": "Battle Axe",
         "damage_mult": 1.7,
         "range": 54,
@@ -42,18 +42,6 @@ WEAPONS = {
         "desc": "Spiked chain ball. Massive arc, sends enemies flying.",
         "class": "knight",
     },
-    "hammer": {
-        "name": "War Hammer",
-        "damage_mult": 2.2,
-        "range": 55,
-        "cooldown": 900,
-        "duration": 400,
-        "sweep_deg": 160,
-        "blade_color": (140, 130, 130),
-        "trail_color": (255, 120, 60),
-        "desc": "Devastating slam, very slow.",
-        "class": "knight",
-    },
     # Knight cyber upgrades
     "plasma_blade": {
         "name": "Plasma Blade",
@@ -64,8 +52,9 @@ WEAPONS = {
         "sweep_deg": 130,
         "blade_color": (0, 200, 255),
         "trail_color": (100, 220, 255),
-        "desc": "Superheated edge. Fast & deadly.",
+        "desc": "Superheated edge. Sets foes ablaze.",
         "class": "knight",
+        "on_hit_status": "fire",
     },
     "gravity_maul": {
         "name": "Gravity Maul",
@@ -112,7 +101,7 @@ WEAPONS = {
         "name": "Throwing Dagger",
         "damage_mult": 1.4,
         "range": 40,
-        "cooldown": 350,
+        "cooldown": 550,
         "duration": 120,
         "sweep_deg": 60,
         "blade_color": (180, 220, 220),
@@ -199,7 +188,7 @@ WEAPONS = {
     },
     "explosive_crossbow": {
         "name": "Explosive Crossbow",
-        "damage_mult": 2.2,
+        "damage_mult": 3.2,
         "range": 45,
         "cooldown": 900,
         "duration": 220,
@@ -209,9 +198,12 @@ WEAPONS = {
         "desc": "Explosive-tipped bolt. Arcs and detonates on impact.",
         "projectile": True,
         "grenade": True,
-        "proj_speed": 7.0,
+        "proj_speed": 8.0,
         "proj_lifetime": 700,
         "proj_count": 1,
+        "proj_style": "bolt",
+        "splash_radius": 140,
+        "sound": "bolt_boom",
         "class": "archer",
     },
     "burst_crossbow": {
@@ -270,8 +262,9 @@ WEAPONS = {
         "sweep_deg": 360,
         "blade_color": (0, 255, 255),
         "trail_color": (150, 255, 255),
-        "desc": "ZAP! Electric handshake of doom.",
+        "desc": "ZAP! Electric handshake of doom. Applies shock.",
         "class": "jester",
+        "on_hit_status": "shock",
     },
     "pie_launcher": {
         "name": "Pie Launcher",
@@ -282,12 +275,13 @@ WEAPONS = {
         "sweep_deg": 45,
         "blade_color": (255, 200, 150),
         "trail_color": (255, 255, 220),
-        "desc": "Cream pies. Deals splash damage.",
+        "desc": "Toxic cream pies. Poisons on hit.",
         "projectile": True,
         "proj_speed": 5.0,
         "proj_lifetime": 800,
         "proj_count": 1,
         "class": "jester",
+        "on_hit_status": "poison",
     },
     "confetti_grenade": {
         "name": "Confetti Grenade",
@@ -321,6 +315,24 @@ WEAPONS = {
         "orbiter_type": "box",
         "class": "jester",
     },
+    "spud_gun": {
+        "name": "Spud Gun",
+        "damage_mult": 1.6,
+        "range": 50,
+        "cooldown": 480,
+        "duration": 150,
+        "sweep_deg": 40,
+        "blade_color": (180, 140, 80),
+        "trail_color": (220, 190, 120),
+        "desc": "Launches potatoes at high velocity. Surprisingly lethal.",
+        "projectile": True,
+        "proj_speed": 8.5,
+        "proj_lifetime": 850,
+        "proj_count": 1,
+        "proj_visual": "potato",
+        "class": "jester",
+        "sound": "thump",
+    },
 }
 
 # ── Character class definitions ──
@@ -334,7 +346,7 @@ CHARACTER_CLASSES = {
         "damage_bonus": -2,
         "speed_bonus": 0,
         "knockback_bonus": 2.0,
-        "passives": ["melee_lifesteal", "armor_plating"],
+        "passives": ["melee_lifesteal"],
     },
     "archer": {
         "name": "Ranger",
@@ -344,7 +356,7 @@ CHARACTER_CLASSES = {
         "hp_bonus": 5,
         "damage_bonus": 0,
         "speed_bonus": 0.5,
-        "passives": ["crit_shots", "evasion", "nano_regen"],
+        "passives": ["evasion"],
     },
     "jester": {
         "name": "Jester",
@@ -354,7 +366,7 @@ CHARACTER_CLASSES = {
         "hp_bonus": 10,
         "damage_bonus": 0,
         "speed_bonus": 0.8,
-        "passives": ["lucky_crits", "confetti_burst", "vampiric_strike"],
+        "passives": ["lucky_crits"],
     },
 }
 
@@ -427,7 +439,7 @@ def draw_weapon(surface: pygame.Surface, sx: int, sy: int,
             _draw_grenade_idle(surface, sx, sy, sword_angle, blade_len, blade_color)
         elif "Crossbow" in wname:
             _draw_crossbow_idle(surface, sx, sy, sword_angle, blade_len, blade_color)
-        elif "Dagger" in wname or "Bow" in wname or "Rifle" in wname or "Scatter" in wname or "Banana" in wname or "Pie" in wname or "Ricochet" in wname or "Jack" in wname:
+        elif "Dagger" in wname or "Bow" in wname or "Rifle" in wname or "Scatter" in wname or "Banana" in wname or "Pie" in wname or "Ricochet" in wname or "Jack" in wname or "Spud" in wname:
             _draw_dagger_idle(surface, sx, sy, sword_angle, blade_len, blade_color)
         elif "Shield" in wname:
             _draw_shield_idle(surface, sx, sy, idle_angle, blade_len, blade_color)

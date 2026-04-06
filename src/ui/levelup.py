@@ -26,7 +26,11 @@ LEVEL_UPGRADES = [
     {"name": "Explosive Kills", "icon": "E", "color": (255, 150, 0),   "effect": "passive", "value": "explosive_kills", "desc": "25% chance for enemies to explode on death"},
     {"name": "Magnetic Field",  "icon": "F", "color": (150, 150, 255), "effect": "passive", "value": "magnetic_field",  "desc": "ALL pickups fly to you from much further away"},
     {"name": "Adrenaline Rush", "icon": "A", "color": (0, 255, 100),   "effect": "passive", "value": "adrenaline",      "desc": "+30% speed for 3s after each kill"},
-    {"name": "Rapid Dash",      "icon": ">", "color": (100, 220, 255), "effect": "dash_charges", "value": 1, "desc": "+1 dash charge before cooldown (stack up to 4 total)"},
+    {"name": "Rapid Dash",      "icon": ">", "color": (100, 220, 255), "effect": "dash_charges", "value": 1, "desc": "+1 dash charge before cooldown (max 2 total)"},
+    {"name": "Armor Plating",   "icon": "M", "color": (120, 180, 255), "effect": "passive", "value": "armor_plating",   "desc": "Take 15% less damage from all sources"},
+    {"name": "Critical Shots",   "icon": "!", "color": (255, 200, 50),  "effect": "passive", "value": "crit_shots",     "class_restrict": ["archer", "jester"], "desc": "20% chance for double damage on projectiles. Not available to Knight."},
+    {"name": "Melee Lifesteal",   "icon": "K", "color": (255, 80, 80),   "effect": "passive", "value": "melee_lifesteal", "class_restrict": ["knight", "jester"], "desc": "Heal 2 HP on melee kills. Not available to Ranger."},
+    {"name": "Confetti Burst",   "icon": "E", "color": (255, 100, 255), "effect": "passive", "value": "confetti_burst", "desc": "Kills have 20% chance to stun nearby enemies"},
     {"name": "Parry Deflect",   "icon": "P", "color": (200, 255, 180), "effect": "passive", "value": "parry_deflect", "class_restrict": "archer", "desc": "Parried bullets fire back at nearest enemy (2x damage). Ranger only."},
 ]
 
@@ -40,7 +44,7 @@ WEAPON_UPGRADES: dict[str, list[dict]] = {
         {"name": "Flame Slash",    "icon": "D", "color": (255, 120, 30),  "effect": "damage",   "value": 12, "desc": "+12 damage — burning sword strikes"},
         {"name": "Strike Tempo",   "icon": "C", "color": (255, 180, 80),  "effect": "cooldown", "value": 70, "desc": "-70ms cooldown — faster swing rhythm"},
     ],
-    "axe": [
+    "battle_axe": [
         {"name": "Cleaving Arc",   "icon": "R", "color": (200, 80, 50),   "effect": "range",    "value": 18, "desc": "+18 range — wider axe arc"},
         {"name": "Executioner",    "icon": "D", "color": (220, 60, 40),   "effect": "damage",   "value": 14, "desc": "+14 damage — decapitating blow"},
     ],
@@ -48,10 +52,7 @@ WEAPON_UPGRADES: dict[str, list[dict]] = {
         {"name": "Chain Momentum", "icon": "D", "color": (220, 190, 90),  "effect": "damage",   "value": 12, "desc": "+12 damage — spiked ball gathers momentum"},
         {"name": "Whip Extension", "icon": "R", "color": (200, 175, 120), "effect": "range",    "value": 16, "desc": "+16 range — longer chain, wider arc"},
     ],
-    "hammer": [
-        {"name": "Shockwave",      "icon": "D", "color": (255, 220, 50),  "effect": "damage",   "value": 16, "desc": "+16 damage — hammer shockwave"},
-        {"name": "Tectonic Force", "icon": "R", "color": (200, 150, 50),  "effect": "range",    "value": 20, "desc": "+20 range — ground-crack radius"},
-    ],
+
     "plasma_blade": [
         {"name": "Plasma Overcharge","icon":"C", "color": (0, 255, 200),  "effect": "cooldown", "value": 80, "desc": "-80ms cooldown — rapid plasma cuts"},
         {"name": "Thermal Edge",   "icon": "D", "color": (0, 200, 255),   "effect": "damage",   "value": 12, "desc": "+12 damage — superheated edge"},
@@ -121,8 +122,10 @@ WEAPON_UPGRADES: dict[str, list[dict]] = {
     "jack_in_box": [
         {"name": "Spring Loaded",  "icon": "C", "color": (200, 80, 255),  "effect": "cooldown", "value": 70, "desc": "-70ms cooldown — faster spring"},
         {"name": "Pop Goes Boom",  "icon": "D", "color": (180, 60, 220),  "effect": "damage",   "value": 12, "desc": "+12 damage — surprise explosion"},
-    ],
-}
+    ],    "spud_gun": [
+        {"name": "Starch Rounds",  "icon": "D", "color": (180, 140, 60),  "effect": "damage",   "value": 11, "desc": "+11 damage \u2014 heavyweight potatoes"},
+        {"name": "Spud Salvo",     "icon": "C", "color": (160, 120, 50),  "effect": "cooldown", "value": 65, "desc": "-65ms cooldown \u2014 rapid-fire spuds"},
+    ],}
 
 
 class LevelUpScreen:
@@ -156,8 +159,11 @@ class LevelUpScreen:
 
         # Add stat + passive upgrades (filter out already-owned passives, maxed tiers, and class-restricted upgrades)
         for u in LEVEL_UPGRADES:
-            if u.get("class_restrict") and u["class_restrict"] != player_class:
-                continue
+            cr = u.get("class_restrict")
+            if cr:
+                allowed = cr if isinstance(cr, list) else [cr]
+                if player_class not in allowed:
+                    continue
             if u["effect"] == "passive" and u["value"] in owned:
                 continue
             if u["effect"] == "glass_cannon" and "glass_cannon" in owned:

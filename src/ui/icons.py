@@ -289,9 +289,8 @@ def _pi_confetti(s, cx, cy, sz, c):
 def _draw_weapon_icon(surf: pygame.Surface, key: str, sz: int):
     _fn = {
         "sword":            _wi_sword,
-        "axe":              _wi_axe,
+        "battle_axe":       _wi_axe,
         "spear":            _wi_spear,
-        "hammer":           _wi_hammer,
         "plasma_blade":     _wi_plasma_blade,
         "gravity_maul":     _wi_gravity_maul,
         "blade_barrier":    _wi_blade_barrier,
@@ -307,6 +306,7 @@ def _draw_weapon_icon(surf: pygame.Surface, key: str, sz: int):
         "pie_launcher":     _wi_pie_launcher,
         "confetti_grenade": _wi_confetti_grenade,
         "jack_in_box":      _wi_jack_in_box,
+        "spud_gun":         _wi_spud_gun,
     }.get(key)
     if _fn:
         _fn(surf, sz // 2, sz // 2, sz)
@@ -625,3 +625,21 @@ def _wi_jack_in_box(s, cx, cy, sz):
            (cx, cy - 10 - r * 2 // 3),
            (cx + r // 3, cy - 10 - r // 3)]
     pygame.draw.polygon(s, bc, pts)
+
+
+def _wi_spud_gun(s, cx, cy, sz):
+    """Potato gun — barrel + lumpy potato projectile."""
+    r = sz // 2 - 2
+    # Barrel (pipe)
+    barrel_len = r
+    pygame.draw.rect(s, (120, 90, 50), (cx - barrel_len // 2, cy - 3, barrel_len, 6))
+    pygame.draw.rect(s, (80, 60, 30), (cx - barrel_len // 2, cy - 3, barrel_len, 6), 1)
+    # Stock/handle
+    pygame.draw.rect(s, (100, 75, 40), (cx - barrel_len // 2, cy + 3, barrel_len // 2, 5))
+    # Potato lump (oval) at muzzle
+    potato_x = cx + barrel_len // 2 + 4
+    pygame.draw.ellipse(s, (180, 145, 80), (potato_x - 5, cy - 4, 10, 9))
+    pygame.draw.ellipse(s, (140, 110, 55), (potato_x - 5, cy - 4, 10, 9), 1)
+    # Potato eyes (two tiny dots)
+    pygame.draw.circle(s, (100, 70, 30), (potato_x - 1, cy - 1), 1)
+    pygame.draw.circle(s, (100, 70, 30), (potato_x + 2, cy + 1), 1)
