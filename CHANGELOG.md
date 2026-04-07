@@ -98,6 +98,23 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Added
 - **Save data in user profile directory** — all saves, caches, screenshots, and logs now write to `%APPDATA%/CyberSurvivor` (Windows) or `~/.cyber_survivor` (Linux/macOS); no more files written to the install folder
+
+---
+
+## [0.9.11] — 2026-04-06
+
+### Added
+- **Procedural backgrounds** for itch.io and trailer
+- **Automated trailer generator** (`make_trailer.py`) and gameplay assembler (`assemble_trailer.py`)
+- **OBS/ffmpeg workflow** for easy gameplay capture and trailer creation
+- **Numerous polish and bugfixes** since 0.9.3
+
+### Changed
+- Updated main menu and itch.io banners
+- Improved trailer and gameplay video workflow
+
+### Fixed
+- Various minor bugs and stability improvements
   - Affected: display settings, player profiles, compendium, legacy saves, run logs, screenshots, procedural music cache
 
 ### Performance (zero visual quality change)
